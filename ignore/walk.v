@@ -61,6 +61,10 @@ pub mut:
 	err  ?IgnoreError
 }
 
+fn none_ignore_error() ?IgnoreError {
+	return none
+}
+
 // The full path that this entry represents.
 pub fn (d DirEntry) path() string {
 	if d.dent is StdinEntry {
@@ -149,7 +153,7 @@ pub fn (d DirEntry) is_dir() bool {
 fn DirEntry.new_stdin() DirEntry {
 	return DirEntry{
 		dent: StdinEntry{}
-		err:  none
+		err:  none_ignore_error()
 	}
 }
 
@@ -227,7 +231,7 @@ fn walk_result_from_entry(entry DirEntry) WalkResult {
 fn walk_result_from_error(err IgnoreError) WalkResult {
 	return WalkResult{
 		is_error: true
-		entry:    DirEntry{}
+		entry:    DirEntry.new_stdin()
 		err:      err
 	}
 }
@@ -442,10 +446,10 @@ pub fn (mut builder WalkBuilder) add_ignore(path string) (bool, IgnoreError) {
 	}
 	mut gitignore_builder := GitignoreBuilder.new(cwd)
 	mut errs := PartialErrorBuilder{}
-	has_err, err := gitignore_builder.add(path)
-	errs.maybe_push(has_err, err)
-	_, gi, build_err := gitignore_builder.build()
-	_ = build_err
+	add_has_err, add_err := gitignore_builder.add(path)
+	errs.maybe_push(add_has_err, add_err)
+	gi, build_has_err, build_err := gitignore_builder.build()
+	errs.maybe_push(build_has_err, build_err)
 	builder.ig_builder.add_ignore(gi)
 	return errs.into_error_option()
 }
@@ -694,7 +698,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	if has_child_err {
 		dent.err = child_err
 	} else {
-		dent.err = none
+			dent.err = none_ignore_error()
 	}
 	if !is_root {
 		if walk.skip_entry(ig, dent) {
@@ -729,7 +733,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 				}
 			}
 		}
-		mut child := DirEntry.new_raw(child_raw, none)
+		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
 		walk.traverse_entry(mut child, child_ignore, false, root_device, has_root_device)
 	}
 }
@@ -820,16 +824,16 @@ pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
 fn prepare_root_entry(path string, follow_links bool) (DirEntry, IgnoreError) {
 	link_root := follow_links || os.is_file(path)
 	mut raw := DirEntryRaw.from_path(0, path, link_root) or {
-		return DirEntry{}, io_error(err).with_path(path)
+		return DirEntry.new_stdin(), io_error(err).with_path(path)
 	}
 	if !follow_links && raw.ty == .symbolic_link {
 		if target_is_dir(path) {
 			raw = DirEntryRaw.from_path(0, path, true) or {
-				return DirEntry{}, io_error(err).with_path(path)
+				return DirEntry.new_stdin(), io_error(err).with_path(path)
 			}
 		}
 	}
-	return DirEntry.new_raw(raw, none), IgnoreError{}
+	return DirEntry.new_raw(raw, none_ignore_error()), IgnoreError{}
 }
 
 fn target_is_dir(path string) bool {
@@ -856,16 +860,16 @@ fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth int) ?Ign
 	hchild := Handle.from_path(child_path) or {
 		return io_error(err).with_path(child_path).with_depth(child_depth)
 	}
-	for i := ig_parent.layers.len - 1; i >= 0; i-- {
-		layer := ig_parent.layers[i]
-		if layer.absolute_parent {
+	for i := ig_parent.nodes.len - 1; i >= 0; i-- {
+		node := ig_parent.nodes[i]
+		if node.is_absolute_parent {
 			break
 		}
-		h := Handle.from_path(layer.path) or {
+		h := Handle.from_path(node.dir) or {
 			return io_error(err).with_path(child_path).with_depth(child_depth)
 		}
 		if h.path == hchild.path {
-			return loop_error(layer.path, child_path).with_depth(child_depth)
+			return loop_error(node.dir, child_path).with_depth(child_depth)
 		}
 	}
 	return none

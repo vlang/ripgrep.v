@@ -39,6 +39,14 @@ Typical cases:
 4. When a comment comes from the Rust source, prefer the source wording.
 Only adjust wording when the port changed behavior or representation and the original text would become misleading.
 
+## Tests
+
+1. Translate Rust `#[cfg(test)]` modules into separate V `_test.v` files.
+Do not leave translated tests inline in the main translated source file.
+
+2. Keep translated test helpers and test comments close to the Rust source.
+Apply the same comment-translation rules to tests.
+
 ## Ownership And Copies
 
 1. Use `.to_owned()` when creating a new owned string from borrowed/derived data.
@@ -75,6 +83,9 @@ v -shared -ownership .
 ```
 
 2. After changing the local V compiler for translation support, run focused V2 tests for the affected checker/transformer behavior before relying on the new feature in translated code.
+
+3. When translated tests exist, verify them from the translated `_test.v` files.
+If `v -ownership test ...` is not supported by the current frontend path, compile and run the `_test.v` file directly with `v -ownership`.
 
 ## Repository Hygiene
 

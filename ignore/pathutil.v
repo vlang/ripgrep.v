@@ -15,6 +15,12 @@ fn strip_prefix(path string, prefix string) string {
 	if nprefix == '' {
 		return npath
 	}
+	if nprefix == os.path_separator.str() {
+		if npath.starts_with(nprefix) {
+			return npath[nprefix.len..]
+		}
+		return npath
+	}
 	if npath == nprefix {
 		return ''
 	}
