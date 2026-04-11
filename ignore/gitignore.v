@@ -10,26 +10,10 @@ pub:
 	is_only_dir  bool
 }
 
-pub fn (pattern GitPattern) clone() GitPattern {
-	return GitPattern{
-		original:     pattern.original.clone()
-		actual:       pattern.actual.clone()
-		is_whitelist: pattern.is_whitelist
-		is_only_dir:  pattern.is_only_dir
-	}
-}
-
 pub struct Gitignore implements IClone {
 pub:
 	root     string
 	patterns []GitPattern
-}
-
-pub fn (gi Gitignore) clone() Gitignore {
-	return Gitignore{
-		root:     gi.root.clone()
-		patterns: gi.patterns.clone()
-	}
 }
 
 pub fn Gitignore.empty() Gitignore {
@@ -116,13 +100,6 @@ pub struct GitignoreBuilder implements IClone {
 	root string
 mut:
 	patterns []GitPattern
-}
-
-pub fn (builder GitignoreBuilder) clone() GitignoreBuilder {
-	return GitignoreBuilder{
-		root:     builder.root.clone()
-		patterns: builder.patterns.clone()
-	}
 }
 
 pub fn GitignoreBuilder.new(root string) GitignoreBuilder {

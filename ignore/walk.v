@@ -38,17 +38,6 @@ struct DirEntryRaw implements IClone {
 	metadata          Metadata
 }
 
-fn (raw DirEntryRaw) clone() DirEntryRaw {
-	return DirEntryRaw{
-		path:              raw.path.clone()
-		ty:                raw.ty
-		follow_link:       raw.follow_link
-		depth:             raw.depth
-		source_is_symlink: raw.source_is_symlink
-		metadata:          raw.metadata
-	}
-}
-
 // File metadata attached to a directory entry.
 pub struct Metadata {
 pub:
@@ -342,30 +331,6 @@ mut:
 	has_sort_by_path bool
 	cwd_initialized bool
 	cwd_value       string
-}
-
-pub fn (builder WalkBuilder) clone() WalkBuilder {
-	return WalkBuilder{
-		paths:             builder.paths.clone()
-		ig_builder:        builder.ig_builder.clone()
-		max_depth:         builder.max_depth
-		min_depth:         builder.min_depth
-		max_filesize:      builder.max_filesize
-		has_max_filesize:  builder.has_max_filesize
-		follow_links:      builder.follow_links
-		same_file_system:  builder.same_file_system
-		threads:           builder.threads
-		skip:              builder.skip
-		has_skip:          builder.has_skip
-		filter:            builder.filter
-		has_filter:        builder.has_filter
-		sort_by_name:      builder.sort_by_name
-		has_sort_by_name:  builder.has_sort_by_name
-		sort_by_path:      builder.sort_by_path
-		has_sort_by_path:  builder.has_sort_by_path
-		cwd_initialized:   builder.cwd_initialized
-		cwd_value:         builder.cwd_value.clone()
-	}
 }
 
 // Creates a new builder for recursive traversal rooted at `path`.

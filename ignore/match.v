@@ -12,13 +12,6 @@ pub:
 	source string
 }
 
-pub fn (m Match) clone() Match {
-	return Match{
-		kind:   m.kind
-		source: m.source.clone()
-	}
-}
-
 pub fn no_match() Match {
 	return Match{}
 }
