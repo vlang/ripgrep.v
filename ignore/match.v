@@ -1,57 +1,96 @@
 module ignore
 
+/// The result of a glob match.
+///
+/// The type parameter `T` typically refers to a type that provides more
+/// information about a particular match. For example, it might identify
+/// the specific gitignore file and the specific glob pattern that caused
+/// the match.
 pub enum MatchKind {
 	none
 	ignore
 	whitelist
 }
 
-pub struct Match implements IClone {
-pub:
-	kind   MatchKind = .none
-	source string
+pub struct Match[T] {
+	kind      MatchKind = .none
+	value     T
+	has_value bool
 }
 
-pub fn no_match() Match {
-	return Match{}
+pub fn no_match[T]() Match[T] {
+	return Match[T]{}
 }
 
-pub fn ignore_match(source string) Match {
-	return Match{
-		kind:   .ignore
-		source: source.to_owned()
+pub fn ignore_match[T](value T) Match[T] {
+	return Match[T]{
+		kind:      .ignore
+		value:     value
+		has_value: true
 	}
 }
 
-pub fn whitelist_match(source string) Match {
-	return Match{
-		kind:   .whitelist
-		source: source.to_owned()
+pub fn whitelist_match[T](value T) Match[T] {
+	return Match[T]{
+		kind:      .whitelist
+		value:     value
+		has_value: true
 	}
 }
 
-pub fn (m Match) is_ignore() bool {
-	return m.kind == .ignore
-}
-
-pub fn (m Match) is_whitelist() bool {
-	return m.kind == .whitelist
-}
-
-pub fn (m Match) is_none() bool {
+/// Returns true if the match result didn't match any globs.
+pub fn (m Match[T]) is_none() bool {
 	return m.kind == .none
 }
 
-pub fn (m Match) or(other Match) Match {
+/// Returns true if the match result implies the path should be ignored.
+pub fn (m Match[T]) is_ignore() bool {
+	return m.kind == .ignore
+}
+
+/// Returns true if the match result implies the path should be
+/// whitelisted.
+pub fn (m Match[T]) is_whitelist() bool {
+	return m.kind == .whitelist
+}
+
+/// Inverts the match so that `Ignore` becomes `Whitelist` and
+/// `Whitelist` becomes `Ignore`. A non-match remains the same.
+pub fn (m Match[T]) invert[T]() Match[T] {
+	match m.kind {
+		.none {
+			return no_match[T]()
+		}
+		.ignore {
+			if value := m.value {
+				return whitelist_match[T](value)
+			}
+		}
+		.whitelist {
+			if value := m.value {
+				return ignore_match[T](value)
+			}
+		}
+	}
+	return no_match[T]()
+}
+
+/// Return the value inside this match if it exists.
+pub fn (m Match[T]) inner[T]() ?T {
+	if !m.has_value {
+		return none
+	}
+	return m.value
+}
+
+/// Return the match if it is not none. Otherwise, return other.
+pub fn (m Match[T]) or[T](other Match[T]) Match[T] {
 	if m.is_none() {
 		return other
 	}
 	return m
 }
 
-pub fn (m Match) str() string {
-	if m.source == '' {
-		return m.kind.str()
-	}
-	return '${m.kind.str()}(${m.source})'
+pub fn (m Match[T]) str[T]() string {
+	return m.kind.str()
 }

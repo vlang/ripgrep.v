@@ -2,6 +2,8 @@ module ignore
 
 import os
 
+const stdin_entry_name = '<stdin>'
+
 pub enum EntryFileType {
 	unknown
 	file
@@ -31,6 +33,7 @@ struct StdinEntry {}
 
 struct DirEntryRaw implements IClone {
 	path              string
+	file_name_value   string
 	ty                EntryFileType
 	follow_link       bool
 	depth             int
@@ -59,6 +62,9 @@ pub struct DirEntry implements IClone {
 pub mut:
 	dent DirEntryInner
 	err  ?IgnoreError
+mut:
+	path_value      string
+	file_name_value string
 }
 
 fn none_ignore_error() ?IgnoreError {
@@ -66,23 +72,19 @@ fn none_ignore_error() ?IgnoreError {
 }
 
 // The full path that this entry represents.
-pub fn (d DirEntry) path() string {
-	if d.dent is StdinEntry {
-		return '<stdin>'
-	}
-	raw := d.dent as DirEntryRaw
-	return raw.path
+pub fn (d &^a DirEntry) path[^a]() &^a string {
+	return &d.path_value
 }
 
 // The full path that this entry represents.
 //
 // Analogous to `DirEntry.path`, but moves ownership of the path.
-pub fn (d DirEntry) into_path() string {
-	return d.path().clone()
+pub fn (d &DirEntry) into_path() string {
+	return d.path_value.clone()
 }
 
 // Whether this entry corresponds to a symbolic link or not.
-pub fn (d DirEntry) path_is_symlink() bool {
+pub fn (d &DirEntry) path_is_symlink() bool {
 	if d.dent is StdinEntry {
 		return false
 	}
@@ -91,12 +93,12 @@ pub fn (d DirEntry) path_is_symlink() bool {
 }
 
 // Returns true if and only if this entry corresponds to stdin.
-pub fn (d DirEntry) is_stdin() bool {
+pub fn (d &DirEntry) is_stdin() bool {
 	return d.dent is StdinEntry
 }
 
 // Returns metadata for the file represented by this entry.
-pub fn (d DirEntry) metadata() !Metadata {
+pub fn (d &DirEntry) metadata() !Metadata {
 	if d.dent is StdinEntry {
 		return error('<stdin> has no metadata')
 	}
@@ -105,7 +107,7 @@ pub fn (d DirEntry) metadata() !Metadata {
 }
 
 // Returns the file type for the file represented by this entry.
-pub fn (d DirEntry) file_type() EntryFileType {
+pub fn (d &DirEntry) file_type() EntryFileType {
 	if d.dent is StdinEntry {
 		return .unknown
 	}
@@ -116,16 +118,12 @@ pub fn (d DirEntry) file_type() EntryFileType {
 // Returns the file name for this entry.
 //
 // If the entry has no base name, then the full path is returned.
-pub fn (d DirEntry) file_name() string {
-	if d.dent is StdinEntry {
-		return '<stdin>'
-	}
-	raw := d.dent as DirEntryRaw
-	return raw.file_name()
+pub fn (d &^a DirEntry) file_name[^a]() &^a string {
+	return &d.file_name_value
 }
 
 // Returns the depth of this entry relative to the walk root.
-pub fn (d DirEntry) depth() int {
+pub fn (d &DirEntry) depth() int {
 	if d.dent is StdinEntry {
 		return 0
 	}
@@ -136,52 +134,55 @@ pub fn (d DirEntry) depth() int {
 // Returns the inode number when it exists.
 //
 // The current V port does not expose inode tracking yet.
-pub fn (d DirEntry) ino() (bool, u64) {
+pub fn (d &DirEntry) ino() (bool, u64) {
 	return false, u64(0)
 }
 
 // Returns an error associated with this entry, if one exists.
-pub fn (d DirEntry) error() ?IgnoreError {
-	return d.err
+pub fn (d &^a DirEntry) error[^a]() ?&^a IgnoreError {
+	if d.err != none {
+		return unsafe { &d.err? }
+	}
+	return none
 }
 
 // Returns true if and only if this entry points to a directory.
-pub fn (d DirEntry) is_dir() bool {
+pub fn (d &DirEntry) is_dir() bool {
 	return d.file_type().is_dir()
 }
 
 fn DirEntry.new_stdin() DirEntry {
 	return DirEntry{
-		dent: StdinEntry{}
-		err:  none_ignore_error()
+		dent:            StdinEntry{}
+		err:             none_ignore_error()
+		path_value:      stdin_entry_name.to_owned()
+		file_name_value: stdin_entry_name.to_owned()
 	}
 }
 
 fn DirEntry.new_raw(dent DirEntryRaw, err ?IgnoreError) DirEntry {
 	return DirEntry{
-		dent: dent
-		err:  err
+		dent:            dent
+		err:             err
+		path_value:      dent.path.to_owned()
+		file_name_value: dent.file_name().to_owned()
 	}
 }
 
-fn (raw DirEntryRaw) path_is_symlink() bool {
+fn (raw &DirEntryRaw) path_is_symlink() bool {
 	return raw.source_is_symlink || raw.follow_link
 }
 
-fn (raw DirEntryRaw) metadata() !Metadata {
+fn (raw &DirEntryRaw) metadata() !Metadata {
 	return raw.metadata
 }
 
-fn (raw DirEntryRaw) file_type() EntryFileType {
+fn (raw &DirEntryRaw) file_type() EntryFileType {
 	return raw.ty
 }
 
-fn (raw DirEntryRaw) file_name() string {
-	base := os.file_name(raw.path)
-	if base != '' {
-		return base
-	}
-	return raw.path
+fn (raw &^a DirEntryRaw) file_name[^a]() &^a string {
+	return &raw.file_name_value
 }
 
 fn DirEntryRaw.from_path(depth int, path string, link bool) !DirEntryRaw {
@@ -193,6 +194,7 @@ fn DirEntryRaw.from_path(depth int, path string, link bool) !DirEntryRaw {
 	}
 	return DirEntryRaw{
 		path:              path.to_owned()
+		file_name_value:   file_name(path).to_owned()
 		ty:                ty
 		follow_link:       link
 		depth:             depth
@@ -884,7 +886,7 @@ fn skip_filesize(max_filesize u64, path string, stat Metadata) bool {
 }
 
 fn should_skip_entry(ig Ignore, dent DirEntry) bool {
-	matched := ig.matched_dir_entry(dent)
+	matched := ig.matched_dir_entry(&dent)
 	if matched.is_ignore() {
 		return true
 	}
