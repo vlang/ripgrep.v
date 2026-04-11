@@ -61,21 +61,6 @@ pub mut:
 	err  ?IgnoreError
 }
 
-fn clone_dir_entry_inner(dent DirEntryInner) DirEntryInner {
-	if dent is StdinEntry {
-		return StdinEntry{}
-	}
-	raw := dent as DirEntryRaw
-	return raw.clone()
-}
-
-pub fn (d DirEntry) clone() DirEntry {
-	return DirEntry{
-		dent: clone_dir_entry_inner(d.dent)
-		err:  d.err
-	}
-}
-
 // The full path that this entry represents.
 pub fn (d DirEntry) path() string {
 	if d.dent is StdinEntry {

@@ -13,7 +13,7 @@ pub enum ErrorKind {
 	other
 }
 
-pub struct IgnoreError {
+pub struct IgnoreError implements IClone {
 pub mut:
 	kind     ErrorKind = .other
 	msg      string
@@ -23,6 +23,23 @@ pub mut:
 	ancestor string
 	child    string
 	nested   []IgnoreError
+}
+
+pub fn (err IgnoreError) clone() IgnoreError {
+	mut nested := []IgnoreError{cap: err.nested.len}
+	for item in err.nested {
+		nested << item.clone()
+	}
+	return IgnoreError{
+		kind:     err.kind
+		msg:      err.msg.clone()
+		line:     err.line
+		path:     err.path.clone()
+		depth:    err.depth
+		ancestor: err.ancestor.clone()
+		child:    err.child.clone()
+		nested:   nested
+	}
 }
 
 pub fn io_error(err IError) IgnoreError {
