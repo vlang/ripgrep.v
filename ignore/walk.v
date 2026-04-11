@@ -29,13 +29,24 @@ fn entry_file_type_from_os(ft os.FileType) EntryFileType {
 
 struct StdinEntry {}
 
-struct DirEntryRaw {
+struct DirEntryRaw implements IClone {
 	path              string
 	ty                EntryFileType
 	follow_link       bool
 	depth             int
 	source_is_symlink bool
 	metadata          Metadata
+}
+
+fn (raw DirEntryRaw) clone() DirEntryRaw {
+	return DirEntryRaw{
+		path:              raw.path.clone()
+		ty:                raw.ty
+		follow_link:       raw.follow_link
+		depth:             raw.depth
+		source_is_symlink: raw.source_is_symlink
+		metadata:          raw.metadata
+	}
 }
 
 // File metadata attached to a directory entry.
@@ -45,13 +56,17 @@ pub:
 	file_type EntryFileType
 }
 
+// Private backing representation stored inside `DirEntry`.
+//
+// This is not a trait or interface implementation. It is the internal tagged
+// union used to represent either a raw filesystem entry or synthetic stdin.
 pub type DirEntryInner = DirEntryRaw | StdinEntry
 
 // A directory entry with an optional attached error.
 //
 // The error usually refers to a problem that happened while parsing ignore
 // files in the directory corresponding to this entry.
-pub struct DirEntry {
+pub struct DirEntry implements IClone {
 pub mut:
 	// Concrete directory entry data or a synthetic stdin entry.
 	dent    DirEntryInner
@@ -59,6 +74,22 @@ pub mut:
 	err     IgnoreError
 	// Whether `err` contains a meaningful value.
 	has_err bool
+}
+
+fn clone_dir_entry_inner(dent DirEntryInner) DirEntryInner {
+	if dent is StdinEntry {
+		return StdinEntry{}
+	}
+	raw := dent as DirEntryRaw
+	return raw.clone()
+}
+
+pub fn (d DirEntry) clone() DirEntry {
+	return DirEntry{
+		dent:    clone_dir_entry_inner(d.dent)
+		err:     d.err
+		has_err: d.has_err
+	}
 }
 
 // Returns the full path represented by this entry.
@@ -290,7 +321,7 @@ fn stdout_handle() (bool, Handle) {
 //
 // The builder controls ignore handling, recursion depth, symlink behavior,
 // path sorting, size filtering, and other traversal options.
-pub struct WalkBuilder {
+pub struct WalkBuilder implements IClone {
 mut:
 	paths           []string
 	ig_builder      IgnoreBuilder
@@ -311,6 +342,30 @@ mut:
 	has_sort_by_path bool
 	cwd_initialized bool
 	cwd_value       string
+}
+
+pub fn (builder WalkBuilder) clone() WalkBuilder {
+	return WalkBuilder{
+		paths:             builder.paths.clone()
+		ig_builder:        builder.ig_builder.clone()
+		max_depth:         builder.max_depth
+		min_depth:         builder.min_depth
+		max_filesize:      builder.max_filesize
+		has_max_filesize:  builder.has_max_filesize
+		follow_links:      builder.follow_links
+		same_file_system:  builder.same_file_system
+		threads:           builder.threads
+		skip:              builder.skip
+		has_skip:          builder.has_skip
+		filter:            builder.filter
+		has_filter:        builder.has_filter
+		sort_by_name:      builder.sort_by_name
+		has_sort_by_name:  builder.has_sort_by_name
+		sort_by_path:      builder.sort_by_path
+		has_sort_by_path:  builder.has_sort_by_path
+		cwd_initialized:   builder.cwd_initialized
+		cwd_value:         builder.cwd_value.clone()
+	}
 }
 
 // Creates a new builder for recursive traversal rooted at `path`.

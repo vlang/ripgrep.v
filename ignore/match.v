@@ -6,10 +6,17 @@ pub enum MatchKind {
 	whitelist
 }
 
-pub struct Match {
+pub struct Match implements IClone {
 pub:
 	kind   MatchKind = .none
 	source string
+}
+
+pub fn (m Match) clone() Match {
+	return Match{
+		kind:   m.kind
+		source: m.source.clone()
+	}
 }
 
 pub fn no_match() Match {

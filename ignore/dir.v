@@ -2,7 +2,7 @@ module ignore
 
 import os
 
-struct IgnoreOptions {
+struct IgnoreOptions implements IClone {
 mut:
 	hidden                  bool = true
 	ignore                  bool = true
@@ -14,7 +14,20 @@ mut:
 	require_git             bool
 }
 
-struct IgnoreLayer {
+fn (opts IgnoreOptions) clone() IgnoreOptions {
+	return IgnoreOptions{
+		hidden:                  opts.hidden
+		ignore:                  opts.ignore
+		parents:                 opts.parents
+		git_global:              opts.git_global
+		git_ignore:              opts.git_ignore
+		git_exclude:             opts.git_exclude
+		ignore_case_insensitive: opts.ignore_case_insensitive
+		require_git:             opts.require_git
+	}
+}
+
+struct IgnoreLayer implements IClone {
 mut:
 	path               string
 	absolute_parent    bool
@@ -25,7 +38,19 @@ mut:
 	git_exclude_matcher Gitignore
 }
 
-pub struct Ignore {
+fn (layer IgnoreLayer) clone() IgnoreLayer {
+	return IgnoreLayer{
+		path:                layer.path.clone()
+		absolute_parent:     layer.absolute_parent
+		has_git:             layer.has_git
+		custom_ignore:       layer.custom_ignore.clone()
+		ignore_matcher:      layer.ignore_matcher.clone()
+		git_ignore_matcher:  layer.git_ignore_matcher.clone()
+		git_exclude_matcher: layer.git_exclude_matcher.clone()
+	}
+}
+
+pub struct Ignore implements IClone {
 pub mut:
 	layers                     []IgnoreLayer
 	overrides                  Override
@@ -35,6 +60,19 @@ pub mut:
 	global_gitignore           Gitignore
 	global_gitignores_relative_to string
 	opts                       IgnoreOptions
+}
+
+pub fn (ig Ignore) clone() Ignore {
+	return Ignore{
+		layers:                      ig.layers.clone()
+		overrides:                   ig.overrides.clone()
+		types:                       ig.types.clone()
+		explicit_ignores:            ig.explicit_ignores.clone()
+		custom_ignore_filenames:     ig.custom_ignore_filenames.clone()
+		global_gitignore:            ig.global_gitignore.clone()
+		global_gitignores_relative_to: ig.global_gitignores_relative_to.clone()
+		opts:                        ig.opts.clone()
+	}
 }
 
 pub fn (ig Ignore) path() string {
@@ -176,7 +214,7 @@ pub fn (ig Ignore) matched_dir_entry(dent DirEntry) Match {
 	return no_match()
 }
 
-pub struct IgnoreBuilder {
+pub struct IgnoreBuilder implements IClone {
 mut:
 	opts                         IgnoreOptions
 	overrides                    Override
@@ -184,6 +222,17 @@ mut:
 	explicit_ignores             []Gitignore
 	custom_ignore_filenames      []string
 	current_dir_value            string
+}
+
+pub fn (builder IgnoreBuilder) clone() IgnoreBuilder {
+	return IgnoreBuilder{
+		opts:                    builder.opts.clone()
+		overrides:               builder.overrides.clone()
+		types:                   builder.types.clone()
+		explicit_ignores:        builder.explicit_ignores.clone()
+		custom_ignore_filenames: builder.custom_ignore_filenames.clone()
+		current_dir_value:       builder.current_dir_value.clone()
+	}
 }
 
 pub fn IgnoreBuilder.new() IgnoreBuilder {
