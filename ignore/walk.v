@@ -38,6 +38,7 @@ struct DirEntryRaw {
 	metadata          Metadata
 }
 
+// File metadata attached to a directory entry.
 pub struct Metadata {
 pub:
 	size      u64
@@ -46,13 +47,21 @@ pub:
 
 pub type DirEntryInner = DirEntryRaw | StdinEntry
 
+// A directory entry with an optional attached error.
+//
+// The error usually refers to a problem that happened while parsing ignore
+// files in the directory corresponding to this entry.
 pub struct DirEntry {
 pub mut:
+	// Concrete directory entry data or a synthetic stdin entry.
 	dent    DirEntryInner
+	// Error associated with this entry, when one exists.
 	err     IgnoreError
+	// Whether `err` contains a meaningful value.
 	has_err bool
 }
 
+// Returns the full path represented by this entry.
 pub fn (d DirEntry) path() string {
 	if d.dent is StdinEntry {
 		return '<stdin>'
@@ -61,10 +70,12 @@ pub fn (d DirEntry) path() string {
 	return raw.path
 }
 
+// Returns the full path represented by this entry as an owned string.
 pub fn (d DirEntry) into_path() string {
 	return d.path().clone()
 }
 
+// Returns whether this entry corresponds to a symbolic link.
 pub fn (d DirEntry) path_is_symlink() bool {
 	if d.dent is StdinEntry {
 		return false
@@ -73,10 +84,12 @@ pub fn (d DirEntry) path_is_symlink() bool {
 	return raw.path_is_symlink()
 }
 
+// Returns true if and only if this entry corresponds to stdin.
 pub fn (d DirEntry) is_stdin() bool {
 	return d.dent is StdinEntry
 }
 
+// Returns metadata for the file represented by this entry.
 pub fn (d DirEntry) metadata() !Metadata {
 	if d.dent is StdinEntry {
 		return error('<stdin> has no metadata')
@@ -85,6 +98,7 @@ pub fn (d DirEntry) metadata() !Metadata {
 	return raw.metadata()
 }
 
+// Returns the file type for the file represented by this entry.
 pub fn (d DirEntry) file_type() EntryFileType {
 	if d.dent is StdinEntry {
 		return .unknown
@@ -93,6 +107,9 @@ pub fn (d DirEntry) file_type() EntryFileType {
 	return raw.file_type()
 }
 
+// Returns the file name for this entry.
+//
+// If the entry has no base name, then the full path is returned.
 pub fn (d DirEntry) file_name() string {
 	if d.dent is StdinEntry {
 		return '<stdin>'
@@ -101,6 +118,7 @@ pub fn (d DirEntry) file_name() string {
 	return raw.file_name()
 }
 
+// Returns the depth of this entry relative to the walk root.
 pub fn (d DirEntry) depth() int {
 	if d.dent is StdinEntry {
 		return 0
@@ -109,10 +127,14 @@ pub fn (d DirEntry) depth() int {
 	return raw.depth
 }
 
+// Returns the inode number when it exists.
+//
+// The current V port does not expose inode tracking yet.
 pub fn (d DirEntry) ino() (bool, u64) {
 	return false, u64(0)
 }
 
+// Returns an error associated with processing this entry, if one exists.
 pub fn (d DirEntry) error() (bool, IgnoreError) {
 	if d.has_err {
 		return true, d.err
@@ -120,6 +142,7 @@ pub fn (d DirEntry) error() (bool, IgnoreError) {
 	return false, IgnoreError{}
 }
 
+// Returns true if and only if this entry points to a directory.
 pub fn (d DirEntry) is_dir() bool {
 	return d.file_type().is_dir()
 }
@@ -183,6 +206,11 @@ fn DirEntryRaw.from_child(depth int, parent_path string, name string) !DirEntryR
 	return DirEntryRaw.from_path(depth, os.join_path(parent_path, name), false)
 }
 
+// Result item produced by the V walk APIs.
+//
+// The original Rust iterator yields `Result<DirEntry, Error>`. This port keeps
+// the same shape explicitly in a struct so it can be used from both the
+// sequential and visitor-style APIs.
 pub struct WalkResult {
 pub:
 	is_error bool
@@ -207,8 +235,11 @@ fn walk_result_from_error(err IgnoreError) WalkResult {
 }
 
 pub enum WalkState {
+	// Continue walking as normal.
 	continue_
+	// If the current entry is a directory, do not descend into it.
 	skip
+	// Stop the walk as soon as possible.
 	quit
 }
 
@@ -224,6 +255,7 @@ pub type NameComparator = fn (string, string) int
 pub type PathComparator = fn (string, string) int
 pub type FilterFn = fn (DirEntry) bool
 
+// Receives walk results during parallel traversal.
 pub interface ParallelVisitor {
 mut:
 	visit(entry WalkResult) WalkState
@@ -236,6 +268,7 @@ fn (mut visitor NoopParallelVisitor) visit(entry WalkResult) WalkState {
 	return .continue_
 }
 
+// Handle used for path equality checks, for example when skipping stdout.
 pub struct Handle {
 pub:
 	path      string
@@ -253,6 +286,10 @@ fn stdout_handle() (bool, Handle) {
 	return false, Handle{}
 }
 
+// Builds a recursive directory iterator.
+//
+// The builder controls ignore handling, recursion depth, symlink behavior,
+// path sorting, size filtering, and other traversal options.
 pub struct WalkBuilder {
 mut:
 	paths           []string
@@ -276,6 +313,10 @@ mut:
 	cwd_value       string
 }
 
+// Creates a new builder for recursive traversal rooted at `path`.
+//
+// If multiple roots are needed, prefer calling `add` instead of creating
+// multiple builders.
 pub fn WalkBuilder.new(path string) WalkBuilder {
 	return WalkBuilder{
 		paths:            [path.to_owned()]
@@ -285,6 +326,7 @@ pub fn WalkBuilder.new(path string) WalkBuilder {
 	}
 }
 
+// Builds a sequential `Walk` iterator.
 pub fn (builder WalkBuilder) build() Walk {
 	cwd := builder.get_or_set_current_dir()
 	ig_root := if cwd != '' { builder.ig_builder.build_with_cwd(cwd) } else { builder.ig_builder.build() }
@@ -313,6 +355,10 @@ pub fn (builder WalkBuilder) build() Walk {
 	return walk
 }
 
+// Builds a `WalkParallel` traversal.
+//
+// Unlike `build`, this does not return an iterator. It returns a traversal
+// value that must be executed with `run` or `visit`.
 pub fn (builder WalkBuilder) build_parallel() WalkParallel {
 	cwd := builder.get_or_set_current_dir()
 	ig_root := if cwd != '' { builder.ig_builder.build_with_cwd(cwd) } else { builder.ig_builder.build() }
@@ -333,11 +379,15 @@ pub fn (builder WalkBuilder) build_parallel() WalkParallel {
 	}
 }
 
+// Adds another root path to the iterator.
 pub fn (mut builder WalkBuilder) add(path string) &WalkBuilder {
 	builder.paths << path.to_owned()
 	return builder
 }
 
+// Sets the maximum recursion depth.
+//
+// Use a negative value to disable the limit.
 pub fn (mut builder WalkBuilder) max_depth(depth int) &WalkBuilder {
 	builder.max_depth = depth
 	if builder.min_depth >= 0 && builder.max_depth >= 0 && builder.max_depth < builder.min_depth {
@@ -346,6 +396,9 @@ pub fn (mut builder WalkBuilder) max_depth(depth int) &WalkBuilder {
 	return builder
 }
 
+// Sets the minimum recursion depth.
+//
+// Use a negative value to disable the limit.
 pub fn (mut builder WalkBuilder) min_depth(depth int) &WalkBuilder {
 	builder.min_depth = depth
 	if builder.max_depth >= 0 && builder.min_depth >= 0 && builder.min_depth > builder.max_depth {
@@ -354,28 +407,36 @@ pub fn (mut builder WalkBuilder) min_depth(depth int) &WalkBuilder {
 	return builder
 }
 
+// Enables or disables following symbolic links.
 pub fn (mut builder WalkBuilder) follow_links(yes bool) &WalkBuilder {
 	builder.follow_links = yes
 	return builder
 }
 
+// Skips files larger than `filesize`.
 pub fn (mut builder WalkBuilder) max_filesize(filesize u64) &WalkBuilder {
 	builder.max_filesize = filesize
 	builder.has_max_filesize = true
 	return builder
 }
 
+// Clears any configured maximum file size limit.
 pub fn (mut builder WalkBuilder) clear_max_filesize() &WalkBuilder {
 	builder.max_filesize = 0
 	builder.has_max_filesize = false
 	return builder
 }
 
+// Sets the number of worker threads used by `build_parallel`.
 pub fn (mut builder WalkBuilder) threads(n int) &WalkBuilder {
 	builder.threads = n
 	return builder
 }
 
+// Adds an explicit ignore file.
+//
+// Explicitly added ignore files have lower precedence than the normal ignore
+// files discovered during traversal.
 pub fn (mut builder WalkBuilder) add_ignore(path string) (bool, IgnoreError) {
 	cwd := builder.get_or_set_current_dir()
 	if cwd == '' {
@@ -391,21 +452,27 @@ pub fn (mut builder WalkBuilder) add_ignore(path string) (bool, IgnoreError) {
 	return errs.into_error_option()
 }
 
+// Adds a custom ignore file name.
+//
+// These custom names have higher precedence than the default ignore files.
 pub fn (mut builder WalkBuilder) add_custom_ignore_filename(file_name string) &WalkBuilder {
 	builder.ig_builder.add_custom_ignore_filename(file_name)
 	return builder
 }
 
+// Sets an override matcher.
 pub fn (mut builder WalkBuilder) overrides(overrides Override) &WalkBuilder {
 	builder.ig_builder.overrides(overrides)
 	return builder
 }
 
+// Sets a file type matcher.
 pub fn (mut builder WalkBuilder) types(types Types) &WalkBuilder {
 	builder.ig_builder.types(types)
 	return builder
 }
 
+// Toggles the standard ignore-related filters as a group.
 pub fn (mut builder WalkBuilder) standard_filters(yes bool) &WalkBuilder {
 	builder.hidden(yes)
 	builder.parents(yes)
@@ -416,46 +483,57 @@ pub fn (mut builder WalkBuilder) standard_filters(yes bool) &WalkBuilder {
 	return builder
 }
 
+// Enables or disables hidden-file filtering.
 pub fn (mut builder WalkBuilder) hidden(yes bool) &WalkBuilder {
 	builder.ig_builder.hidden(yes)
 	return builder
 }
 
+// Enables or disables loading ignore files from parent directories.
 pub fn (mut builder WalkBuilder) parents(yes bool) &WalkBuilder {
 	builder.ig_builder.parents(yes)
 	return builder
 }
 
+// Enables or disables `.ignore` files.
 pub fn (mut builder WalkBuilder) ignore(yes bool) &WalkBuilder {
 	builder.ig_builder.ignore(yes)
 	return builder
 }
 
+// Enables or disables the global gitignore file.
 pub fn (mut builder WalkBuilder) git_global(yes bool) &WalkBuilder {
 	builder.ig_builder.git_global(yes)
 	return builder
 }
 
+// Enables or disables `.gitignore` files.
 pub fn (mut builder WalkBuilder) git_ignore(yes bool) &WalkBuilder {
 	builder.ig_builder.git_ignore(yes)
 	return builder
 }
 
+// Enables or disables `.git/info/exclude` files.
 pub fn (mut builder WalkBuilder) git_exclude(yes bool) &WalkBuilder {
 	builder.ig_builder.git_exclude(yes)
 	return builder
 }
 
+// Controls whether git-related rules require being inside a git repository.
 pub fn (mut builder WalkBuilder) require_git(yes bool) &WalkBuilder {
 	builder.ig_builder.require_git(yes)
 	return builder
 }
 
+// Processes ignore files case-insensitively.
 pub fn (mut builder WalkBuilder) ignore_case_insensitive(yes bool) &WalkBuilder {
 	builder.ig_builder.ignore_case_insensitive(yes)
 	return builder
 }
 
+// Sorts directory entries by full path.
+//
+// This is only used by the sequential iterator.
 pub fn (mut builder WalkBuilder) sort_by_file_path(cmp PathComparator) &WalkBuilder {
 	builder.sort_by_path = cmp
 	builder.has_sort_by_path = true
@@ -463,6 +541,9 @@ pub fn (mut builder WalkBuilder) sort_by_file_path(cmp PathComparator) &WalkBuil
 	return builder
 }
 
+// Sorts directory entries by base file name.
+//
+// This is only used by the sequential iterator.
 pub fn (mut builder WalkBuilder) sort_by_file_name(cmp NameComparator) &WalkBuilder {
 	builder.sort_by_name = cmp
 	builder.has_sort_by_name = true
@@ -470,11 +551,13 @@ pub fn (mut builder WalkBuilder) sort_by_file_name(cmp NameComparator) &WalkBuil
 	return builder
 }
 
+// Prevents traversal from crossing filesystem boundaries.
 pub fn (mut builder WalkBuilder) same_file_system(yes bool) &WalkBuilder {
 	builder.same_file_system = yes
 	return builder
 }
 
+// Skips directory entries believed to correspond to stdout.
 pub fn (mut builder WalkBuilder) skip_stdout(yes bool) &WalkBuilder {
 	if yes {
 		has_handle, handle := stdout_handle()
@@ -486,12 +569,15 @@ pub fn (mut builder WalkBuilder) skip_stdout(yes bool) &WalkBuilder {
 	return builder
 }
 
+// Filters yielded entries and prevents descending into directories that do
+// not satisfy the predicate.
 pub fn (mut builder WalkBuilder) filter_entry(filter FilterFn) &WalkBuilder {
 	builder.filter = filter
 	builder.has_filter = true
 	return builder
 }
 
+// Sets the current working directory used for global gitignore resolution.
 pub fn (mut builder WalkBuilder) current_dir(cwd string) &WalkBuilder {
 	builder.ig_builder.current_dir(cwd)
 	builder.cwd_initialized = true
@@ -506,6 +592,9 @@ fn (builder WalkBuilder) get_or_set_current_dir() string {
 	return os.getwd()
 }
 
+// Recursive directory iterator over one or more roots.
+//
+// By default, ignore files such as `.gitignore` are respected.
 pub struct Walk {
 mut:
 	entries          []WalkResult
@@ -529,10 +618,12 @@ mut:
 	has_sort_by_path bool
 }
 
+// Creates a new recursive directory iterator using default settings.
 pub fn Walk.new(path string) Walk {
 	return WalkBuilder.new(path).build()
 }
 
+// Returns the next walk result, or `none` when iteration is finished.
 pub fn (mut walk Walk) next() ?WalkResult {
 	if walk.index >= walk.entries.len {
 		return none
@@ -542,6 +633,7 @@ pub fn (mut walk Walk) next() ?WalkResult {
 	return result
 }
 
+// Returns all currently buffered walk results.
 pub fn (walk Walk) items() []WalkResult {
 	return walk.entries.clone()
 }
@@ -671,6 +763,10 @@ fn (walk Walk) skip_entry(ig Ignore, ent DirEntry) bool {
 	return false
 }
 
+// Parallel recursive directory traversal over one or more roots.
+//
+// This port currently executes through the same traversal core as `Walk`
+// while preserving the visitor-based API.
 pub struct WalkParallel {
 	paths            []string
 	ig_root          Ignore
@@ -687,10 +783,12 @@ pub struct WalkParallel {
 	has_filter       bool
 }
 
+// Executes the traversal with a visitor.
 pub fn (wp WalkParallel) run(mut visitor ParallelVisitor) {
-	wp.visit(visitor)
+	wp.visit(mut visitor)
 }
 
+// Executes the traversal using a custom visitor implementation.
 pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
 	mut walk := Walk{
 		ig_root:          wp.ig_root
