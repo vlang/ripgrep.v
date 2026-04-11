@@ -51,18 +51,14 @@ pub:
 // union used to represent either a raw filesystem entry or synthetic stdin.
 pub type DirEntryInner = DirEntryRaw | StdinEntry
 
-// A directory entry with an optional attached error.
+// A directory entry with a possible error attached.
 //
-// The error usually refers to a problem that happened while parsing ignore
-// files in the directory corresponding to this entry.
+// The error typically refers to a problem parsing ignore files in a
+// particular directory.
 pub struct DirEntry implements IClone {
 pub mut:
-	// Concrete directory entry data or a synthetic stdin entry.
-	dent    DirEntryInner
-	// Error associated with this entry, when one exists.
-	err     IgnoreError
-	// Whether `err` contains a meaningful value.
-	has_err bool
+	dent DirEntryInner
+	err  ?IgnoreError
 }
 
 fn clone_dir_entry_inner(dent DirEntryInner) DirEntryInner {
@@ -75,13 +71,12 @@ fn clone_dir_entry_inner(dent DirEntryInner) DirEntryInner {
 
 pub fn (d DirEntry) clone() DirEntry {
 	return DirEntry{
-		dent:    clone_dir_entry_inner(d.dent)
-		err:     d.err
-		has_err: d.has_err
+		dent: clone_dir_entry_inner(d.dent)
+		err:  d.err
 	}
 }
 
-// Returns the full path represented by this entry.
+// The full path that this entry represents.
 pub fn (d DirEntry) path() string {
 	if d.dent is StdinEntry {
 		return '<stdin>'
@@ -90,12 +85,14 @@ pub fn (d DirEntry) path() string {
 	return raw.path
 }
 
-// Returns the full path represented by this entry as an owned string.
+// The full path that this entry represents.
+//
+// Analogous to `DirEntry.path`, but moves ownership of the path.
 pub fn (d DirEntry) into_path() string {
 	return d.path().clone()
 }
 
-// Returns whether this entry corresponds to a symbolic link.
+// Whether this entry corresponds to a symbolic link or not.
 pub fn (d DirEntry) path_is_symlink() bool {
 	if d.dent is StdinEntry {
 		return false
@@ -154,12 +151,9 @@ pub fn (d DirEntry) ino() (bool, u64) {
 	return false, u64(0)
 }
 
-// Returns an error associated with processing this entry, if one exists.
-pub fn (d DirEntry) error() (bool, IgnoreError) {
-	if d.has_err {
-		return true, d.err
-	}
-	return false, IgnoreError{}
+// Returns an error associated with this entry, if one exists.
+pub fn (d DirEntry) error() ?IgnoreError {
+	return d.err
 }
 
 // Returns true if and only if this entry points to a directory.
@@ -169,16 +163,15 @@ pub fn (d DirEntry) is_dir() bool {
 
 fn DirEntry.new_stdin() DirEntry {
 	return DirEntry{
-		dent:    StdinEntry{}
-		has_err: false
+		dent: StdinEntry{}
+		err:  none
 	}
 }
 
-fn DirEntry.new_raw(dent DirEntryRaw, has_err bool, err IgnoreError) DirEntry {
+fn DirEntry.new_raw(dent DirEntryRaw, err ?IgnoreError) DirEntry {
 	return DirEntry{
-		dent:    dent
-		err:     err
-		has_err: has_err
+		dent: dent
+		err:  err
 	}
 }
 
@@ -713,8 +706,11 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	}
 
 	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
-	dent.has_err = has_child_err
-	dent.err = child_err
+	if has_child_err {
+		dent.err = child_err
+	} else {
+		dent.err = none
+	}
 	if !is_root {
 		if walk.skip_entry(ig, dent) {
 			return
@@ -748,7 +744,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 				}
 			}
 		}
-		mut child := DirEntry.new_raw(child_raw, false, IgnoreError{})
+		mut child := DirEntry.new_raw(child_raw, none)
 		walk.traverse_entry(mut child, child_ignore, false, root_device, has_root_device)
 	}
 }
@@ -848,7 +844,7 @@ fn prepare_root_entry(path string, follow_links bool) (DirEntry, IgnoreError) {
 			}
 		}
 	}
-	return DirEntry.new_raw(raw, false, IgnoreError{}), IgnoreError{}
+	return DirEntry.new_raw(raw, none), IgnoreError{}
 }
 
 fn target_is_dir(path string) bool {
