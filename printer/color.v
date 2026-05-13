@@ -77,6 +77,7 @@ fn color_error_from_parse_error(err ParseColorError) ColorError {
 /// can be created from a sequence of
 /// `UserColorSpec`s.
 pub struct ColorSpecs implements IClone {
+mut:
 	path_spec      ColorSpec
 	line_spec      ColorSpec
 	column_spec    ColorSpec
@@ -256,7 +257,7 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 	if pieces.len <= 1 || pieces.len > 3 {
 		return ColorError{
 			kind:     .invalid_format
-			original: s.to_owned()
+			original: s.clone()
 		}
 	}
 	otype := parse_out_type(pieces[0])!
@@ -273,7 +274,7 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 			if pieces.len < 3 {
 				return ColorError{
 					kind:     .invalid_format
-					original: s.to_owned()
+					original: s.clone()
 				}
 			}
 			style := parse_style(pieces[2])!
@@ -289,10 +290,16 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 			if pieces.len < 3 {
 				return ColorError{
 					kind:     .invalid_format
-					original: s.to_owned()
+					original: s.clone()
 				}
 			}
-			color := parse_color(pieces[2]) or { return color_error_from_parse_error(err) }
+			color := parse_color(pieces[2]) or {
+				return ColorError{
+					kind:    .unrecognized_color
+					name:    pieces[2].clone()
+					details: err.msg()
+				}
+			}
 			return UserColorSpec{
 				ty:    otype
 				value: SpecValue{
@@ -305,10 +312,16 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 			if pieces.len < 3 {
 				return ColorError{
 					kind:     .invalid_format
-					original: s.to_owned()
+					original: s.clone()
 				}
 			}
-			color := parse_color(pieces[2]) or { return color_error_from_parse_error(err) }
+			color := parse_color(pieces[2]) or {
+				return ColorError{
+					kind:    .unrecognized_color
+					name:    pieces[2].clone()
+					details: err.msg()
+				}
+			}
 			return UserColorSpec{
 				ty:    otype
 				value: SpecValue{
@@ -340,7 +353,7 @@ fn parse_out_type(s string) !OutType {
 		else {
 			return ColorError{
 				kind: .unrecognized_out_type
-				name: s.to_owned()
+				name: s.clone()
 			}
 		}
 	}
@@ -363,7 +376,7 @@ fn parse_spec_type(s string) !SpecType {
 		else {
 			return ColorError{
 				kind: .unrecognized_spec_type
-				name: s.to_owned()
+				name: s.clone()
 			}
 		}
 	}
@@ -398,7 +411,7 @@ fn parse_style(s string) !Style {
 		else {
 			return ColorError{
 				kind: .unrecognized_style
-				name: s.to_owned()
+				name: s.clone()
 			}
 		}
 	}

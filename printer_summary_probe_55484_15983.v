@@ -1,53 +1,53 @@
-import ripgrep_v.matcher
-import ripgrep_v.printer
-import ripgrep_v.searcher
+import matcher
+import printer
+import searcher
 
 struct DummyWriter {
 mut:
 	data []u8
 }
 
-fn (mut w DummyWriter) write(buf []u8) !int {
+pub fn (mut w DummyWriter) write(buf []u8) !int {
 	w.data << buf
 	return buf.len
 }
 
 struct DummyMatcher {}
 
-fn (m DummyMatcher) find_at(haystack []u8, at usize) !?matcher.Match {
+pub fn (m DummyMatcher) find_at(haystack []u8, at usize) !matcher.FallibleOption[matcher.Match] {
 	for i := at; i + 4 <= haystack.len; i++ {
 		if haystack[i..i + 4].bytestr() == 'test' {
-			return matcher.Match.new(i, i + 4)
+			return matcher.FallibleOption.some(matcher.Match.new(i, i + 4))
 		}
 	}
-	return none
+	return matcher.FallibleOption.absent[matcher.Match]()
 }
 
-fn (m DummyMatcher) new_captures() !matcher.NoCaptures {
+pub fn (m DummyMatcher) new_captures() !matcher.NoCaptures {
 	return matcher.NoCaptures.new()
 }
 
-fn (m DummyMatcher) capture_count() usize {
+pub fn (m DummyMatcher) capture_count() usize {
 	return matcher.default_capture_count()
 }
 
-fn (m DummyMatcher) capture_index(name string) ?usize {
+pub fn (m DummyMatcher) capture_index(name string) ?usize {
 	return matcher.default_capture_index(name)
 }
 
-fn (m DummyMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+pub fn (m DummyMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
-fn (m DummyMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
+pub fn (m DummyMatcher) non_matching_bytes() ?&matcher.ByteSet {
 	return matcher.default_non_matching_bytes()
 }
 
-fn (m DummyMatcher) line_terminator() ?matcher.LineTerminator {
+pub fn (m DummyMatcher) line_terminator() ?matcher.LineTerminator {
 	return matcher.default_line_terminator()
 }
 
-fn (m DummyMatcher) find_candidate_line(haystack []u8) !?matcher.LineMatchKind {
+pub fn (m DummyMatcher) find_candidate_line(haystack []u8) !matcher.FallibleOption[matcher.LineMatchKind] {
 	return matcher.default_find_candidate_line(m, haystack)
 }
 

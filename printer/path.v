@@ -2,6 +2,7 @@ module printer
 
 /// A configuration for describing how paths should be written.
 struct PathConfig {
+mut:
 	colors     ColorSpecs
 	hyperlink  HyperlinkConfig
 	separator  ?u8
@@ -10,6 +11,7 @@ struct PathConfig {
 
 /// A builder for a printer that emits file paths.
 pub struct PathPrinterBuilder {
+mut:
 	config PathConfig
 }
 
@@ -66,7 +68,7 @@ mut:
 }
 
 /// Write the given path to the underlying writer.
-pub fn (mut printer PathPrinter[W]) write[^p](path &^p string) ! {
+pub fn (mut printer PathPrinter[W]) write(path &string) ! {
 	$if W is WriteColor {
 		ppath := PrinterPath.new(path).with_separator(printer.config.separator)
 		bytes := ppath.as_bytes()
@@ -87,7 +89,7 @@ pub fn (mut printer PathPrinter[W]) write[^p](path &^p string) ! {
 }
 
 /// Starts a hyperlink span when applicable.
-fn (mut printer PathPrinter[W]) start_hyperlink[^p](mut path PrinterPath[^p]) !InterpolatorStatus {
+fn (mut printer PathPrinter[W]) start_hyperlink(mut path PrinterPath) !InterpolatorStatus {
 	$if W is WriteColor {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)

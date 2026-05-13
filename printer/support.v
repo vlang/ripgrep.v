@@ -1,8 +1,8 @@
 module printer
 
 import os
-import ripgrep_v.matcher
-import ripgrep_v.searcher
+import matcher
+import searcher
 import time
 
 /// A simple encapsulation of a file path used by a printer.
@@ -15,17 +15,17 @@ import time
 /// This port uses V strings for paths instead of Rust's `Path` and `Cow`
 /// representation. The original behavior is preserved, but the path bytes are
 /// always materialized eagerly.
-pub struct PrinterPath[^a] implements IClone {
-	path &^a string
+pub struct PrinterPath implements IClone {
+	path string
 mut:
 	bytes     []u8
 	hyperlink ?HyperlinkPath
 }
 
 /// Create a new path suitable for printing.
-pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
-	return PrinterPath[^a]{
-		path:  path
+pub fn PrinterPath.new(path &string) PrinterPath {
+	return PrinterPath{
+		path:  (*path).clone()
 		bytes: path.bytes()
 	}
 }
@@ -34,7 +34,7 @@ pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
 ///
 /// When set, `PrinterPath::as_bytes` will return the path provided but
 /// with its separator replaced with the one given.
-pub fn (pp PrinterPath[^a]) with_separator(sep ?u8) PrinterPath[^a] {
+pub fn (pp PrinterPath) with_separator(sep ?u8) PrinterPath {
 	sep_value := sep or { return pp }
 	mut bytes := pp.bytes.clone()
 	for i, byte in bytes {
@@ -48,35 +48,35 @@ pub fn (pp PrinterPath[^a]) with_separator(sep ?u8) PrinterPath[^a] {
 			}
 		}
 	}
-	return PrinterPath[^a]{
+	return PrinterPath{
 		path:  pp.path
 		bytes: bytes
 	}
 }
 
 /// Return the raw bytes for this path.
-pub fn (pp PrinterPath[^a]) as_bytes() []u8 {
+pub fn (pp PrinterPath) as_bytes() []u8 {
 	return pp.bytes.clone()
 }
 
 /// Return this path as a hyperlink.
 ///
 /// This port uses an optional cached hyperlink value instead of a `OnceCell`.
-pub fn (mut pp PrinterPath[^a]) as_hyperlink[^a]() ?&^a HyperlinkPath {
+pub fn (mut pp PrinterPath) as_hyperlink() ?HyperlinkPath {
 	if pp.hyperlink == none {
-		pp.hyperlink = HyperlinkPath.from_path(*pp.path) or { return none }
+		pp.hyperlink = HyperlinkPath.from_path(pp.path) or { return none }
 	}
-	return unsafe { &pp.hyperlink? }
+	return pp.hyperlink
 }
 
 /// Return this path as an actual path string.
-pub fn (pp PrinterPath[^a]) as_path[^a]() &^a string {
+pub fn (pp PrinterPath) as_path() string {
 	return pp.path
 }
 
 /// A type that provides "nicer" Display impls for `time.Duration`.
 pub struct NiceDuration implements IClone {
-pub:
+mut:
 	duration time.Duration
 }
 
@@ -116,7 +116,7 @@ pub fn DecimalFormatter.new(n u64) DecimalFormatter {
 	}
 	return DecimalFormatter{
 		buf:   buf
-		start: i
+		start: usize(i)
 	}
 }
 
@@ -130,10 +130,11 @@ pub fn normalize_hyperlink_path(path string) ?string {
 	if canonical == '' || !os.is_abs_path(canonical) {
 		return none
 	}
-	return canonical.to_owned()
+	return canonical.clone()
 }
 
-pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, mut bytes []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
+pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
+	mut bytes := bytes_in.clone()
 	// This strange dance is to account for the possibility of look-ahead in
 	// the regex. The problem here is that mat.bytes() doesn't include the
 	// lines beyond the match boundaries in mulit-line mode, which means that
@@ -160,12 +161,12 @@ pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, mut b
 	is_multi_line := searcher_.multi_line_with_matcher(matcher_)
 	if is_multi_line {
 		if range.end() <= bytes.len && bytes[range.end()..].len >= max_look_ahead {
-			bytes = bytes[..range.end() + max_look_ahead]
+			bytes = bytes[..range.end() + max_look_ahead].clone()
 		}
 	} else {
 		mut line := matcher.Match.new(0, range.end())
 		line, _ = trim_line_terminator(searcher_, bytes, line)
-		bytes = bytes[..line.end()]
+		bytes = bytes[..line.end()].clone()
 	}
 	matcher.find_iter_at(matcher_, bytes, range.start(), fn [range, matched] (m matcher.Match) bool {
 		if m.start() >= range.end() {

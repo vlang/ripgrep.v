@@ -2,17 +2,17 @@ module printer
 
 fn alias(name string, description string, format string) HyperlinkAlias {
 	return HyperlinkAlias{
-		name_:        name.to_owned()
-		description_: description.to_owned()
-		format_:      format.to_owned()
+		name_:        name.clone()
+		description_: description.clone()
+		format_:      format.clone()
 	}
 }
 
 fn prioritized_alias(priority i16, name string, description string, format string) HyperlinkAlias {
 	return HyperlinkAlias{
-		name_:             name.to_owned()
-		description_:      description.to_owned()
-		format_:           format.to_owned()
+		name_:             name.clone()
+		description_:      description.clone()
+		format_:           format.clone()
 		display_priority_: priority
 	}
 }

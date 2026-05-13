@@ -1,5 +1,7 @@
 module printer
 
+interface IClone {}
+
 /*
 This crate provides featureful and fast printers that interoperate with the
 `grep-searcher` crate.

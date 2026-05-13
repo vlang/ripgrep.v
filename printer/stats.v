@@ -7,6 +7,7 @@ import time
 /// When statistics are reported by a printer, they correspond to all searches
 /// executed with that printer.
 pub struct Stats implements IClone {
+mut:
 	elapsed_             NiceDuration
 	searches_            u64
 	searches_with_match_ u64

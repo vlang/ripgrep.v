@@ -11,32 +11,32 @@ module matcher
 /// corresponding matched text. If no such match exists, then `append` should
 /// not write anything to its given buffer.
 pub fn interpolate(replacement []u8, append fn (usize, mut []u8), name_to_index fn (string) ?usize, mut dst []u8) {
-	mut replacement_bytes := replacement
+	mut replacement_bytes := replacement.clone()
 	for replacement_bytes.len > 0 {
 		index := find_byte(replacement_bytes, `$`) or { break }
 		dst << replacement_bytes[..index]
-		replacement_bytes = replacement_bytes[index..]
+		replacement_bytes = replacement_bytes[index..].clone()
 		if replacement_bytes.len > 1 && replacement_bytes[1] == `$` {
 			dst << [u8(`$`)]
-			replacement_bytes = replacement_bytes[2..]
+			replacement_bytes = replacement_bytes[2..].clone()
 			continue
 		}
 		cap_ref := find_cap_ref(replacement_bytes) or {
 			dst << [u8(`$`)]
-			replacement_bytes = replacement_bytes[1..]
+			replacement_bytes = replacement_bytes[1..].clone()
 			continue
 		}
-		replacement_bytes = replacement_bytes[cap_ref.end..]
+		replacement_bytes = replacement_bytes[cap_ref.end..].clone()
 		match cap_ref.kind {
 			.number {
 				append(cap_ref.number, mut dst)
-			}
-			.named {
-				if index := name_to_index(cap_ref.name) {
-					append(index, mut dst)
-				}
+		}
+		.named {
+			if cap_index := name_to_index(cap_ref.name) {
+				append(cap_index, mut dst)
 			}
 		}
+	}
 	}
 	dst << replacement_bytes
 }
@@ -64,7 +64,7 @@ enum CaptureRefKind {
 fn CaptureRef.named(name string, end usize) CaptureRef {
 	return CaptureRef{
 		kind: .named
-		name: name.to_owned()
+		name: name.clone()
 		end:  end
 	}
 }

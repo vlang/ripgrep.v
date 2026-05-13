@@ -1,6 +1,8 @@
 module searcher
 
-import ripgrep_v.matcher
+import matcher
+
+interface IClone {}
 
 /// A minimal translated surface for `grep-searcher` needed by `printer`
 /// until the rest of the searcher crate is translated.
@@ -24,6 +26,7 @@ pub fn (d BinaryDetection) quit_byte() ?u8 {
 }
 
 pub struct Searcher implements IClone {
+mut:
 	multi_line_       bool
 	line_terminator_  matcher.LineTerminator
 	binary_detection_ BinaryDetection
@@ -35,29 +38,29 @@ pub fn Searcher.new() Searcher {
 	}
 }
 
-pub fn (searcher Searcher) multi_line_with_matcher[M](matcher_ M) bool {
+pub fn (s Searcher) multi_line_with_matcher[M](matcher_ M) bool {
 	_ = matcher_
-	return searcher.multi_line_
+	return s.multi_line_
 }
 
-pub fn (searcher Searcher) line_terminator() matcher.LineTerminator {
-	return searcher.line_terminator_
+pub fn (s Searcher) line_terminator() matcher.LineTerminator {
+	return s.line_terminator_
 }
 
-pub fn (searcher Searcher) binary_detection() BinaryDetection {
-	return searcher.binary_detection_
+pub fn (s Searcher) binary_detection() BinaryDetection {
+	return s.binary_detection_
 }
 
-pub fn (mut searcher Searcher) set_multi_line(yes bool) {
-	searcher.multi_line_ = yes
+pub fn (mut s Searcher) set_multi_line(yes bool) {
+	s.multi_line_ = yes
 }
 
-pub fn (mut searcher Searcher) set_line_terminator(line_terminator matcher.LineTerminator) {
-	searcher.line_terminator_ = line_terminator
+pub fn (mut s Searcher) set_line_terminator(line_terminator matcher.LineTerminator) {
+	s.line_terminator_ = line_terminator
 }
 
-pub fn (mut searcher Searcher) set_binary_detection(binary_detection BinaryDetection) {
-	searcher.binary_detection_ = binary_detection
+pub fn (mut s Searcher) set_binary_detection(binary_detection BinaryDetection) {
+	s.binary_detection_ = binary_detection
 }
 
 pub struct SinkFinish implements IClone {

@@ -147,8 +147,8 @@ pub fn parse_color(name string) !Color {
 				pieces := lower.split(',')
 				if pieces.len != 3 {
 					return ParseColorError{
-						invalid_value: name.to_owned()
-						message:       'invalid color ${name}'.to_owned()
+						invalid_value: name.clone()
+						message:       'invalid color ${name}'.clone()
 					}
 				}
 				return color_rgb(parse_u8_component(pieces[0])!, parse_u8_component(pieces[1])!,
@@ -179,11 +179,11 @@ pub fn (mut spec ColorSpec) clear() {
 }
 
 pub fn (mut spec ColorSpec) set_fg(color ?Color) {
-	spec.fg = if value := color { value.clone() } else { none }
+	spec.fg = if value := color { value } else { none }
 }
 
 pub fn (mut spec ColorSpec) set_bg(color ?Color) {
-	spec.bg = if value := color { value.clone() } else { none }
+	spec.bg = if value := color { value } else { none }
 }
 
 pub fn (mut spec ColorSpec) set_bold(value bool) {
@@ -204,14 +204,14 @@ pub fn (mut spec ColorSpec) set_italic(value bool) {
 
 pub fn (spec ColorSpec) fg() ?Color {
 	if value := spec.fg {
-		return value.clone()
+		return value
 	}
 	return none
 }
 
 pub fn (spec ColorSpec) bg() ?Color {
 	if value := spec.bg {
-		return value.clone()
+		return value
 	}
 	return none
 }
