@@ -18,26 +18,6 @@ pub struct Match[T] {
 	has_value bool
 }
 
-pub fn no_match[T]() Match[T] {
-	return Match[T]{}
-}
-
-pub fn ignore_match[T](value T) Match[T] {
-	return Match[T]{
-		kind:      .ignore
-		value:     value
-		has_value: true
-	}
-}
-
-pub fn whitelist_match[T](value T) Match[T] {
-	return Match[T]{
-		kind:      .whitelist
-		value:     value
-		has_value: true
-	}
-}
-
 /// Returns true if the match result didn't match any globs.
 pub fn (m Match[T]) is_none() bool {
 	return m.kind == .none
@@ -59,20 +39,28 @@ pub fn (m Match[T]) is_whitelist() bool {
 pub fn (m Match[T]) invert[T]() Match[T] {
 	match m.kind {
 		.none {
-			return no_match[T]()
+			return Match[T]{}
 		}
 		.ignore {
-			if value := m.value {
-				return whitelist_match[T](value)
+			if m.has_value {
+				return Match[T]{
+					kind:      .whitelist
+					value:     m.value
+					has_value: true
+				}
 			}
 		}
 		.whitelist {
-			if value := m.value {
-				return ignore_match[T](value)
+			if m.has_value {
+				return Match[T]{
+					kind:      .ignore
+					value:     m.value
+					has_value: true
+				}
 			}
 		}
 	}
-	return no_match[T]()
+	return Match[T]{}
 }
 
 /// Return the value inside this match if it exists.

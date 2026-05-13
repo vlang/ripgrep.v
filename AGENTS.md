@@ -14,6 +14,12 @@ Preserve names, control flow, helper boundaries, and API shape unless V or owner
 3. Use V ownership mode as the target model.
 If faithful translation needs an ownership feature that V does not yet support, implement the missing feature in the local V compiler instead of weakening the translated code.
 
+4. If a compiler bug is encountered while translating, fix the compiler bug instead of routing around it in the translated code.
+Add the focused compiler tests needed for the fix before relying on the new behavior.
+
+5. Keep V's standard `flag` module ownership-free.
+If translated ownership-aware code needs flag-style parsing, put that work in a separate module instead of making `vlib/flag` an ownership dependency.
+
 ## Stubs
 
 1. If translated code calls into an untranslated module, create the minimal module/file needed so the code builds.
@@ -47,6 +53,9 @@ Do not leave translated tests inline in the main translated source file.
 2. Keep translated test helpers and test comments close to the Rust source.
 Apply the same comment-translation rules to tests.
 
+3. When a shared translated test helper must be reused across multiple `_test.v` files, keep it in a normal module file only if the current ownership frontend cannot load sibling `_test.v` helpers during direct `v -ownership some_test.v` compilation.
+Document that frontend limitation in the helper file comment when this exception is used.
+
 ## Ownership And Copies
 
 1. Use `.to_owned()` when creating a new owned string from borrowed/derived data.
@@ -65,16 +74,19 @@ Example: custom tagged-union/internal-representation handling.
 
 ## Lifetimes
 
-1. When the Rust API uses lifetimes to express borrowing relationships, translate them with V explicit lifetimes instead of erasing them.
+1. Translate all Rust lifetimes in translated code.
+Do not drop, silently erase, or leave lifetime-bearing Rust APIs unparameterized in V unless the original code is actually owning/cloning the data or a documented V/compiler limitation forces a deviation.
+
+2. When the Rust API uses lifetimes to express borrowing relationships, translate them with V explicit lifetimes instead of erasing them.
 Use `^a` lifetime parameters, `&^a T` references, `Type[^a]` lifetime-parameterized types, and `fn foo[^a](...)` or `pub fn (x &^a T) bar[^a](...)` for functions and methods.
 
-2. Do not replace borrowed Rust return values with owned V values just to avoid lifetimes.
+3. Do not replace borrowed Rust return values with owned V values just to avoid lifetimes.
 If the Rust return type borrows from `self`, an argument, or nested matcher state, the translated V type should carry the same lifetime relationship.
 
-3. If a translated type exists only to carry borrowed data, keep it lifetime-parameterized even when the lifetime has no runtime representation.
+4. If a translated type exists only to carry borrowed data, keep it lifetime-parameterized even when the lifetime has no runtime representation.
 Do not collapse lifetime-only generic parameters out of the translated API shape.
 
-4. Only omit or rewrite Rust lifetimes when the original code is actually cloning/owning the data or a documented V/compiler limitation forces a deviation.
+5. Only omit or rewrite Rust lifetimes when the original code is actually cloning/owning the data or a documented V/compiler limitation forces a deviation.
 When a deviation is unavoidable, document it in the translated code comments.
 
 ## Representation Conventions
@@ -84,7 +96,9 @@ When a deviation is unavoidable, document it in the translated code comments.
 2. Only use an explicit fallback representation like `T` plus `has_* bool` when V cannot represent the original Rust shape directly or a documented port-specific constraint requires it.
 Document the deviation when this happens.
 
-3. If a Rust-private field must become public in V for practical reasons, keep the representation explicit and document only the V-specific parts.
+3. This also applies to translated struct fields: prefer a direct `?T` field over splitting it into `value` plus `has_value bool` when V supports the optional field shape.
+
+4. If a Rust-private field must become public in V for practical reasons, keep the representation explicit and document only the V-specific parts.
 
 ## Verification
 

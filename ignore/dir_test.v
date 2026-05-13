@@ -1,21 +1,6 @@
 module ignore
 
 import os
-import rand
-
-struct TempDir {
-	dir string
-}
-
-fn (td TempDir) path() string {
-	return td.dir
-}
-
-fn (td TempDir) cleanup() {
-	if td.dir != '' {
-		os.rmdir_all(td.dir) or {}
-	}
-}
 
 fn wfile(path string, contents string) {
 	os.write_file(path, contents) or { panic(err.msg()) }
@@ -29,14 +14,6 @@ fn partial(err IgnoreError) []IgnoreError {
 	match err.kind {
 		.partial { return err.nested }
 		else { panic('expected partial error') }
-	}
-}
-
-fn tmpdir() TempDir {
-	path := os.join_path(os.temp_dir(), rand.ulid())
-	os.mkdir_all(path) or { panic(err.msg()) }
-	return TempDir{
-		dir: path
 	}
 }
 

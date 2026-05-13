@@ -33,7 +33,9 @@ pub:
 	case_insensitive bool
 }
 
-type GitignoreGlobRef[^a] = &^a Glob
+pub struct GitignoreGlobRef[^a] implements IClone {
+	glob &^a Glob
+}
 
 /// Returns the file path that defined this glob.
 pub fn (g Glob) from() ?string {
@@ -167,9 +169,9 @@ pub fn (gi Gitignore) num_whitelists() u64 {
 /// then `path` is assumed to be relative to this matcher.
 pub fn (gi &^a Gitignore) matched[^a](path string, is_dir bool) Match[GitignoreGlobRef[^a]] {
 	if gi.is_empty() {
-		return gitignore_no_match[^a]()
+		return Match[GitignoreGlobRef[^a]]{}
 	}
-	return gi.matched_stripped[^a](gi.strip(path), is_dir)
+	return gi.matched_stripped(gi.strip(path), is_dir)
 }
 
 /// Returns whether the given path (file or directory, and expected to be
@@ -195,11 +197,11 @@ pub fn (gi &^a Gitignore) matched[^a](path string, is_dir bool) Match[GitignoreG
 /// of this matcher.
 pub fn (gi &^a Gitignore) matched_path_or_any_parents[^a](path string, is_dir bool) Match[GitignoreGlobRef[^a]] {
 	if gi.is_empty() {
-		return gitignore_no_match[^a]()
+		return Match[GitignoreGlobRef[^a]]{}
 	}
 	mut stripped := gi.strip(path)
 	assert !stripped.starts_with('/'), 'path is expected to be under the root'
-	matched := gi.matched_stripped[^a](stripped, is_dir)
+	matched := gi.matched_stripped(stripped, is_dir)
 	if !matched.is_none() {
 		return matched
 	}
@@ -208,19 +210,19 @@ pub fn (gi &^a Gitignore) matched_path_or_any_parents[^a](path string, is_dir bo
 		if parent == '' || parent == '.' || parent == stripped {
 			break
 		}
-		matched := gi.matched_stripped[^a](parent, true)
+		matched := gi.matched_stripped(parent, true)
 		if !matched.is_none() {
 			return matched
 		}
 		stripped = parent
 	}
-	return gitignore_no_match[^a]()
+	return Match[GitignoreGlobRef[^a]]{}
 }
 
 /// Like matched, but takes a path that has already been stripped.
 fn (gi &^a Gitignore) matched_stripped[^a](path string, is_dir bool) Match[GitignoreGlobRef[^a]] {
 	if gi.is_empty() {
-		return gitignore_no_match[^a]()
+		return Match[GitignoreGlobRef[^a]]{}
 	}
 	candidate := gitignore_path_for_matching(path)
 	for idx in 0 .. gi.globs.len {
@@ -231,13 +233,25 @@ fn (gi &^a Gitignore) matched_stripped[^a](path string, is_dir bool) Match[Gitig
 				continue
 			}
 			return if glob.is_whitelist() {
-				gitignore_whitelist_match[^a](glob)
+				Match[GitignoreGlobRef[^a]]{
+					kind:      .whitelist
+					value:     GitignoreGlobRef[^a]{
+						glob: glob
+					}
+					has_value: true
+				}
 			} else {
-				gitignore_ignore_match[^a](glob)
+				Match[GitignoreGlobRef[^a]]{
+					kind:      .ignore
+					value:     GitignoreGlobRef[^a]{
+						glob: glob
+					}
+					has_value: true
+				}
 			}
 		}
 	}
-	return gitignore_no_match[^a]()
+	return Match[GitignoreGlobRef[^a]]{}
 }
 
 /// Strips the given path such that it's suitable for matching with this
@@ -752,24 +766,4 @@ fn gitignore_char_class_matches(class []rune, ch rune) bool {
 		i++
 	}
 	return if negate { !matched } else { matched }
-}
-
-fn gitignore_no_match[^a]() Match[GitignoreGlobRef[^a]] {
-	return Match[GitignoreGlobRef[^a]]{}
-}
-
-fn gitignore_ignore_match[^a](glob GitignoreGlobRef[^a]) Match[GitignoreGlobRef[^a]] {
-	return Match[GitignoreGlobRef[^a]]{
-		kind:      .ignore
-		value:     glob
-		has_value: true
-	}
-}
-
-fn gitignore_whitelist_match[^a](glob GitignoreGlobRef[^a]) Match[GitignoreGlobRef[^a]] {
-	return Match[GitignoreGlobRef[^a]]{
-		kind:      .whitelist
-		value:     glob
-		has_value: true
-	}
 }

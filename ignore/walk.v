@@ -29,6 +29,11 @@ fn entry_file_type_from_os(ft os.FileType) EntryFileType {
 	}
 }
 
+fn followed_path_info(path string) !os.Stat {
+	resolved := os.real_path(path)
+	return os.lstat(resolved)
+}
+
 struct StdinEntry {}
 
 struct DirEntryRaw implements IClone {
@@ -39,6 +44,7 @@ struct DirEntryRaw implements IClone {
 	depth             int
 	source_is_symlink bool
 	metadata          Metadata
+	ino_value         u64
 }
 
 // File metadata attached to a directory entry.
@@ -106,10 +112,12 @@ pub fn (d &DirEntry) metadata() !Metadata {
 	return raw.metadata()
 }
 
-// Returns the file type for the file represented by this entry.
-pub fn (d &DirEntry) file_type() EntryFileType {
+// Return the file type for the file that this entry points to.
+//
+// This entry doesn't have a file type if it corresponds to stdin.
+pub fn (d &DirEntry) file_type() ?EntryFileType {
 	if d.dent is StdinEntry {
-		return .unknown
+		return none
 	}
 	raw := d.dent as DirEntryRaw
 	return raw.file_type()
@@ -131,11 +139,15 @@ pub fn (d &DirEntry) depth() int {
 	return raw.depth
 }
 
-// Returns the inode number when it exists.
+// Returns the underlying inode number if one exists.
 //
-// The current V port does not expose inode tracking yet.
-pub fn (d &DirEntry) ino() (bool, u64) {
-	return false, u64(0)
+// If this entry doesn't have an inode number, then `none` is returned.
+pub fn (d &DirEntry) ino() ?u64 {
+	if d.dent is StdinEntry {
+		return none
+	}
+	raw := d.dent as DirEntryRaw
+	return raw.ino()
 }
 
 // Returns an error associated with this entry, if one exists.
@@ -148,7 +160,10 @@ pub fn (d &^a DirEntry) error[^a]() ?&^a IgnoreError {
 
 // Returns true if and only if this entry points to a directory.
 pub fn (d &DirEntry) is_dir() bool {
-	return d.file_type().is_dir()
+	if file_type := d.file_type() {
+		return file_type.is_dir()
+	}
+	return false
 }
 
 fn DirEntry.new_stdin() DirEntry {
@@ -170,7 +185,7 @@ fn DirEntry.new_raw(dent DirEntryRaw, err ?IgnoreError) DirEntry {
 }
 
 fn (raw &DirEntryRaw) path_is_symlink() bool {
-	return raw.source_is_symlink || raw.follow_link
+	return raw.source_is_symlink
 }
 
 fn (raw &DirEntryRaw) metadata() !Metadata {
@@ -181,17 +196,23 @@ fn (raw &DirEntryRaw) file_type() EntryFileType {
 	return raw.ty
 }
 
+fn (raw &DirEntryRaw) ino() ?u64 {
+	$if linux || macos || freebsd || openbsd || netbsd || dragonfly || solaris {
+		return raw.ino_value
+	} $else {
+		return none
+	}
+}
+
 fn (raw &^a DirEntryRaw) file_name[^a]() &^a string {
 	return &raw.file_name_value
 }
 
 fn DirEntryRaw.from_path(depth int, path string, link bool) !DirEntryRaw {
-	source_is_symlink := os.is_link(path)
-	ty := if link {
-		detect_followed_type(path)
-	} else {
-		detect_unfollowed_type(path, source_is_symlink)
-	}
+	link_info := os.lstat(path) or { return err }
+	source_is_symlink := link_info.get_filetype() == .symbolic_link
+	info := if link { followed_path_info(path) or { return err } } else { link_info }
+	ty := entry_file_type_from_os(info.get_filetype())
 	return DirEntryRaw{
 		path:              path.to_owned()
 		file_name_value:   file_name(path).to_owned()
@@ -200,9 +221,10 @@ fn DirEntryRaw.from_path(depth int, path string, link bool) !DirEntryRaw {
 		depth:             depth
 		source_is_symlink: source_is_symlink
 		metadata:          Metadata{
-			size:      if ty == .directory { u64(0) } else { os.file_size(path) }
+			size:      if ty == .directory { u64(0) } else { info.size }
 			file_type: ty
 		}
+		ino_value:         info.inode
 	}
 }
 
@@ -273,21 +295,52 @@ fn (mut visitor NoopParallelVisitor) visit(entry WalkResult) WalkState {
 }
 
 // Handle used for path equality checks, for example when skipping stdout.
-pub struct Handle {
+struct Handle {
 pub:
 	path      string
+	dev       u64
+	ino       u64
 	is_stdout bool
 }
 
 fn Handle.from_path(path string) !Handle {
+	info := followed_path_info(path) or { return err }
 	return Handle{
 		path:      os.real_path(path).to_owned()
+		dev:       info.dev
+		ino:       info.inode
 		is_stdout: false
 	}
 }
 
+fn (left Handle) same_file(right Handle) bool {
+	return left.dev == right.dev && left.ino == right.ino
+}
+
+// Returns a handle to stdout for filtering search.
+//
+// A handle is returned if and only if stdout is being redirected to a file.
+// The handle returned corresponds to that file.
+//
+// This can be used to ensure that we do not attempt to search a file that we
+// may also be writing to.
 fn stdout_handle() (bool, Handle) {
-	return false, Handle{}
+	$if windows {
+		return false, Handle{}
+	} $else {
+		info := followed_path_info('/dev/fd/1') or {
+			return false, Handle{}
+		}
+		if info.get_filetype() != .regular {
+			return false, Handle{}
+		}
+		return true, Handle{
+			path:      os.real_path('/dev/fd/1').to_owned()
+			dev:       info.dev
+			ino:       info.inode
+			is_stdout: true
+		}
+	}
 }
 
 // Builds a recursive directory iterator.
@@ -654,7 +707,7 @@ fn (mut walk Walk) add_root_path(path string) {
 		return
 	}
 	root, err := prepare_root_entry(path, walk.follow_links)
-	if err.kind != .other || err.msg != '' {
+	if err.kind != .other || err.message != '' {
 		walk.push_result(walk_result_from_error(err))
 		return
 	}
@@ -674,7 +727,7 @@ fn (mut walk Walk) add_root_path(path string) {
 
 fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, root_device u64, has_root_device bool) {
 	should_visit := walk.min_depth < 0 || dent.depth() >= walk.min_depth
-	if dent.path_is_symlink() || !dent.is_dir() {
+	if !dent.is_dir() {
 		if !is_root {
 			if walk.skip_entry(ig, dent) {
 				return
@@ -815,7 +868,8 @@ pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
 	for path in wp.paths {
 		walk.add_root_path(path)
 	}
-	for item in walk.items() {
+	for {
+		item := walk.next() or { break }
 		state := visitor.visit(item)
 		if state.is_quit() {
 			break
@@ -870,7 +924,7 @@ fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth int) ?Ign
 		h := Handle.from_path(node.dir) or {
 			return io_error(err).with_path(child_path).with_depth(child_depth)
 		}
-		if h.path == hchild.path {
+		if h.same_file(hchild) {
 			return loop_error(node.dir, child_path).with_depth(child_depth)
 		}
 	}
@@ -893,42 +947,41 @@ fn should_skip_entry(ig Ignore, dent DirEntry) bool {
 	return false
 }
 
+fn never_equal(dent DirEntry, handle Handle) bool {
+	$if linux || macos || freebsd || openbsd || netbsd || dragonfly || solaris {
+		if ino := dent.ino() {
+			return ino != handle.ino
+		}
+		return false
+	} $else {
+		_ = dent
+		_ = handle
+		return false
+	}
+}
+
+// Returns true if and only if the given directory entry is believed to be
+// equivalent to the given handle. If there was a problem querying the path
+// for information to determine equality, then that error is returned.
 fn path_equals(dent DirEntry, handle Handle) !bool {
-	if dent.is_stdin() {
+	if dent.is_stdin() || never_equal(dent, handle) {
 		return false
 	}
 	other := Handle.from_path(dent.path())!
-	return other.path == handle.path
+	return other.same_file(handle)
 }
 
+// Returns true if and only if the given path is on the same device as the
+// given root device.
 fn is_same_file_system(root_device u64, path string) !bool {
 	return root_device == device_num(path)!
 }
 
 fn device_num(path string) !u64 {
-	_ = path
-	return u64(0)
-}
-
-fn detect_followed_type(path string) EntryFileType {
-	if os.is_dir(path) {
-		return .directory
+	$if linux || macos || freebsd || openbsd || netbsd || dragonfly || solaris || windows {
+		info := followed_path_info(path) or { return err }
+		return info.dev
+	} $else {
+		return error('walkdir: same_file_system option not supported on this platform')
 	}
-	if os.is_file(path) {
-		return .file
-	}
-	return .other
-}
-
-fn detect_unfollowed_type(path string, source_is_symlink bool) EntryFileType {
-	if source_is_symlink {
-		return .symbolic_link
-	}
-	if os.is_dir(path) {
-		return .directory
-	}
-	if os.is_file(path) {
-		return .file
-	}
-	return .other
 }

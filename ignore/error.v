@@ -16,7 +16,7 @@ pub enum ErrorKind {
 pub struct IgnoreError implements IClone {
 pub mut:
 	kind     ErrorKind = .other
-	msg      string
+	message  string
 	line     u64
 	path     string
 	depth    int = -1
@@ -32,7 +32,7 @@ pub fn (err IgnoreError) clone() IgnoreError {
 	}
 	return IgnoreError{
 		kind:     err.kind
-		msg:      err.msg.clone()
+		message:  err.message.clone()
 		line:     err.line
 		path:     err.path.clone()
 		depth:    err.depth
@@ -45,29 +45,29 @@ pub fn (err IgnoreError) clone() IgnoreError {
 pub fn io_error(err IError) IgnoreError {
 	return IgnoreError{
 		kind: .io
-		msg:  err.msg().to_owned()
+		message: err.msg().to_owned()
 	}
 }
 
 pub fn other_error(msg string) IgnoreError {
 	return IgnoreError{
-		kind: .other
-		msg:  msg.to_owned()
+		kind:    .other
+		message: msg.to_owned()
 	}
 }
 
 pub fn glob_error(glob string, msg string) IgnoreError {
 	return IgnoreError{
-		kind: .glob
-		msg:  msg.to_owned()
-		path: glob.to_owned()
+		kind:    .glob
+		message: msg.to_owned()
+		path:    glob.to_owned()
 	}
 }
 
 pub fn loop_error(ancestor string, child string) IgnoreError {
 	return IgnoreError{
 		kind:     .loop_
-		msg:      'symbolic link loop detected'.to_owned()
+		message:  'symbolic link loop detected'.to_owned()
 		ancestor: ancestor.to_owned()
 		child:    child.to_owned()
 	}
@@ -75,15 +75,15 @@ pub fn loop_error(ancestor string, child string) IgnoreError {
 
 pub fn unrecognized_file_type_error(name string) IgnoreError {
 	return IgnoreError{
-		kind: .unrecognized_file_type
-		msg:  name.to_owned()
+		kind:    .unrecognized_file_type
+		message: name.to_owned()
 	}
 }
 
 pub fn invalid_definition_error() IgnoreError {
 	return IgnoreError{
-		kind: .invalid_definition
-		msg:  'invalid definition'.to_owned()
+		kind:    .invalid_definition
+		message: 'invalid definition'.to_owned()
 	}
 }
 
@@ -138,8 +138,8 @@ pub fn (err IgnoreError) has_depth() bool {
 
 pub fn ignore_error_str(err IgnoreError) string {
 	mut parts := []string{}
-	if err.msg != '' {
-		parts << err.msg.clone()
+	if err.message != '' {
+		parts << err.message.clone()
 	}
 	if err.path != '' {
 		parts << 'path=${err.path}'
@@ -194,7 +194,7 @@ pub fn (builder PartialErrorBuilder) into_error_option() (bool, IgnoreError) {
 	}
 	return true, IgnoreError{
 		kind:   .partial
-		msg:    'partial error'.to_owned()
+		message: 'partial error'.to_owned()
 		nested: builder.errs.clone()
 	}
 }
