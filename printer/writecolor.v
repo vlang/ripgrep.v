@@ -179,11 +179,11 @@ pub fn (mut spec ColorSpec) clear() {
 }
 
 pub fn (mut spec ColorSpec) set_fg(color ?Color) {
-	spec.fg = if value := color { value } else { none }
+	spec.fg = color
 }
 
 pub fn (mut spec ColorSpec) set_bg(color ?Color) {
-	spec.bg = if value := color { value } else { none }
+	spec.bg = color
 }
 
 pub fn (mut spec ColorSpec) set_bold(value bool) {
@@ -230,6 +230,11 @@ pub fn (spec ColorSpec) underline() ?bool {
 
 pub fn (spec ColorSpec) italic() ?bool {
 	return spec.italic
+}
+
+pub fn (spec ColorSpec) is_none() bool {
+	return spec.fg == none && spec.bg == none && spec.bold == none && spec.intense == none
+		&& spec.underline == none && spec.italic == none
 }
 
 pub struct HyperlinkSpec implements IClone {

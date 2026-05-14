@@ -68,7 +68,7 @@ mut:
 }
 
 /// Write the given path to the underlying writer.
-pub fn (mut printer PathPrinter[W]) write(path &string) ! {
+pub fn (mut printer PathPrinter[W]) write[^p](path &^p string) ! {
 	$if W is WriteColor {
 		ppath := PrinterPath.new(path).with_separator(printer.config.separator)
 		bytes := ppath.as_bytes()
@@ -89,7 +89,7 @@ pub fn (mut printer PathPrinter[W]) write(path &string) ! {
 }
 
 /// Starts a hyperlink span when applicable.
-fn (mut printer PathPrinter[W]) start_hyperlink(mut path PrinterPath) !InterpolatorStatus {
+fn (mut printer PathPrinter[W]) start_hyperlink[^p](mut path PrinterPath[^p]) !InterpolatorStatus {
 	$if W is WriteColor {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)

@@ -132,7 +132,9 @@ pub fn SummaryBuilder.new() SummaryBuilder {
 pub fn (builder SummaryBuilder) build[W](wtr W) Summary[W] {
 	return Summary[W]{
 		config: builder.config
-		wtr:    CounterWriter.new(wtr)
+		wtr:    CounterWriter[W]{
+			wtr: wtr
+		}
 	}
 }
 
@@ -286,16 +288,16 @@ pub fn Summary.new_no_color[W](wtr W) Summary[NoColor[W]] {
 /// this summary printer does not make sense without a file path (such as
 /// `PathWithMatch` or `PathWithoutMatch`), then any searches executed
 /// using this sink will immediately quit with an error.
-pub fn (mut summary Summary[W]) sink[M](matcher_ M) SummarySink[W, M] {
+pub fn (mut summary Summary[W]) sink[^s, M](matcher_ M) SummarySink[^s, ^s, M, W] {
 	mut stats := ?Stats(none)
 	if summary.config.stats || summary.config.kind.requires_stats() {
 		stats = Stats.new()
 	}
-	return SummarySink[W, M]{
+	return SummarySink[^s, ^s, M, W]{
 		matcher:      matcher_
-		summary:      unsafe { &summary }
+		summary:      &summary
 		interpolator: Interpolator.new(summary.config.hyperlink)
-		path:         none
+		path:         ?PrinterPath(none)
 		start_time:   time.now()
 		match_count:  0
 		stats:        stats
@@ -306,26 +308,26 @@ pub fn (mut summary Summary[W]) sink[M](matcher_ M) SummarySink[W, M] {
 ///
 /// When the printer is associated with a path, then it may, depending on
 /// its configuration, print the path.
-pub fn (mut summary Summary[W]) sink_with_path[M](matcher_ M, path &string) SummarySink[W, M] {
+pub fn (mut summary Summary[W]) sink_with_path[^p, ^s, M](matcher_ M, path &^p string) SummarySink[^p, ^s, M, W] {
 	mut stats := ?Stats(none)
 	if summary.config.stats || summary.config.kind.requires_stats() {
 		stats = Stats.new()
 	}
 	if !summary.config.path && !summary.config.kind.requires_path() {
-		return SummarySink[W, M]{
-			matcher:      matcher_
-			summary:      unsafe { &summary }
+			return SummarySink[^p, ^s, M, W]{
+				matcher:      matcher_
+				summary:      &summary
 			interpolator: Interpolator.new(summary.config.hyperlink)
-			path:         none
+			path:         ?PrinterPath(none)
 			start_time:   time.now()
 			match_count:  0
 			stats:        stats
 		}
 	}
 	ppath := PrinterPath.new(path).with_separator(summary.config.separator_path)
-	return SummarySink[W, M]{
+	return SummarySink[^p, ^s, M, W]{
 		matcher:      matcher_
-		summary:      unsafe { &summary }
+		summary:      &summary
 		interpolator: Interpolator.new(summary.config.hyperlink)
 		path:         ppath
 		start_time:   time.now()
@@ -337,29 +339,29 @@ pub fn (mut summary Summary[W]) sink_with_path[M](matcher_ M, path &string) Summ
 /// Returns true if and only if this printer has written at least one byte
 /// to the underlying writer during any of the previous searches.
 pub fn (summary Summary[W]) has_written() bool {
-	return summary.wtr.total_count() > 0
+	return summary.wtr.total_count_ + summary.wtr.count_ > 0
 }
 
 /// Return a mutable reference to the underlying writer.
 pub fn (mut summary Summary[W]) get_mut() &W {
-	return summary.wtr.get_mut()
+	return unsafe { &summary.wtr.wtr }
 }
 
 /// Consume this printer and return back ownership of the underlying
 /// writer.
 pub fn (mut summary Summary[W]) into_inner() W {
-	return summary.wtr.into_inner()
+	return summary.wtr.wtr
 }
 
 /// An implementation of `Sink` associated with a matcher and an optional file
 /// path for the summary printer.
 ///
-pub struct SummarySink[W, M] {
+pub struct SummarySink[^p, ^s, M, W] {
 	matcher M
 mut:
-	summary            &Summary[W]
+	summary            &^s Summary[W]
 	interpolator       Interpolator
-	path               ?PrinterPath
+	path               ?PrinterPath[^p]
 	start_time         time.Time
 	match_count        u64
 	binary_byte_offset ?u64
@@ -371,7 +373,7 @@ mut:
 ///
 /// This is unaffected by the result of searches before the previous
 /// search.
-pub fn (sink SummarySink[W, M]) has_match() bool {
+pub fn (sink SummarySink[^p, ^s, M, W]) has_match() bool {
 	return match sink.summary.config.kind {
 		.path_without_match, .quiet_without_match { sink.match_count == 0 }
 		else { sink.match_count > 0 }
@@ -383,7 +385,7 @@ pub fn (sink SummarySink[W, M]) has_match() bool {
 ///
 /// The offset returned is an absolute offset relative to the entire
 /// set of bytes searched.
-pub fn (sink SummarySink[W, M]) binary_byte_offset() ?u64 {
+pub fn (sink SummarySink[^p, ^s, M, W]) binary_byte_offset() ?u64 {
 	return sink.binary_byte_offset
 }
 
@@ -392,9 +394,9 @@ pub fn (sink SummarySink[W, M]) binary_byte_offset() ?u64 {
 ///
 /// This only returns stats if they were requested via the
 /// [`SummaryBuilder`] configuration.
-pub fn (sink &SummarySink[W, M]) stats() ?Stats {
-	if stats := sink.stats {
-		return stats
+pub fn (sink &^a SummarySink[^p, ^s, M, W]) stats[^a]() ?&^a Stats {
+	if sink.stats != none {
+		return unsafe { &sink.stats? }
 	}
 	return none
 }
@@ -406,7 +408,7 @@ pub fn (sink &SummarySink[W, M]) stats() ?Stats {
 /// line mode, but also checks if the matter can match over multiple lines.
 /// If it can't, then we don't need multi line handling, even if the
 /// searcher has multi line mode enabled.
-fn (sink SummarySink[W, M]) multi_line(searcher_ searcher.Searcher) bool {
+fn (sink SummarySink[^p, ^s, M, W]) multi_line(searcher_ searcher.Searcher) bool {
 	return searcher_.multi_line_with_matcher(sink.matcher)
 }
 
@@ -414,7 +416,7 @@ fn (sink SummarySink[W, M]) multi_line(searcher_ searcher.Searcher) bool {
 /// write that path to the underlying writer followed by a line terminator.
 /// (If a path terminator is set, then that is used instead of the line
 /// terminator.)
-fn (mut sink SummarySink[W, M]) write_path_line(searcher_ searcher.Searcher) ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) write_path_line(searcher_ searcher.Searcher) ! {
 	if sink.path != none {
 		sink.write_path()!
 		if term := sink.summary.config.path_terminator {
@@ -429,7 +431,7 @@ fn (mut sink SummarySink[W, M]) write_path_line(searcher_ searcher.Searcher) ! {
 /// write that path to the underlying writer followed by the field
 /// separator. (If a path terminator is set, then that is used instead of
 /// the field separator.)
-fn (mut sink SummarySink[W, M]) write_path_field() ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) write_path_field() ! {
 	if sink.path != none {
 		sink.write_path()!
 		if term := sink.summary.config.path_terminator {
@@ -443,7 +445,7 @@ fn (mut sink SummarySink[W, M]) write_path_field() ! {
 /// If this printer has a file path associated with it, then this will
 /// write that path to the underlying writer in the appropriate style
 /// (color and hyperlink).
-fn (mut sink SummarySink[W, M]) write_path() ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) write_path() ! {
 	if path := sink.path {
 		status := sink.start_hyperlink()!
 		sink.write_spec(sink.summary.config.colors.path(), path.as_bytes())!
@@ -452,7 +454,7 @@ fn (mut sink SummarySink[W, M]) write_path() ! {
 }
 
 /// Starts a hyperlink span when applicable.
-fn (mut sink SummarySink[W, M]) start_hyperlink() !InterpolatorStatus {
+fn (mut sink SummarySink[^p, ^s, M, W]) start_hyperlink() !InterpolatorStatus {
 	if mut path := sink.path {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)
@@ -461,24 +463,24 @@ fn (mut sink SummarySink[W, M]) start_hyperlink() !InterpolatorStatus {
 	return InterpolatorStatus.inactive()
 }
 
-fn (mut sink SummarySink[W, M]) end_hyperlink(status InterpolatorStatus) ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) end_hyperlink(status InterpolatorStatus) ! {
 	sink.interpolator.finish(status, mut sink.summary.wtr)!
 }
 
 /// Write the line terminator configured on the given searcher.
-fn (mut sink SummarySink[W, M]) write_line_term(searcher_ searcher.Searcher) ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) write_line_term(searcher_ searcher.Searcher) ! {
 	sink.write_all(searcher_.line_terminator().as_bytes())!
 }
 
 /// Write the given bytes using the give style.
-fn (mut sink SummarySink[W, M]) write_spec(spec ColorSpec, buf []u8) ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) write_spec(spec ColorSpec, buf []u8) ! {
 	sink.summary.wtr.set_color(spec)!
 	sink.write_all(buf)!
 	sink.summary.wtr.reset()!
 }
 
 /// Write all of the given bytes.
-fn (mut sink SummarySink[W, M]) write_all(buf []u8) ! {
+fn (mut sink SummarySink[^p, ^s, M, W]) write_all(buf []u8) ! {
 	mut written := usize(0)
 	for written < buf.len {
 			n := sink.summary.wtr.write(buf[written..])!
@@ -489,7 +491,7 @@ fn (mut sink SummarySink[W, M]) write_all(buf []u8) ! {
 	}
 }
 
-pub fn (mut sink SummarySink[W, M]) matched(searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
+pub fn (mut sink SummarySink[^p, ^s, M, W]) matched(searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
 	is_multi_line := sink.multi_line(searcher_)
 	sink_match_count := if sink.stats == none && !is_multi_line {
 		u64(1)
@@ -531,7 +533,20 @@ pub fn (mut sink SummarySink[W, M]) matched(searcher_ searcher.Searcher, mat sea
 	return true
 }
 
-pub fn (mut sink SummarySink[W, M]) binary_data(searcher_ searcher.Searcher, binary_byte_offset u64) !bool {
+pub fn (mut sink SummarySink[^p, ^s, M, W]) context(searcher_ searcher.Searcher, ctx searcher.SinkContext) !bool {
+	_ = sink
+	_ = searcher_
+	_ = ctx
+	return true
+}
+
+pub fn (mut sink SummarySink[^p, ^s, M, W]) context_break(searcher_ searcher.Searcher) !bool {
+	_ = sink
+	_ = searcher_
+	return true
+}
+
+pub fn (mut sink SummarySink[^p, ^s, M, W]) binary_data(searcher_ searcher.Searcher, binary_byte_offset u64) !bool {
 	if searcher_.binary_detection().quit_byte() != none {
 		if path := sink.path {
 			log.debug('ignoring ${path.as_path()}: found binary data at offset ${binary_byte_offset}')
@@ -540,7 +555,7 @@ pub fn (mut sink SummarySink[W, M]) binary_data(searcher_ searcher.Searcher, bin
 	return true
 }
 
-pub fn (mut sink SummarySink[W, M]) begin(_searcher searcher.Searcher) !bool {
+pub fn (mut sink SummarySink[^p, ^s, M, W]) begin(_searcher searcher.Searcher) !bool {
 	if sink.path == none && sink.summary.config.kind.requires_path() {
 		return error('output kind ${sink.summary.config.kind} requires a file path')
 	}
@@ -551,7 +566,7 @@ pub fn (mut sink SummarySink[W, M]) begin(_searcher searcher.Searcher) !bool {
 	return true
 }
 
-pub fn (mut sink SummarySink[W, M]) finish(searcher_ searcher.Searcher, finish searcher.SinkFinish) ! {
+pub fn (mut sink SummarySink[^p, ^s, M, W]) finish(searcher_ searcher.Searcher, finish searcher.SinkFinish) ! {
 	sink.binary_byte_offset = finish.binary_byte_offset()
 	if sink.stats != none {
 		mut stats := sink.stats or { panic('stats missing unexpectedly') }

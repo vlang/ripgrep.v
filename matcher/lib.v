@@ -334,7 +334,15 @@ pub fn (mut set ByteSet) remove_all(start u8, end u8) {
 }
 
 /// Return true if and only if the given byte is in this set.
+@[markused]
 pub fn (set ByteSet) contains(byte u8) bool {
+	bucket := usize(byte / 64)
+	bit := u32(byte % 64)
+	return (set.bits.bits[bucket] & (u64(1) << bit)) > 0
+}
+
+@[markused]
+pub fn byte_set_contains(set &ByteSet, byte u8) bool {
 	bucket := usize(byte / 64)
 	bit := u32(byte % 64)
 	return (set.bits.bits[bucket] & (u64(1) << bit)) > 0
@@ -416,8 +424,11 @@ pub fn (caps Captures) is_empty() bool {
 /// matches.
 pub fn (caps Captures) interpolate(name_to_index fn (string) ?usize, haystack []u8, replacement []u8, mut dst []u8) {
 	interpolate(replacement, fn [caps, haystack] (i usize, mut dst []u8) {
-		if range := caps.get(i) {
-			dst << haystack[range.start()..range.end()]
+		range := caps.get(i) or {
+			return
+		}
+		for byte in haystack[range.start()..range.end()] {
+			dst << byte
 		}
 	}, name_to_index, mut dst)
 }
@@ -512,34 +523,80 @@ pub fn (kind LineMatchKind) position() usize {
 	return kind.pos
 }
 
-// V does not support Rust's `Result<Option<T>>` shape as `!?T`.
-// Fallible matcher methods return `!FallibleOption[T]`: `!` carries errors,
-// while this wrapper carries the optional success value.
-pub struct FallibleOption[T] {
+// V does not support spelling Rust's `Result<Option<T>>` shape directly.
+// Fallible matcher methods keep `!` for errors and use these explicit
+// optional success wrappers for the few result shapes needed by this module.
+pub struct FallibleMatch {
 	has_value bool
-	value     T
+	value     Match
 }
 
-pub fn FallibleOption.some[T](value T) FallibleOption[T] {
-	return FallibleOption[T]{
+pub fn FallibleMatch.some(value Match) FallibleMatch {
+	return FallibleMatch{
 		has_value: true
 		value:     value
 	}
 }
 
-pub fn FallibleOption.absent[T]() FallibleOption[T] {
-	return FallibleOption[T]{}
+pub fn FallibleMatch.absent() FallibleMatch {
+	return FallibleMatch{}
 }
 
-pub fn (opt FallibleOption[T]) is_some[T]() bool {
+pub fn (opt FallibleMatch) is_some() bool {
 	return opt.has_value
 }
 
-pub fn (opt FallibleOption[T]) is_none[T]() bool {
+pub fn (opt FallibleMatch) is_none() bool {
 	return !opt.has_value
 }
 
-pub fn (opt FallibleOption[T]) get[T]() ?T {
+pub fn (opt FallibleMatch) get() ?Match {
+	if !opt.has_value {
+		return none
+	}
+	return opt.value
+}
+
+pub struct FallibleLineMatchKind {
+	has_value bool
+	value     LineMatchKind
+}
+
+pub fn FallibleLineMatchKind.some(value LineMatchKind) FallibleLineMatchKind {
+	return FallibleLineMatchKind{
+		has_value: true
+		value:     value
+	}
+}
+
+pub fn FallibleLineMatchKind.absent() FallibleLineMatchKind {
+	return FallibleLineMatchKind{}
+}
+
+pub fn (opt FallibleLineMatchKind) get() ?LineMatchKind {
+	if !opt.has_value {
+		return none
+	}
+	return opt.value
+}
+
+pub struct FallibleUsize {
+	has_value bool
+	value     usize
+}
+
+pub fn FallibleUsize.some(value usize) FallibleUsize {
+	return FallibleUsize{
+		has_value: true
+		value:     value
+	}
+}
+
+pub fn FallibleUsize.absent() FallibleUsize {
+	return FallibleUsize{}
+}
+
+pub fn (opt FallibleUsize) get() ?usize {
 	if !opt.has_value {
 		return none
 	}
@@ -560,7 +617,7 @@ pub fn (opt FallibleOption[T]) get[T]() ?T {
 /// on top of `find_at` and `new_captures`. V interfaces do not support
 /// Rust-style default trait methods, so this port exposes those routines as
 /// generic module functions below.
-pub interface Matcher[T] {
+pub interface Matcher {
 	/// Returns the start and end byte range of the first match in `haystack`
 	/// after `at`, where the byte offsets are relative to the that start of
 	/// `haystack` (and not `at`). If no match exists, then `none` is returned.
@@ -571,10 +628,10 @@ pub interface Matcher[T] {
 	/// The significance of the starting point is that it takes the surrounding
 	/// context into consideration. For example, the `\A` anchor can only
 	/// match when `at == 0`.
-	find_at(haystack []u8, at usize) !FallibleOption[Match]
+	find_at(haystack []u8, at usize) !FallibleMatch
 	/// Creates an empty group of captures suitable for use with the capturing
 	/// APIs of this interface.
-	new_captures() !T
+	new_captures() !NoCaptures
 	/// Returns the total number of capturing groups in this matcher.
 	capture_count() usize
 	/// Maps the given capture group name to its corresponding capture group
@@ -585,17 +642,17 @@ pub interface Matcher[T] {
 	/// group are relative to the start of `haystack` (and not `at`). If no
 	/// match exists, then `false` is returned and the contents of the given
 	/// capturing groups are unspecified.
-	captures_at(haystack []u8, at usize, mut caps T) !bool
+	captures_at(haystack []u8, at usize, mut caps NoCaptures) !bool
 	/// If available, return a set of bytes that will never appear in a match
 	/// produced by an implementation.
-	non_matching_bytes() ?&ByteSet
+	non_matching_bytes[^a]() ?&^a ByteSet
 	/// If this matcher was compiled as a line oriented matcher, then this
 	/// method returns the line terminator if and only if the line terminator
 	/// never appears in any match produced by this matcher.
 	line_terminator() ?LineTerminator
 	/// Return one of the following: a confirmed line match, a candidate line
 	/// match (which may be a false positive) or no match at all.
-	find_candidate_line(haystack []u8) !FallibleOption[LineMatchKind]
+	find_candidate_line(haystack []u8) !FallibleLineMatchKind
 }
 
 /// By default, capturing groups are not supported, so this always
@@ -621,7 +678,7 @@ pub fn default_captures_at[T](haystack []u8, at usize, mut caps T) !bool {
 }
 
 /// By default, this returns `none`.
-pub fn default_non_matching_bytes() ?&ByteSet {
+pub fn default_non_matching_bytes[^a]() ?&^a ByteSet {
 	return none
 }
 
@@ -632,15 +689,17 @@ pub fn default_line_terminator() ?LineTerminator {
 
 /// By default, this never returns a candidate match, and always either
 /// returns a confirmed match or no match at all.
-pub fn default_find_candidate_line[M](matcher_ M, haystack []u8) !FallibleOption[LineMatchKind] {
+pub fn default_find_candidate_line[M](matcher_ M, haystack []u8) !FallibleLineMatchKind {
 	maybe_end := shortest_match(matcher_, haystack)!
-	end := maybe_end.get() or { return FallibleOption.absent[LineMatchKind]() }
-	return FallibleOption.some(LineMatchKind.confirmed(end))
+	if !maybe_end.has_value {
+		return FallibleLineMatchKind.absent()
+	}
+	return FallibleLineMatchKind.some(LineMatchKind.confirmed(maybe_end.value))
 }
 
 /// Returns the start and end byte range of the first match in `haystack`.
 /// If no match exists, then `none` is returned.
-pub fn find[M](matcher_ M, haystack []u8) !FallibleOption[Match] {
+pub fn find[M](matcher_ M, haystack []u8) !FallibleMatch {
 	return matcher_.find_at(haystack, 0)!
 }
 
@@ -695,7 +754,10 @@ pub fn try_find_iter_at[M](matcher_ M, haystack []u8, at usize, matched fn (Matc
 			return
 		}
 		maybe_mat := matcher_.find_at(haystack, last_end)!
-		mat := maybe_mat.get() or { return }
+		if !maybe_mat.has_value {
+			return
+		}
+		mat := maybe_mat.value
 		if mat.start() == mat.end() {
 			// This is an empty match. To ensure we make progress, start
 			// the next search at the smallest possible starting position
@@ -778,7 +840,9 @@ pub fn try_captures_iter_at[M, T](matcher_ M, haystack []u8, at usize, mut caps 
 		if !matcher_.captures_at(haystack, last_end, mut caps)! {
 			return
 		}
-		mat := caps.get(0) or { panic('captures missing overall match at index 0') }
+		mat := caps.get(0) or {
+			panic('captures missing overall match at index 0')
+		}
 		if mat.start() == mat.end() {
 			// This is an empty match. To ensure we make progress, start
 			// the next search at the smallest possible starting position
@@ -834,7 +898,9 @@ pub fn replace_with_captures[M, T](matcher_ M, haystack []u8, mut caps T, mut ds
 pub fn replace_with_captures_at[M, T](matcher_ M, haystack []u8, at usize, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
 	mut last_match := at
 	captures_iter_at(matcher_, haystack, at, mut caps, fn [haystack, mut dst, append, mut last_match] (caps &T) bool {
-		mat := caps.get(0) or { panic('captures missing overall match at index 0') }
+		mat := caps.get(0) or {
+			panic('captures missing overall match at index 0')
+		}
 		dst << haystack[last_match..mat.start()]
 		last_match = mat.end()
 		return append(caps, mut dst)
@@ -858,7 +924,7 @@ pub fn is_match[M](matcher_ M, haystack []u8) !bool {
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
 pub fn is_match_at[M](matcher_ M, haystack []u8, at usize) !bool {
-	return shortest_match_at(matcher_, haystack, at)!.is_some()
+	return shortest_match_at(matcher_, haystack, at)!.has_value
 }
 
 /// Returns an end location of the first match in `haystack`. If no match
@@ -875,7 +941,7 @@ pub fn is_match_at[M](matcher_ M, haystack []u8, at usize) !bool {
 /// a faster implementation of this than what `find` does.
 ///
 /// By default, this method is implemented by calling `find`.
-pub fn shortest_match[M](matcher_ M, haystack []u8) !FallibleOption[usize] {
+pub fn shortest_match[M](matcher_ M, haystack []u8) !FallibleUsize {
 	return shortest_match_at(matcher_, haystack, 0)
 }
 
@@ -897,8 +963,10 @@ pub fn shortest_match[M](matcher_ M, haystack []u8) !FallibleOption[usize] {
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn shortest_match_at[M](matcher_ M, haystack []u8, at usize) !FallibleOption[usize] {
+pub fn shortest_match_at[M](matcher_ M, haystack []u8, at usize) !FallibleUsize {
 	maybe_mat := matcher_.find_at(haystack, at)!
-	mat := maybe_mat.get() or { return FallibleOption.absent[usize]() }
-	return FallibleOption.some(mat.end())
+	if !maybe_mat.has_value {
+		return FallibleUsize.absent()
+	}
+	return FallibleUsize.some(maybe_mat.value.end())
 }

@@ -14,13 +14,13 @@ pub fn (mut w DummyWriter) write(buf []u8) !int {
 
 struct DummyMatcher {}
 
-pub fn (m DummyMatcher) find_at(haystack []u8, at usize) !matcher.FallibleOption[matcher.Match] {
+pub fn (m DummyMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	for i := at; i + 4 <= haystack.len; i++ {
 		if haystack[i..i + 4].bytestr() == 'test' {
-			return matcher.FallibleOption.some(matcher.Match.new(i, i + 4))
+			return matcher.FallibleMatch.some(matcher.Match.new(i, i + 4))
 		}
 	}
-	return matcher.FallibleOption.absent[matcher.Match]()
+	return matcher.FallibleMatch.absent()
 }
 
 pub fn (m DummyMatcher) new_captures() !matcher.NoCaptures {
@@ -39,7 +39,7 @@ pub fn (m DummyMatcher) captures_at(haystack []u8, at usize, mut caps matcher.No
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
-pub fn (m DummyMatcher) non_matching_bytes() ?&matcher.ByteSet {
+pub fn (m DummyMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	return matcher.default_non_matching_bytes()
 }
 
@@ -47,7 +47,7 @@ pub fn (m DummyMatcher) line_terminator() ?matcher.LineTerminator {
 	return matcher.default_line_terminator()
 }
 
-pub fn (m DummyMatcher) find_candidate_line(haystack []u8) !matcher.FallibleOption[matcher.LineMatchKind] {
+pub fn (m DummyMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
 	return matcher.default_find_candidate_line(m, haystack)
 }
 

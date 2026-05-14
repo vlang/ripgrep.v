@@ -36,7 +36,7 @@ pub fn (m Match[T]) is_whitelist() bool {
 
 /// Inverts the match so that `Ignore` becomes `Whitelist` and
 /// `Whitelist` becomes `Ignore`. A non-match remains the same.
-pub fn (m Match[T]) invert[T]() Match[T] {
+pub fn (m Match[T]) invert() Match[T] {
 	match m.kind {
 		.none {
 			return Match[T]{}
@@ -64,7 +64,7 @@ pub fn (m Match[T]) invert[T]() Match[T] {
 }
 
 /// Return the value inside this match if it exists.
-pub fn (m Match[T]) inner[T]() ?T {
+pub fn (m Match[T]) inner() ?T {
 	if !m.has_value {
 		return none
 	}
@@ -72,13 +72,13 @@ pub fn (m Match[T]) inner[T]() ?T {
 }
 
 /// Return the match if it is not none. Otherwise, return other.
-pub fn (m Match[T]) or[T](other Match[T]) Match[T] {
+pub fn (m Match[T]) or(other Match[T]) Match[T] {
 	if m.is_none() {
 		return other
 	}
 	return m
 }
 
-pub fn (m Match[T]) str[T]() string {
+pub fn (m Match[T]) str() string {
 	return m.kind.str()
 }

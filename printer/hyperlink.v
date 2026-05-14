@@ -412,7 +412,7 @@ mut:
 	text []u8
 }
 
-fn (values Values) interpolate_to(part HyperlinkPart, env HyperlinkEnvironment, mut dest []u8) {
+fn (values Values[^a]) interpolate_to(part HyperlinkPart, env HyperlinkEnvironment, mut dest []u8) {
 	match part.kind {
 		.text {
 			dest << part.text
@@ -453,28 +453,28 @@ fn (part HyperlinkPart) str() string {
 /// This only consists of values that depend on each path or match printed.
 /// Values that are invariant throughout the lifetime of the process are set
 /// via a `HyperlinkEnvironment`.
-pub struct Values implements IClone {
-	path   HyperlinkPath
+pub struct Values[^a] implements IClone {
+	path   &^a HyperlinkPath
 	line   ?u64
 	column ?u64
 }
 
-pub fn Values.new(path HyperlinkPath) Values {
-	return Values{
+pub fn Values.new[^a](path &^a HyperlinkPath) Values[^a] {
+	return Values[^a]{
 		path: path
 	}
 }
 
-pub fn (values Values) line(line ?u64) Values {
-	return Values{
+pub fn (values Values[^a]) line[^a](line ?u64) Values[^a] {
+	return Values[^a]{
 		path:   values.path
 		line:   line
 		column: values.column
 	}
 }
 
-pub fn (values Values) column(column ?u64) Values {
-	return Values{
+pub fn (values Values[^a]) column[^a](column ?u64) Values[^a] {
+	return Values[^a]{
 		path:   values.path
 		line:   values.line
 		column: column
@@ -496,7 +496,7 @@ pub fn Interpolator.new(config HyperlinkConfig) Interpolator {
 	}
 }
 
-pub fn (mut interpolator Interpolator) begin[W](values Values, mut wtr W) !InterpolatorStatus {
+pub fn (mut interpolator Interpolator) begin[^a, W](values Values[^a], mut wtr W) !InterpolatorStatus {
 	$if W is WriteColor {
 		if interpolator.config.format().is_empty() || !wtr.supports_hyperlinks()
 			|| !wtr.supports_color() {

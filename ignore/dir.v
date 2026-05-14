@@ -772,31 +772,39 @@ fn resolve_git_commondir(dir string, git_is_file bool) (string, bool, IgnoreErro
 	if !git_is_file {
 		return git_dir_path, false, IgnoreError{}
 	}
-	dot_git_lines := os.read_lines(git_dir_path) or {
-		return '', true, io_error(err).with_path(git_dir_path)
+	dot_git_line, dot_git_has_err, dot_git_err := read_first_line(git_dir_path)
+	if dot_git_has_err {
+		return '', true, dot_git_err
 	}
-	if dot_git_lines.len == 0 {
-		return '', false, IgnoreError{}
-	}
-	dot_git_line := dot_git_lines[0]
 	if !dot_git_line.starts_with('gitdir: ') {
 		return '', false, IgnoreError{}
 	}
 	real_git_dir := dot_git_line['gitdir: '.len..]
 	git_commondir_file := os.join_path(real_git_dir, 'commondir')
-	commondir_lines := os.read_lines(git_commondir_file) or {
+	commondir_line, commondir_has_err, commondir_err := read_first_line(git_commondir_file)
+	if commondir_has_err {
+		_ = commondir_err
 		return '', false, IgnoreError{}
 	}
-	if commondir_lines.len == 0 {
+	if commondir_line == '' {
 		return '', false, IgnoreError{}
 	}
-	commondir_line := commondir_lines[0]
 	commondir_abs := if commondir_line.starts_with('.') {
 		os.join_path(real_git_dir, commondir_line)
 	} else {
 		commondir_line
 	}
 	return commondir_abs, false, IgnoreError{}
+}
+
+// Reads the first line with Rust `BufRead::lines().next()` semantics.
+fn read_first_line(path string) (string, bool, IgnoreError) {
+	contents := os.read_file(path) or { return '', true, io_error(err).with_path(path) }
+	if contents == '' {
+		return '', false, IgnoreError{}
+	}
+	line_end := contents.index('\n') or { contents.len }
+	return contents[..line_end].trim_right('\r'), false, IgnoreError{}
 }
 
 /// Strips `prefix` from `path` if it's a prefix, otherwise returns `path`

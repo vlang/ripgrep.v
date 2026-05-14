@@ -162,604 +162,904 @@ struct ParsedOccurrence {
 
 fn occurrence_from_parsed(parsed vflag.ParsedFlag) !ParsedOccurrence {
 	match parsed.field_name {
-		'flag_after_context' { return ParsedOccurrence{
+		'flag_after_context' {
+			return ParsedOccurrence{
 				id:    .after_context
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_auto_hybrid_regex' { return ParsedOccurrence{
+			}
+		}
+		'flag_auto_hybrid_regex' {
+			return ParsedOccurrence{
 				id:    .auto_hybrid_regex
 				value: flag_switch(true)
-			} }
-		'flag_no_auto_hybrid_regex_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_auto_hybrid_regex_negated' {
+			return ParsedOccurrence{
 				id:    .auto_hybrid_regex
 				value: flag_switch(false)
-			} }
-		'flag_before_context' { return ParsedOccurrence{
+			}
+		}
+		'flag_before_context' {
+			return ParsedOccurrence{
 				id:    .before_context
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_binary' { return ParsedOccurrence{
+			}
+		}
+		'flag_binary' {
+			return ParsedOccurrence{
 				id:    .binary
 				value: flag_switch(true)
-			} }
-		'flag_no_binary_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_binary_negated' {
+			return ParsedOccurrence{
 				id:    .binary
 				value: flag_switch(false)
-			} }
-		'flag_block_buffered' { return ParsedOccurrence{
+			}
+		}
+		'flag_block_buffered' {
+			return ParsedOccurrence{
 				id:    .block_buffered
 				value: flag_switch(true)
-			} }
-		'flag_no_block_buffered_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_block_buffered_negated' {
+			return ParsedOccurrence{
 				id:    .block_buffered
 				value: flag_switch(false)
-			} }
-		'flag_byte_offset' { return ParsedOccurrence{
+			}
+		}
+		'flag_byte_offset' {
+			return ParsedOccurrence{
 				id:    .byte_offset
 				value: flag_switch(true)
-			} }
-		'flag_no_byte_offset_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_byte_offset_negated' {
+			return ParsedOccurrence{
 				id:    .byte_offset
 				value: flag_switch(false)
-			} }
-		'flag_case_sensitive' { return ParsedOccurrence{
+			}
+		}
+		'flag_case_sensitive' {
+			return ParsedOccurrence{
 				id:    .case_sensitive
 				value: flag_switch(true)
-			} }
-		'flag_color' { return ParsedOccurrence{
+			}
+		}
+		'flag_color' {
+			return ParsedOccurrence{
 				id:    .color
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_colors' { return ParsedOccurrence{
+			}
+		}
+		'flag_colors' {
+			return ParsedOccurrence{
 				id:    .colors
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_column' { return ParsedOccurrence{
+			}
+		}
+		'flag_column' {
+			return ParsedOccurrence{
 				id:    .column
 				value: flag_switch(true)
-			} }
-		'flag_no_column_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_column_negated' {
+			return ParsedOccurrence{
 				id:    .column
 				value: flag_switch(false)
-			} }
-		'flag_context' { return ParsedOccurrence{
+			}
+		}
+		'flag_context' {
+			return ParsedOccurrence{
 				id:    .context
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_context_separator' { return ParsedOccurrence{
+			}
+		}
+		'flag_context_separator' {
+			return ParsedOccurrence{
 				id:    .context_separator
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_no_context_separator_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_context_separator_negated' {
+			return ParsedOccurrence{
 				id:    .context_separator
 				value: flag_switch(false)
-			} }
-		'flag_count' { return ParsedOccurrence{
+			}
+		}
+		'flag_count' {
+			return ParsedOccurrence{
 				id:    .count
 				value: flag_switch(true)
-			} }
-		'flag_count_matches' { return ParsedOccurrence{
+			}
+		}
+		'flag_count_matches' {
+			return ParsedOccurrence{
 				id:    .count_matches
 				value: flag_switch(true)
-			} }
-		'flag_crlf' { return ParsedOccurrence{
+			}
+		}
+		'flag_crlf' {
+			return ParsedOccurrence{
 				id:    .crlf
 				value: flag_switch(true)
-			} }
-		'flag_no_crlf_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_crlf_negated' {
+			return ParsedOccurrence{
 				id:    .crlf
 				value: flag_switch(false)
-			} }
-		'flag_debug' { return ParsedOccurrence{
+			}
+		}
+		'flag_debug' {
+			return ParsedOccurrence{
 				id:    .debug
 				value: flag_switch(true)
-			} }
-		'flag_dfa_size_limit' { return ParsedOccurrence{
+			}
+		}
+		'flag_dfa_size_limit' {
+			return ParsedOccurrence{
 				id:    .dfa_size_limit
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_encoding' { return ParsedOccurrence{
+			}
+		}
+		'flag_encoding' {
+			return ParsedOccurrence{
 				id:    .encoding
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_no_encoding_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_encoding_negated' {
+			return ParsedOccurrence{
 				id:    .encoding
 				value: flag_switch(false)
-			} }
-		'flag_engine' { return ParsedOccurrence{
+			}
+		}
+		'flag_engine' {
+			return ParsedOccurrence{
 				id:    .engine
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_field_context_separator' { return ParsedOccurrence{
+			}
+		}
+		'flag_field_context_separator' {
+			return ParsedOccurrence{
 				id:    .field_context_separator
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_field_match_separator' { return ParsedOccurrence{
+			}
+		}
+		'flag_field_match_separator' {
+			return ParsedOccurrence{
 				id:    .field_match_separator
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_file' { return ParsedOccurrence{
+			}
+		}
+		'flag_file' {
+			return ParsedOccurrence{
 				id:    .file
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_files' { return ParsedOccurrence{
+			}
+		}
+		'flag_files' {
+			return ParsedOccurrence{
 				id:    .files
 				value: flag_switch(true)
-			} }
-		'flag_files_with_matches' { return ParsedOccurrence{
+			}
+		}
+		'flag_files_with_matches' {
+			return ParsedOccurrence{
 				id:    .files_with_matches
 				value: flag_switch(true)
-			} }
-		'flag_files_without_match' { return ParsedOccurrence{
+			}
+		}
+		'flag_files_without_match' {
+			return ParsedOccurrence{
 				id:    .files_without_match
 				value: flag_switch(true)
-			} }
-		'flag_fixed_strings' { return ParsedOccurrence{
+			}
+		}
+		'flag_fixed_strings' {
+			return ParsedOccurrence{
 				id:    .fixed_strings
 				value: flag_switch(true)
-			} }
-		'flag_no_fixed_strings_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_fixed_strings_negated' {
+			return ParsedOccurrence{
 				id:    .fixed_strings
 				value: flag_switch(false)
-			} }
-		'flag_follow' { return ParsedOccurrence{
+			}
+		}
+		'flag_follow' {
+			return ParsedOccurrence{
 				id:    .follow
 				value: flag_switch(true)
-			} }
-		'flag_no_follow_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_follow_negated' {
+			return ParsedOccurrence{
 				id:    .follow
 				value: flag_switch(false)
-			} }
-		'flag_generate' { return ParsedOccurrence{
+			}
+		}
+		'flag_generate' {
+			return ParsedOccurrence{
 				id:    .generate
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_glob' { return ParsedOccurrence{
+			}
+		}
+		'flag_glob' {
+			return ParsedOccurrence{
 				id:    .glob
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_glob_case_insensitive' { return ParsedOccurrence{
+			}
+		}
+		'flag_glob_case_insensitive' {
+			return ParsedOccurrence{
 				id:    .glob_case_insensitive
 				value: flag_switch(true)
-			} }
-		'flag_no_glob_case_insensitive_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_glob_case_insensitive_negated' {
+			return ParsedOccurrence{
 				id:    .glob_case_insensitive
 				value: flag_switch(false)
-			} }
-		'flag_heading' { return ParsedOccurrence{
+			}
+		}
+		'flag_heading' {
+			return ParsedOccurrence{
 				id:    .heading
 				value: flag_switch(true)
-			} }
-		'flag_no_heading_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_heading_negated' {
+			return ParsedOccurrence{
 				id:    .heading
 				value: flag_switch(false)
-			} }
-		'flag_help' { return ParsedOccurrence{
+			}
+		}
+		'flag_help' {
+			return ParsedOccurrence{
 				id:    .help
 				value: flag_switch(true)
-			} }
-		'flag_hidden' { return ParsedOccurrence{
+			}
+		}
+		'flag_hidden' {
+			return ParsedOccurrence{
 				id:    .hidden
 				value: flag_switch(true)
-			} }
-		'flag_no_hidden_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_hidden_negated' {
+			return ParsedOccurrence{
 				id:    .hidden
 				value: flag_switch(false)
-			} }
-		'flag_hostname_bin' { return ParsedOccurrence{
+			}
+		}
+		'flag_hostname_bin' {
+			return ParsedOccurrence{
 				id:    .hostname_bin
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_hyperlink_format' { return ParsedOccurrence{
+			}
+		}
+		'flag_hyperlink_format' {
+			return ParsedOccurrence{
 				id:    .hyperlink_format
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_iglob' { return ParsedOccurrence{
+			}
+		}
+		'flag_iglob' {
+			return ParsedOccurrence{
 				id:    .i_glob
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_ignore_case' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_case' {
+			return ParsedOccurrence{
 				id:    .ignore_case
 				value: flag_switch(true)
-			} }
-		'flag_ignore_file' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_file' {
+			return ParsedOccurrence{
 				id:    .ignore_file
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_ignore_file_case_insensitive' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_file_case_insensitive' {
+			return ParsedOccurrence{
 				id:    .ignore_file_case_insensitive
 				value: flag_switch(true)
-			} }
-		'flag_no_ignore_file_case_insensitive_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_file_case_insensitive_negated' {
+			return ParsedOccurrence{
 				id:    .ignore_file_case_insensitive
 				value: flag_switch(false)
-			} }
-		'flag_include_zero' { return ParsedOccurrence{
+			}
+		}
+		'flag_include_zero' {
+			return ParsedOccurrence{
 				id:    .include_zero
 				value: flag_switch(true)
-			} }
-		'flag_no_include_zero_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_include_zero_negated' {
+			return ParsedOccurrence{
 				id:    .include_zero
 				value: flag_switch(false)
-			} }
-		'flag_invert_match' { return ParsedOccurrence{
+			}
+		}
+		'flag_invert_match' {
+			return ParsedOccurrence{
 				id:    .invert_match
 				value: flag_switch(true)
-			} }
-		'flag_no_invert_match_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_invert_match_negated' {
+			return ParsedOccurrence{
 				id:    .invert_match
 				value: flag_switch(false)
-			} }
-		'flag_json' { return ParsedOccurrence{
+			}
+		}
+		'flag_json' {
+			return ParsedOccurrence{
 				id:    .json
 				value: flag_switch(true)
-			} }
-		'flag_no_json_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_json_negated' {
+			return ParsedOccurrence{
 				id:    .json
 				value: flag_switch(false)
-			} }
-		'flag_line_buffered' { return ParsedOccurrence{
+			}
+		}
+		'flag_line_buffered' {
+			return ParsedOccurrence{
 				id:    .line_buffered
 				value: flag_switch(true)
-			} }
-		'flag_no_line_buffered_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_line_buffered_negated' {
+			return ParsedOccurrence{
 				id:    .line_buffered
 				value: flag_switch(false)
-			} }
-		'flag_line_number' { return ParsedOccurrence{
+			}
+		}
+		'flag_line_number' {
+			return ParsedOccurrence{
 				id:    .line_number
 				value: flag_switch(true)
-			} }
-		'flag_no_line_number' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_line_number' {
+			return ParsedOccurrence{
 				id:    .line_number_no
 				value: flag_switch(true)
-			} }
-		'flag_line_regexp' { return ParsedOccurrence{
+			}
+		}
+		'flag_line_regexp' {
+			return ParsedOccurrence{
 				id:    .line_regexp
 				value: flag_switch(true)
-			} }
-		'flag_max_columns' { return ParsedOccurrence{
+			}
+		}
+		'flag_max_columns' {
+			return ParsedOccurrence{
 				id:    .max_columns
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_max_columns_preview' { return ParsedOccurrence{
+			}
+		}
+		'flag_max_columns_preview' {
+			return ParsedOccurrence{
 				id:    .max_columns_preview
 				value: flag_switch(true)
-			} }
-		'flag_no_max_columns_preview_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_max_columns_preview_negated' {
+			return ParsedOccurrence{
 				id:    .max_columns_preview
 				value: flag_switch(false)
-			} }
-		'flag_max_count' { return ParsedOccurrence{
+			}
+		}
+		'flag_max_count' {
+			return ParsedOccurrence{
 				id:    .max_count
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_max_depth' { return ParsedOccurrence{
+			}
+		}
+		'flag_max_depth' {
+			return ParsedOccurrence{
 				id:    .max_depth
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_maxdepth_alias' { return ParsedOccurrence{
+			}
+		}
+		'flag_maxdepth_alias' {
+			return ParsedOccurrence{
 				id:    .max_depth
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_max_filesize' { return ParsedOccurrence{
+			}
+		}
+		'flag_max_filesize' {
+			return ParsedOccurrence{
 				id:    .max_filesize
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_mmap' { return ParsedOccurrence{
+			}
+		}
+		'flag_mmap' {
+			return ParsedOccurrence{
 				id:    .mmap
 				value: flag_switch(true)
-			} }
-		'flag_no_mmap_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_mmap_negated' {
+			return ParsedOccurrence{
 				id:    .mmap
 				value: flag_switch(false)
-			} }
-		'flag_multiline' { return ParsedOccurrence{
+			}
+		}
+		'flag_multiline' {
+			return ParsedOccurrence{
 				id:    .multiline
 				value: flag_switch(true)
-			} }
-		'flag_no_multiline_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_multiline_negated' {
+			return ParsedOccurrence{
 				id:    .multiline
 				value: flag_switch(false)
-			} }
-		'flag_multiline_dotall' { return ParsedOccurrence{
+			}
+		}
+		'flag_multiline_dotall' {
+			return ParsedOccurrence{
 				id:    .multiline_dotall
 				value: flag_switch(true)
-			} }
-		'flag_no_multiline_dotall_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_multiline_dotall_negated' {
+			return ParsedOccurrence{
 				id:    .multiline_dotall
 				value: flag_switch(false)
-			} }
-		'flag_no_config' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_config' {
+			return ParsedOccurrence{
 				id:    .no_config
 				value: flag_switch(true)
-			} }
-		'flag_no_ignore' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore' {
+			return ParsedOccurrence{
 				id:    .no_ignore
 				value: flag_switch(true)
-			} }
-		'flag_ignore_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_dot' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_dot' {
+			return ParsedOccurrence{
 				id:    .no_ignore_dot
 				value: flag_switch(true)
-			} }
-		'flag_ignore_dot_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_dot_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_dot
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_exclude' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_exclude' {
+			return ParsedOccurrence{
 				id:    .no_ignore_exclude
 				value: flag_switch(true)
-			} }
-		'flag_ignore_exclude_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_exclude_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_exclude
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_files' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_files' {
+			return ParsedOccurrence{
 				id:    .no_ignore_files
 				value: flag_switch(true)
-			} }
-		'flag_ignore_files_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_files_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_files
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_global' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_global' {
+			return ParsedOccurrence{
 				id:    .no_ignore_global
 				value: flag_switch(true)
-			} }
-		'flag_ignore_global_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_global_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_global
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_messages' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_messages' {
+			return ParsedOccurrence{
 				id:    .no_ignore_messages
 				value: flag_switch(true)
-			} }
-		'flag_ignore_messages_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_messages_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_messages
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_parent' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_parent' {
+			return ParsedOccurrence{
 				id:    .no_ignore_parent
 				value: flag_switch(true)
-			} }
-		'flag_ignore_parent_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_parent_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_parent
 				value: flag_switch(false)
-			} }
-		'flag_no_ignore_vcs' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_ignore_vcs' {
+			return ParsedOccurrence{
 				id:    .no_ignore_vcs
 				value: flag_switch(true)
-			} }
-		'flag_ignore_vcs_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_ignore_vcs_negated' {
+			return ParsedOccurrence{
 				id:    .no_ignore_vcs
 				value: flag_switch(false)
-			} }
-		'flag_no_messages' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_messages' {
+			return ParsedOccurrence{
 				id:    .no_messages
 				value: flag_switch(true)
-			} }
-		'flag_messages_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_messages_negated' {
+			return ParsedOccurrence{
 				id:    .no_messages
 				value: flag_switch(false)
-			} }
-		'flag_no_pcre2_unicode' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_pcre2_unicode' {
+			return ParsedOccurrence{
 				id:    .no_pcre_2_unicode
 				value: flag_switch(true)
-			} }
-		'flag_pcre2_unicode_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_pcre2_unicode_negated' {
+			return ParsedOccurrence{
 				id:    .no_pcre_2_unicode
 				value: flag_switch(false)
-			} }
-		'flag_no_require_git' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_require_git' {
+			return ParsedOccurrence{
 				id:    .no_require_git
 				value: flag_switch(true)
-			} }
-		'flag_require_git_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_require_git_negated' {
+			return ParsedOccurrence{
 				id:    .no_require_git
 				value: flag_switch(false)
-			} }
-		'flag_no_unicode' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_unicode' {
+			return ParsedOccurrence{
 				id:    .no_unicode
 				value: flag_switch(true)
-			} }
-		'flag_unicode_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_unicode_negated' {
+			return ParsedOccurrence{
 				id:    .no_unicode
 				value: flag_switch(false)
-			} }
-		'flag_null' { return ParsedOccurrence{
+			}
+		}
+		'flag_null' {
+			return ParsedOccurrence{
 				id:    .null
 				value: flag_switch(true)
-			} }
-		'flag_null_data' { return ParsedOccurrence{
+			}
+		}
+		'flag_null_data' {
+			return ParsedOccurrence{
 				id:    .null_data
 				value: flag_switch(true)
-			} }
-		'flag_one_file_system' { return ParsedOccurrence{
+			}
+		}
+		'flag_one_file_system' {
+			return ParsedOccurrence{
 				id:    .one_file_system
 				value: flag_switch(true)
-			} }
-		'flag_no_one_file_system_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_one_file_system_negated' {
+			return ParsedOccurrence{
 				id:    .one_file_system
 				value: flag_switch(false)
-			} }
-		'flag_only_matching' { return ParsedOccurrence{
+			}
+		}
+		'flag_only_matching' {
+			return ParsedOccurrence{
 				id:    .only_matching
 				value: flag_switch(true)
-			} }
-		'flag_path_separator' { return ParsedOccurrence{
+			}
+		}
+		'flag_path_separator' {
+			return ParsedOccurrence{
 				id:    .path_separator
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_passthru' { return ParsedOccurrence{
+			}
+		}
+		'flag_passthru' {
+			return ParsedOccurrence{
 				id:    .passthru
 				value: flag_switch(true)
-			} }
-		'flag_passthrough_alias' { return ParsedOccurrence{
+			}
+		}
+		'flag_passthrough_alias' {
+			return ParsedOccurrence{
 				id:    .passthru
 				value: flag_switch(true)
-			} }
-		'flag_pcre2' { return ParsedOccurrence{
+			}
+		}
+		'flag_pcre2' {
+			return ParsedOccurrence{
 				id:    .pcre_2
 				value: flag_switch(true)
-			} }
-		'flag_no_pcre2_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_pcre2_negated' {
+			return ParsedOccurrence{
 				id:    .pcre_2
 				value: flag_switch(false)
-			} }
-		'flag_pcre2_version' { return ParsedOccurrence{
+			}
+		}
+		'flag_pcre2_version' {
+			return ParsedOccurrence{
 				id:    .pcre_2_version
 				value: flag_switch(true)
-			} }
-		'flag_pre' { return ParsedOccurrence{
+			}
+		}
+		'flag_pre' {
+			return ParsedOccurrence{
 				id:    .pre
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_no_pre_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_pre_negated' {
+			return ParsedOccurrence{
 				id:    .pre
 				value: flag_switch(false)
-			} }
-		'flag_pre_glob' { return ParsedOccurrence{
+			}
+		}
+		'flag_pre_glob' {
+			return ParsedOccurrence{
 				id:    .pre_glob
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_pretty' { return ParsedOccurrence{
+			}
+		}
+		'flag_pretty' {
+			return ParsedOccurrence{
 				id:    .pretty
 				value: flag_switch(true)
-			} }
-		'flag_quiet' { return ParsedOccurrence{
+			}
+		}
+		'flag_quiet' {
+			return ParsedOccurrence{
 				id:    .quiet
 				value: flag_switch(true)
-			} }
-		'flag_regex_size_limit' { return ParsedOccurrence{
+			}
+		}
+		'flag_regex_size_limit' {
+			return ParsedOccurrence{
 				id:    .regex_size_limit
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_regexp' { return ParsedOccurrence{
+			}
+		}
+		'flag_regexp' {
+			return ParsedOccurrence{
 				id:    .regexp
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_replace' { return ParsedOccurrence{
+			}
+		}
+		'flag_replace' {
+			return ParsedOccurrence{
 				id:    .replace
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_search_zip' { return ParsedOccurrence{
+			}
+		}
+		'flag_search_zip' {
+			return ParsedOccurrence{
 				id:    .search_zip
 				value: flag_switch(true)
-			} }
-		'flag_no_search_zip_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_search_zip_negated' {
+			return ParsedOccurrence{
 				id:    .search_zip
 				value: flag_switch(false)
-			} }
-		'flag_smart_case' { return ParsedOccurrence{
+			}
+		}
+		'flag_smart_case' {
+			return ParsedOccurrence{
 				id:    .smart_case
 				value: flag_switch(true)
-			} }
-		'flag_sort_files' { return ParsedOccurrence{
+			}
+		}
+		'flag_sort_files' {
+			return ParsedOccurrence{
 				id:    .sort_files
 				value: flag_switch(true)
-			} }
-		'flag_no_sort_files_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_sort_files_negated' {
+			return ParsedOccurrence{
 				id:    .sort_files
 				value: flag_switch(false)
-			} }
-		'flag_sort' { return ParsedOccurrence{
+			}
+		}
+		'flag_sort' {
+			return ParsedOccurrence{
 				id:    .sort
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_sortr' { return ParsedOccurrence{
+			}
+		}
+		'flag_sortr' {
+			return ParsedOccurrence{
 				id:    .sortr
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_stats' { return ParsedOccurrence{
+			}
+		}
+		'flag_stats' {
+			return ParsedOccurrence{
 				id:    .stats
 				value: flag_switch(true)
-			} }
-		'flag_no_stats_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_stats_negated' {
+			return ParsedOccurrence{
 				id:    .stats
 				value: flag_switch(false)
-			} }
-		'flag_stop_on_nonmatch' { return ParsedOccurrence{
+			}
+		}
+		'flag_stop_on_nonmatch' {
+			return ParsedOccurrence{
 				id:    .stop_on_nonmatch
 				value: flag_switch(true)
-			} }
-		'flag_text' { return ParsedOccurrence{
+			}
+		}
+		'flag_text' {
+			return ParsedOccurrence{
 				id:    .text
 				value: flag_switch(true)
-			} }
-		'flag_no_text_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_text_negated' {
+			return ParsedOccurrence{
 				id:    .text
 				value: flag_switch(false)
-			} }
-		'flag_threads' { return ParsedOccurrence{
+			}
+		}
+		'flag_threads' {
+			return ParsedOccurrence{
 				id:    .threads
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_trace' { return ParsedOccurrence{
+			}
+		}
+		'flag_trace' {
+			return ParsedOccurrence{
 				id:    .trace
 				value: flag_switch(true)
-			} }
-		'flag_trim' { return ParsedOccurrence{
+			}
+		}
+		'flag_trim' {
+			return ParsedOccurrence{
 				id:    .trim
 				value: flag_switch(true)
-			} }
-		'flag_no_trim_negated' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_trim_negated' {
+			return ParsedOccurrence{
 				id:    .trim
 				value: flag_switch(false)
-			} }
-		'flag_type' { return ParsedOccurrence{
+			}
+		}
+		'flag_type' {
+			return ParsedOccurrence{
 				id:    .type
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_type_add' { return ParsedOccurrence{
+			}
+		}
+		'flag_type_add' {
+			return ParsedOccurrence{
 				id:    .type_add
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_type_clear' { return ParsedOccurrence{
+			}
+		}
+		'flag_type_clear' {
+			return ParsedOccurrence{
 				id:    .type_clear
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_type_not' { return ParsedOccurrence{
+			}
+		}
+		'flag_type_not' {
+			return ParsedOccurrence{
 				id:    .type_not
 				value: flag_value(parsed.arg or { return error('missing flag value') })
-			} }
-		'flag_type_list' { return ParsedOccurrence{
+			}
+		}
+		'flag_type_list' {
+			return ParsedOccurrence{
 				id:    .type_list
 				value: flag_switch(true)
-			} }
-		'flag_unrestricted' { return ParsedOccurrence{
+			}
+		}
+		'flag_unrestricted' {
+			return ParsedOccurrence{
 				id:    .unrestricted
 				value: flag_switch(true)
-			} }
-		'flag_unrestricted_short' { return ParsedOccurrence{
+			}
+		}
+		'flag_unrestricted_short' {
+			return ParsedOccurrence{
 				id:      .unrestricted
 				value:   flag_switch(true)
 				repeats: parsed.repeats
-			} }
-		'flag_version' { return ParsedOccurrence{
+			}
+		}
+		'flag_version' {
+			return ParsedOccurrence{
 				id:    .version
 				value: flag_switch(true)
-			} }
-		'flag_vimgrep' { return ParsedOccurrence{
+			}
+		}
+		'flag_vimgrep' {
+			return ParsedOccurrence{
 				id:    .vimgrep
 				value: flag_switch(true)
-			} }
-		'flag_with_filename' { return ParsedOccurrence{
+			}
+		}
+		'flag_with_filename' {
+			return ParsedOccurrence{
 				id:    .with_filename
 				value: flag_switch(true)
-			} }
-		'flag_no_filename' { return ParsedOccurrence{
+			}
+		}
+		'flag_no_filename' {
+			return ParsedOccurrence{
 				id:    .with_filename_no
 				value: flag_switch(true)
-			} }
-		'flag_word_regexp' { return ParsedOccurrence{
+			}
+		}
+		'flag_word_regexp' {
+			return ParsedOccurrence{
 				id:    .word_regexp
 				value: flag_switch(true)
-			} }
-		else { return error('unrecognized parsed flag') }
+			}
+		}
+		else {
+			return error('unrecognized parsed flag')
+		}
 	}
 }
 
@@ -824,6 +1124,15 @@ pub fn parse_low_raw(rawargs []string) !LowArgs {
 			continue
 		}
 		if arg != '-' && arg.starts_with('-') {
+			if arg.starts_with('--') && arg.len > 2 {
+				mut name := arg[2..]
+				if eq := name.index('=') {
+					name = name[..eq]
+				}
+				if suggest_msg := suggest(name) {
+					return error('unrecognized flag ${arg}\n\n${suggest_msg}')
+				}
+			}
 			return error('unrecognized flag ${arg}')
 		}
 		args.positional << arg.to_owned()

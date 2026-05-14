@@ -15,17 +15,17 @@ import time
 /// This port uses V strings for paths instead of Rust's `Path` and `Cow`
 /// representation. The original behavior is preserved, but the path bytes are
 /// always materialized eagerly.
-pub struct PrinterPath implements IClone {
-	path string
+pub struct PrinterPath[^a] implements IClone {
+	path &^a string
 mut:
 	bytes     []u8
 	hyperlink ?HyperlinkPath
 }
 
 /// Create a new path suitable for printing.
-pub fn PrinterPath.new(path &string) PrinterPath {
-	return PrinterPath{
-		path:  (*path).clone()
+pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
+	return PrinterPath[^a]{
+		path:  path
 		bytes: path.bytes()
 	}
 }
@@ -34,7 +34,7 @@ pub fn PrinterPath.new(path &string) PrinterPath {
 ///
 /// When set, `PrinterPath::as_bytes` will return the path provided but
 /// with its separator replaced with the one given.
-pub fn (pp PrinterPath) with_separator(sep ?u8) PrinterPath {
+pub fn (pp PrinterPath[^a]) with_separator(sep ?u8) PrinterPath[^a] {
 	sep_value := sep or { return pp }
 	mut bytes := pp.bytes.clone()
 	for i, byte in bytes {
@@ -48,29 +48,30 @@ pub fn (pp PrinterPath) with_separator(sep ?u8) PrinterPath {
 			}
 		}
 	}
-	return PrinterPath{
+	return PrinterPath[^a]{
 		path:  pp.path
 		bytes: bytes
 	}
 }
 
 /// Return the raw bytes for this path.
-pub fn (pp PrinterPath) as_bytes() []u8 {
+pub fn (pp PrinterPath[^a]) as_bytes() []u8 {
 	return pp.bytes.clone()
 }
 
 /// Return this path as a hyperlink.
 ///
 /// This port uses an optional cached hyperlink value instead of a `OnceCell`.
-pub fn (mut pp PrinterPath) as_hyperlink() ?HyperlinkPath {
+pub fn (mut pp PrinterPath[^a]) as_hyperlink[^a]() ?&^a HyperlinkPath {
 	if pp.hyperlink == none {
-		pp.hyperlink = HyperlinkPath.from_path(pp.path) or { return none }
+		hyperlink := HyperlinkPath.from_path(*pp.path) or { return none }
+		pp.hyperlink = hyperlink
 	}
-	return pp.hyperlink
+	return unsafe { &pp.hyperlink? }
 }
 
 /// Return this path as an actual path string.
-pub fn (pp PrinterPath) as_path() string {
+pub fn (pp PrinterPath[^a]) as_path[^a]() &^a string {
 	return pp.path
 }
 
@@ -125,6 +126,25 @@ pub fn (fmt DecimalFormatter) as_bytes() []u8 {
 	return fmt.buf[fmt.start..].clone()
 }
 
+/// Trim prefix ASCII spaces from the given slice and return the corresponding
+/// range.
+///
+/// This stops trimming a prefix as soon as it sees non-whitespace or a line
+/// terminator.
+pub fn trim_ascii_prefix(line_term matcher.LineTerminator, slice []u8, range matcher.Match) matcher.Match {
+	mut count := usize(0)
+	for b in slice[range.start()..range.end()] {
+		if !(b == `\t` || b == `\n` || b == 0x0b || b == 0x0c || b == `\r` || b == ` `) {
+			break
+		}
+		if line_term.is_suffix([b]) {
+			break
+		}
+		count++
+	}
+	return range.with_start(range.start() + count)
+}
+
 pub fn normalize_hyperlink_path(path string) ?string {
 	canonical := os.real_path(path)
 	if canonical == '' || !os.is_abs_path(canonical) {
@@ -174,6 +194,237 @@ pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, bytes
 		}
 		return matched(m)
 	})!
+}
+
+// V does not have Rust's associated `M::Captures` type here, so replacements
+// use the overall match found by `find_iter_at` for `$0` interpolation.
+struct ReplacementCaptures implements IClone {
+	overall     matcher.Match
+	has_overall bool
+}
+
+fn ReplacementCaptures.overall(mat matcher.Match) ReplacementCaptures {
+	return ReplacementCaptures{
+		overall:     mat
+		has_overall: true
+	}
+}
+
+fn (caps ReplacementCaptures) len() usize {
+	return if caps.has_overall { usize(1) } else { usize(0) }
+}
+
+fn (caps ReplacementCaptures) get(i usize) ?matcher.Match {
+	if i == 0 && caps.has_overall {
+		return caps.overall
+	}
+	return none
+}
+
+fn replacement_no_capture_index(name string) ?usize {
+	_ = name
+	return none
+}
+
+fn append_bytes(mut dst []u8, bytes []u8) {
+	for byte in bytes {
+		dst << byte
+	}
+}
+
+fn append_match_bytes(mut dst []u8, haystack []u8, mat matcher.Match) {
+	for i := mat.start(); i < mat.end(); i++ {
+		dst << haystack[i]
+	}
+}
+
+/// A type for handling replacements while amortizing allocation.
+pub struct Replacer[M] {
+mut:
+	dst     []u8
+	matches []matcher.Match
+	active  bool
+}
+
+/// Create a new replacer for use with a particular matcher.
+///
+/// This constructor does not allocate. Instead, space for dealing with
+/// replacements is allocated lazily only when needed.
+pub fn Replacer.new[M]() Replacer[M] {
+	return Replacer[M]{}
+}
+
+/// Executes a replacement on the given haystack string by replacing all
+/// matches with the given replacement. To access the result of the
+/// replacement, use the `replacement` method.
+///
+/// This can fail if the underlying matcher reports an error.
+pub fn (mut replacer Replacer[M]) replace_all(searcher_ searcher.Searcher, matcher_ M, haystack_in []u8, range matcher.Match, replacement []u8) ! {
+	mut haystack := haystack_in.clone()
+	mut line_terminator := []u8{}
+	is_multi_line := searcher_.multi_line_with_matcher(matcher_)
+	if is_multi_line {
+		if range.end() <= haystack.len && haystack[range.end()..].len >= max_look_ahead {
+			haystack = haystack[..range.end() + max_look_ahead].clone()
+		}
+	} else {
+		mut m := matcher.Match.new(0, range.end())
+		m, line_terminator = trim_line_terminator(searcher_, haystack, m)
+		haystack = haystack[..m.end()].clone()
+	}
+	replacer.dst.clear()
+	replacer.matches.clear()
+	mut last_match := range.start()
+	matcher.find_iter_at(matcher_, haystack, range.start(), fn [haystack, replacement, range, mut last_match, mut replacer] (mat matcher.Match) bool {
+		if mat.start() >= range.end() {
+			return false
+		}
+		append_bytes(mut replacer.dst, haystack[last_match..mat.start()])
+		start := replacer.dst.len
+		caps := ReplacementCaptures.overall(mat)
+		matcher.interpolate(replacement, fn [caps, haystack] (i usize, mut dst []u8) {
+			cap_match := caps.get(i) or {
+				return
+			}
+			append_match_bytes(mut dst, haystack, cap_match)
+		}, replacement_no_capture_index, mut replacer.dst)
+		end := replacer.dst.len
+		replacer.matches << matcher.Match.new(start, end)
+		last_match = mat.end()
+		return true
+	})!
+	end := if last_match > range.end() {
+		haystack.len
+	} else if range.end() < haystack.len {
+		range.end()
+	} else {
+		haystack.len
+	}
+	append_bytes(mut replacer.dst, haystack[last_match..end])
+	append_bytes(mut replacer.dst, line_terminator)
+	replacer.active = replacer.matches.len > 0
+}
+
+/// Return the result of the prior replacement and the match offsets for
+/// all replacement occurrences within the returned replacement buffer.
+///
+/// If no replacement has occurred then `None` is returned.
+pub fn (replacer Replacer[M]) replacement() ?Replacement {
+	if !replacer.active || replacer.matches.len == 0 {
+		return none
+	}
+	return Replacement{
+		bytes:   replacer.dst.clone()
+		matches: replacer.matches.clone()
+	}
+}
+
+/// Clear space used for performing a replacement.
+///
+/// Subsequent calls to `replacement` after calling `clear` (but before
+/// executing another replacement) will always return `None`.
+pub fn (mut replacer Replacer[M]) clear() {
+	replacer.dst.clear()
+	replacer.matches.clear()
+	replacer.active = false
+}
+
+pub struct Replacement implements IClone {
+	bytes   []u8
+	matches []matcher.Match
+}
+
+/// A simple layer of abstraction over either a match or a contextual line
+/// reported by the searcher.
+///
+/// In particular, this provides an API that unions the `SinkMatch` and
+/// `SinkContext` types while also exposing a list of all individual match
+/// locations.
+///
+/// While this serves as a convenient mechanism to abstract over `SinkMatch`
+/// and `SinkContext`, this also provides a way to abstract over replacements.
+/// Namely, after a replacement, a `Sunk` value can be constructed using the
+/// results of the replacement instead of the bytes reported directly by the
+/// searcher.
+pub struct Sunk implements IClone {
+	bytes_                []u8
+	absolute_byte_offset_ u64
+	line_number_          ?u64
+	context_kind_         ?searcher.SinkContextKind
+	matches_              []matcher.Match
+	original_matches_     []matcher.Match
+}
+
+pub fn Sunk.empty() Sunk {
+	return Sunk{}
+}
+
+pub fn Sunk.from_sink_match(sunk searcher.SinkMatch, original_matches []matcher.Match, replacement ?Replacement) Sunk {
+	if repl := replacement {
+		return Sunk{
+			bytes_:                repl.bytes.clone()
+			absolute_byte_offset_: sunk.absolute_byte_offset()
+			line_number_:          sunk.line_number()
+			matches_:              repl.matches.clone()
+			original_matches_:     original_matches.clone()
+		}
+	}
+	return Sunk{
+		bytes_:                sunk.bytes()
+		absolute_byte_offset_: sunk.absolute_byte_offset()
+		line_number_:          sunk.line_number()
+		matches_:              original_matches.clone()
+		original_matches_:     original_matches.clone()
+	}
+}
+
+pub fn Sunk.from_sink_context(sunk searcher.SinkContext, original_matches []matcher.Match, replacement ?Replacement) Sunk {
+	if repl := replacement {
+		return Sunk{
+			bytes_:                repl.bytes.clone()
+			absolute_byte_offset_: sunk.absolute_byte_offset()
+			line_number_:          sunk.line_number()
+			context_kind_:         sunk.kind()
+			matches_:              repl.matches.clone()
+			original_matches_:     original_matches.clone()
+		}
+	}
+	return Sunk{
+		bytes_:                sunk.bytes()
+		absolute_byte_offset_: sunk.absolute_byte_offset()
+		line_number_:          sunk.line_number()
+		context_kind_:         sunk.kind()
+		matches_:              original_matches.clone()
+		original_matches_:     original_matches.clone()
+	}
+}
+
+pub fn (sunk Sunk) context_kind() ?searcher.SinkContextKind {
+	return sunk.context_kind_
+}
+
+pub fn (sunk Sunk) bytes() []u8 {
+	return sunk.bytes_.clone()
+}
+
+pub fn (sunk Sunk) matches() []matcher.Match {
+	return sunk.matches_.clone()
+}
+
+pub fn (sunk Sunk) original_matches() []matcher.Match {
+	return sunk.original_matches_.clone()
+}
+
+pub fn (sunk Sunk) lines(line_term u8) searcher.LineIter {
+	return searcher.LineIter.new(sunk.bytes(), line_term)
+}
+
+pub fn (sunk Sunk) absolute_byte_offset() u64 {
+	return sunk.absolute_byte_offset_
+}
+
+pub fn (sunk Sunk) line_number() ?u64 {
+	return sunk.line_number_
 }
 
 fn trim_line_terminator(searcher_ searcher.Searcher, buf []u8, line matcher.Match) (matcher.Match, []u8) {
