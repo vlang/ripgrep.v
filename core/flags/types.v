@@ -1,6 +1,7 @@
 module flags
 
 import encoding.utf8
+import os
 import strconv
 
 pub enum Category {
@@ -364,28 +365,40 @@ pub:
 	label string
 }
 
-const known_encodings = [
-	'ascii',
-	'latin1',
-	'utf-8',
-	'utf8',
-	'utf-16',
-	'utf-16be',
-	'utf-16le',
-	'utf-32',
-	'utf-32be',
-	'utf-32le',
-	'windows-1252',
-]
-
 pub fn new_encoding(label string) !Encoding {
 	normalized := label.to_lower()
-	if normalized in known_encodings {
+	if canonical := canonical_encoding_label(normalized) {
 		return Encoding{
-			label: normalized
+			label: canonical
 		}
 	}
 	return error('unrecognized encoding')
+}
+
+fn canonical_encoding_label(label string) ?string {
+	match label {
+		'unicode-1-1-utf-8', 'unicode11utf8', 'unicode20utf8', 'utf-8', 'utf8', 'x-unicode20utf8' {
+			return 'utf-8'
+		}
+		'utf-16', 'utf-16le', 'utf16le' {
+			return 'utf-16le'
+		}
+		'utf-16be', 'utf16be' {
+			return 'utf-16be'
+		}
+		'utf-32', 'utf-32le', 'utf32le' {
+			return 'utf-32le'
+		}
+		'utf-32be', 'utf32be' {
+			return 'utf-32be'
+		}
+		'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100', 'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252', 'x-cp1252' {
+			return 'windows-1252'
+		}
+		else {
+			return none
+		}
+	}
 }
 
 pub enum EncodingModeKind {
@@ -550,6 +563,23 @@ pub enum SortModeKind {
 	last_modified
 	last_accessed
 	created
+}
+
+/// Checks whether the selected sort mode is supported. If it isn't, an
+/// error (hopefully explaining why) is returned.
+pub fn (sort SortMode) supported() ! {
+	if sort.kind == .path {
+		return
+	}
+	exe := os.executable()
+	_ = os.stat(exe) or {
+		return match sort.kind {
+			.path { error('unreachable path sort support check') }
+			.last_modified { error("sorting by last modified isn't supported: ${err.msg()}") }
+			.last_accessed { error("sorting by last accessed isn't supported: ${err.msg()}") }
+			.created { error("sorting by creation time isn't supported: ${err.msg()}") }
+		}
+	}
 }
 
 pub enum TypeChangeKind {

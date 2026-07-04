@@ -192,7 +192,7 @@ pub fn (kind ErrorKind) description() string {
 
 pub fn (kind ErrorKind) str() string {
 	return if kind.tag == .invalid_range {
-		'invalid range; \'${kind.start.str()}\' > \'${kind.end.str()}\''
+		"invalid range; '${kind.start.str()}' > '${kind.end.str()}'"
 	} else {
 		kind.description()
 	}
@@ -269,14 +269,14 @@ fn candidate_from_string[^a](path &^a string) Candidate[^a] {
 	}
 }
 
-fn (candidate Candidate[^a]) path_prefix(max usize) string {
+fn (candidate Candidate[^a]) path_prefix[^a](max usize) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
 	return candidate.path_[..int(max)]
 }
 
-fn (candidate Candidate[^a]) path_suffix(max usize) string {
+fn (candidate Candidate[^a]) path_suffix[^a](max usize) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
@@ -493,27 +493,67 @@ fn (s RegexSetStrategy) matches_into[^a](candidate Candidate[^a], mut matches []
 }
 
 fn glob_set_strategy_is_match[^a](strat GlobSetMatchStrategy, candidate Candidate[^a]) bool {
-	match strat {
-		LiteralStrategy { return strat.is_match(candidate) }
-		BasenameLiteralStrategy { return strat.is_match(candidate) }
-		ExtensionStrategy { return strat.is_match(candidate) }
-		PrefixStrategy { return strat.is_match(candidate) }
-		SuffixStrategy { return strat.is_match(candidate) }
-		RequiredExtensionStrategy { return strat.is_match(candidate) }
-		RegexSetStrategy { return strat.is_match(candidate) }
+	if strat is LiteralStrategy {
+		s := strat as LiteralStrategy
+		return s.is_match(candidate)
 	}
+	if strat is BasenameLiteralStrategy {
+		s := strat as BasenameLiteralStrategy
+		return s.is_match(candidate)
+	}
+	if strat is ExtensionStrategy {
+		s := strat as ExtensionStrategy
+		return s.is_match(candidate)
+	}
+	if strat is PrefixStrategy {
+		s := strat as PrefixStrategy
+		return s.is_match(candidate)
+	}
+	if strat is SuffixStrategy {
+		s := strat as SuffixStrategy
+		return s.is_match(candidate)
+	}
+	if strat is RequiredExtensionStrategy {
+		s := strat as RequiredExtensionStrategy
+		return s.is_match(candidate)
+	}
+	s := strat as RegexSetStrategy
+	return s.is_match(candidate)
 }
 
 fn glob_set_strategy_matches_into[^a](strat GlobSetMatchStrategy, candidate Candidate[^a], mut matches []usize) {
-	match strat {
-		LiteralStrategy { strat.matches_into(candidate, mut matches) }
-		BasenameLiteralStrategy { strat.matches_into(candidate, mut matches) }
-		ExtensionStrategy { strat.matches_into(candidate, mut matches) }
-		PrefixStrategy { strat.matches_into(candidate, mut matches) }
-		SuffixStrategy { strat.matches_into(candidate, mut matches) }
-		RequiredExtensionStrategy { strat.matches_into(candidate, mut matches) }
-		RegexSetStrategy { strat.matches_into(candidate, mut matches) }
+	if strat is LiteralStrategy {
+		s := strat as LiteralStrategy
+		s.matches_into(candidate, mut matches)
+		return
 	}
+	if strat is BasenameLiteralStrategy {
+		s := strat as BasenameLiteralStrategy
+		s.matches_into(candidate, mut matches)
+		return
+	}
+	if strat is ExtensionStrategy {
+		s := strat as ExtensionStrategy
+		s.matches_into(candidate, mut matches)
+		return
+	}
+	if strat is PrefixStrategy {
+		s := strat as PrefixStrategy
+		s.matches_into(candidate, mut matches)
+		return
+	}
+	if strat is SuffixStrategy {
+		s := strat as SuffixStrategy
+		s.matches_into(candidate, mut matches)
+		return
+	}
+	if strat is RequiredExtensionStrategy {
+		s := strat as RequiredExtensionStrategy
+		s.matches_into(candidate, mut matches)
+		return
+	}
+	s := strat as RegexSetStrategy
+	s.matches_into(candidate, mut matches)
 }
 
 struct MultiStrategyBuilder implements IClone {
@@ -845,7 +885,7 @@ pub fn (builder GlobSetBuilder) build() !GlobSet {
 /// Add a new pattern to this set.
 pub fn (mut builder GlobSetBuilder) add(pat Glob) &GlobSetBuilder {
 	builder.pats << pat
-	return &builder
+	return builder
 }
 
 /// Escape meta-characters within the given glob pattern.

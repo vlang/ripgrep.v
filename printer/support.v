@@ -2,8 +2,160 @@ module printer
 
 import os
 import matcher
+import pcre2
+import regex
 import searcher
 import time
+
+fn match_new(start usize, end usize) matcher.Match {
+	return matcher.Match.new(start, end)
+}
+
+enum PrinterMatcherKind {
+	rust_regex
+	pcre2
+}
+
+pub struct PrinterMatcher {
+	kind  PrinterMatcherKind
+	regex regex.RegexMatcher
+	pcre2 pcre2.RegexMatcher
+}
+
+pub fn PrinterMatcher.rust_regex(matcher_ regex.RegexMatcher) PrinterMatcher {
+	return PrinterMatcher{
+		kind:  .rust_regex
+		regex: matcher_
+	}
+}
+
+pub fn PrinterMatcher.pcre2(matcher_ pcre2.RegexMatcher) PrinterMatcher {
+	return PrinterMatcher{
+		kind:  .pcre2
+		pcre2: matcher_
+	}
+}
+
+pub fn (pm PrinterMatcher) clone() PrinterMatcher {
+	return match pm.kind {
+		.rust_regex {
+			PrinterMatcher{
+				kind:  .rust_regex
+				regex: pm.regex.clone()
+			}
+		}
+		.pcre2 {
+			PrinterMatcher{
+				kind:  .pcre2
+				pcre2: pm.pcre2.clone()
+			}
+		}
+	}
+}
+
+fn (pm PrinterMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+	return match pm.kind {
+		.rust_regex { pm.regex.find_at(haystack, at)! }
+		.pcre2 { pm.pcre2.find_at(haystack, at)! }
+	}
+}
+
+fn (pm PrinterMatcher) new_captures() !matcher.NoCaptures {
+	return match pm.kind {
+		.rust_regex { pm.regex.new_captures()! }
+		.pcre2 { pm.pcre2.new_captures()! }
+	}
+}
+
+fn (pm PrinterMatcher) capture_count() usize {
+	return match pm.kind {
+		.rust_regex { pm.regex.capture_count() }
+		.pcre2 { pm.pcre2.capture_count() }
+	}
+}
+
+fn (pm PrinterMatcher) capture_index(name string) ?usize {
+	return match pm.kind {
+		.rust_regex { pm.regex.capture_index(name) }
+		.pcre2 { pm.pcre2.capture_index(name) }
+	}
+}
+
+fn (pm PrinterMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+	return match pm.kind {
+		.rust_regex { pm.regex.captures_at(haystack, at, mut caps)! }
+		.pcre2 { pm.pcre2.captures_at(haystack, at, mut caps)! }
+	}
+}
+
+fn (pm &^a PrinterMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
+	return match pm.kind {
+		.rust_regex { pm.regex.non_matching_bytes() }
+		.pcre2 { none }
+	}
+}
+
+fn (pm PrinterMatcher) line_terminator() ?matcher.LineTerminator {
+	return match pm.kind {
+		.rust_regex { pm.regex.line_terminator() }
+		.pcre2 { pm.pcre2.line_terminator() }
+	}
+}
+
+fn (pm PrinterMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+	return match pm.kind {
+		.rust_regex { pm.regex.find_candidate_line(haystack)! }
+		.pcre2 { pm.pcre2.find_candidate_line(haystack)! }
+	}
+}
+
+// V-specific: keep printer match rediscovery on the concrete wrapper so V2
+// does not need a cross-module generic `find_iter_at` specialization here.
+fn printer_find_iter_at(matcher_ PrinterMatcher, haystack []u8, at usize, matched fn (matcher.Match) bool) ! {
+	mut last_end := at
+	mut has_last_match := false
+	mut last_match_end := usize(0)
+	for {
+		if last_end > haystack.len {
+			return
+		}
+		maybe_mat := matcher_.find_at(haystack, last_end)!
+		if !maybe_mat.has_value {
+			return
+		}
+		mat := maybe_mat.value
+		if mat.start() == mat.end() {
+			last_end = mat.end() + 1
+			if has_last_match && mat.end() == last_match_end {
+				continue
+			}
+		} else {
+			last_end = mat.end()
+		}
+		has_last_match = true
+		last_match_end = mat.end()
+		if !matched(mat) {
+			return
+		}
+	}
+}
+
+fn printer_matcher_multi_line(searcher_ searcher.Searcher, matcher_ PrinterMatcher) bool {
+	if !searcher_.multi_line() {
+		return false
+	}
+	if line_term := matcher_.line_terminator() {
+		if line_term == searcher_.line_terminator() {
+			return false
+		}
+	}
+	if non_matching := matcher_.non_matching_bytes() {
+		if matcher.byte_set_contains(non_matching, searcher_.line_terminator().as_byte()) {
+			return false
+		}
+	}
+	return true
+}
 
 /// A simple encapsulation of a file path used by a printer.
 ///
@@ -34,7 +186,7 @@ pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
 ///
 /// When set, `PrinterPath::as_bytes` will return the path provided but
 /// with its separator replaced with the one given.
-pub fn (pp PrinterPath[^a]) with_separator(sep ?u8) PrinterPath[^a] {
+pub fn (pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
 	sep_value := sep or { return pp }
 	mut bytes := pp.bytes.clone()
 	for i, byte in bytes {
@@ -55,7 +207,7 @@ pub fn (pp PrinterPath[^a]) with_separator(sep ?u8) PrinterPath[^a] {
 }
 
 /// Return the raw bytes for this path.
-pub fn (pp PrinterPath[^a]) as_bytes() []u8 {
+pub fn (pp PrinterPath[^a]) as_bytes[^a]() []u8 {
 	return pp.bytes.clone()
 }
 
@@ -153,7 +305,7 @@ pub fn normalize_hyperlink_path(path string) ?string {
 	return canonical.clone()
 }
 
-pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
+pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ PrinterMatcher, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
 	mut bytes := bytes_in.clone()
 	// This strange dance is to account for the possibility of look-ahead in
 	// the regex. The problem here is that mat.bytes() doesn't include the
@@ -178,7 +330,7 @@ pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, bytes
 	// responsible for finding matches when necessary, and the printer
 	// shouldn't be involved in this business in the first place. Sigh. Live
 	// and learn. Abstraction boundaries are hard.
-	is_multi_line := searcher_.multi_line_with_matcher(matcher_)
+	is_multi_line := printer_matcher_multi_line(searcher_, matcher_)
 	if is_multi_line {
 		if range.end() <= bytes.len && bytes[range.end()..].len >= max_look_ahead {
 			bytes = bytes[..range.end() + max_look_ahead].clone()
@@ -188,7 +340,7 @@ pub fn find_iter_at_in_context[M](searcher_ searcher.Searcher, matcher_ M, bytes
 		line, _ = trim_line_terminator(searcher_, bytes, line)
 		bytes = bytes[..line.end()].clone()
 	}
-	matcher.find_iter_at(matcher_, bytes, range.start(), fn [range, matched] (m matcher.Match) bool {
+	printer_find_iter_at(matcher_, bytes, range.start(), fn [range, matched] (m matcher.Match) bool {
 		if m.start() >= range.end() {
 			return false
 		}
@@ -239,7 +391,7 @@ fn append_match_bytes(mut dst []u8, haystack []u8, mat matcher.Match) {
 }
 
 /// A type for handling replacements while amortizing allocation.
-pub struct Replacer[M] {
+pub struct Replacer {
 mut:
 	dst     []u8
 	matches []matcher.Match
@@ -250,8 +402,8 @@ mut:
 ///
 /// This constructor does not allocate. Instead, space for dealing with
 /// replacements is allocated lazily only when needed.
-pub fn Replacer.new[M]() Replacer[M] {
-	return Replacer[M]{}
+pub fn Replacer.new() Replacer {
+	return Replacer{}
 }
 
 /// Executes a replacement on the given haystack string by replacing all
@@ -259,10 +411,10 @@ pub fn Replacer.new[M]() Replacer[M] {
 /// replacement, use the `replacement` method.
 ///
 /// This can fail if the underlying matcher reports an error.
-pub fn (mut replacer Replacer[M]) replace_all(searcher_ searcher.Searcher, matcher_ M, haystack_in []u8, range matcher.Match, replacement []u8) ! {
+pub fn (mut replacer Replacer) replace_all(searcher_ searcher.Searcher, matcher_ PrinterMatcher, haystack_in []u8, range matcher.Match, replacement []u8) ! {
 	mut haystack := haystack_in.clone()
 	mut line_terminator := []u8{}
-	is_multi_line := searcher_.multi_line_with_matcher(matcher_)
+	is_multi_line := printer_matcher_multi_line(searcher_, matcher_)
 	if is_multi_line {
 		if range.end() <= haystack.len && haystack[range.end()..].len >= max_look_ahead {
 			haystack = haystack[..range.end() + max_look_ahead].clone()
@@ -275,7 +427,7 @@ pub fn (mut replacer Replacer[M]) replace_all(searcher_ searcher.Searcher, match
 	replacer.dst.clear()
 	replacer.matches.clear()
 	mut last_match := range.start()
-	matcher.find_iter_at(matcher_, haystack, range.start(), fn [haystack, replacement, range, mut last_match, mut replacer] (mat matcher.Match) bool {
+	printer_find_iter_at(matcher_, haystack, range.start(), fn [haystack, replacement, range, mut last_match, mut replacer] (mat matcher.Match) bool {
 		if mat.start() >= range.end() {
 			return false
 		}
@@ -289,7 +441,7 @@ pub fn (mut replacer Replacer[M]) replace_all(searcher_ searcher.Searcher, match
 			append_match_bytes(mut dst, haystack, cap_match)
 		}, replacement_no_capture_index, mut replacer.dst)
 		end := replacer.dst.len
-		replacer.matches << matcher.Match.new(start, end)
+		replacer.matches << match_new(start, end)
 		last_match = mat.end()
 		return true
 	})!
@@ -309,7 +461,7 @@ pub fn (mut replacer Replacer[M]) replace_all(searcher_ searcher.Searcher, match
 /// all replacement occurrences within the returned replacement buffer.
 ///
 /// If no replacement has occurred then `None` is returned.
-pub fn (replacer Replacer[M]) replacement() ?Replacement {
+pub fn (replacer Replacer) replacement() ?Replacement {
 	if !replacer.active || replacer.matches.len == 0 {
 		return none
 	}
@@ -323,7 +475,7 @@ pub fn (replacer Replacer[M]) replacement() ?Replacement {
 ///
 /// Subsequent calls to `replacement` after calling `clear` (but before
 /// executing another replacement) will always return `None`.
-pub fn (mut replacer Replacer[M]) clear() {
+pub fn (mut replacer Replacer) clear() {
 	replacer.dst.clear()
 	replacer.matches.clear()
 	replacer.active = false

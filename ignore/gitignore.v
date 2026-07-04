@@ -53,7 +53,7 @@ pub fn (g Glob) is_only_dir() bool {
 }
 
 /// Returns true if and only if this glob has a `**/` prefix.
-fn (g Glob) has_doublestar_prefix() bool {
+fn (g &Glob) has_doublestar_prefix() bool {
 	return g.actual.starts_with('**/') || g.actual == '**'
 }
 
@@ -449,7 +449,7 @@ fn gitignore_builder_add_line(mut builder GitignoreBuilder, from ?string, line s
 	if glob.actual.ends_with('/**') {
 		glob.actual += '/*'
 	}
-	if invalid_glob(glob.actual, builder.allow_unclosed_class) {
+	if invalid_glob(&glob.actual, builder.allow_unclosed_class) {
 		return true, glob_error(glob.original, 'invalid glob')
 	}
 	builder.globs << glob
@@ -584,7 +584,7 @@ fn home_dir() ?string {
 	return home
 }
 
-fn invalid_glob(glob string, allow_unclosed_class bool) bool {
+fn invalid_glob(glob &string, allow_unclosed_class bool) bool {
 	if glob.contains('{') || glob.contains('}') {
 		return true
 	}
@@ -594,7 +594,7 @@ fn invalid_glob(glob string, allow_unclosed_class bool) bool {
 	return false
 }
 
-fn has_unclosed_class(pattern string) bool {
+fn has_unclosed_class(pattern &string) bool {
 	mut escaped := false
 	mut in_class := false
 	for ch in pattern {

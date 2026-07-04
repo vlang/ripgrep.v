@@ -44,7 +44,8 @@ fn match_strategy_new(pat Glob) MatchStrategy {
 			kind:  .prefix
 			value: prefix
 		}
-	} else if suffix, component := pat.suffix() {
+	} else if suffix_pair := pat.suffix() {
+		suffix, component := suffix_pair
 		return MatchStrategy{
 			kind:      .suffix
 			value:     suffix
@@ -137,6 +138,16 @@ fn token_alternates(patterns []Tokens) Token {
 	}
 }
 
+fn (tok Token) clone() Token {
+	return Token{
+		kind:     tok.kind
+		ch:       tok.ch
+		negated:  tok.negated
+		ranges:   tok.ranges.clone()
+		patterns: tok.patterns.clone()
+	}
+}
+
 fn (tok Token) str() string {
 	return match tok.kind {
 		.literal { 'Literal(${tok.ch.str()})' }
@@ -196,7 +207,8 @@ fn (t Tokens) is_empty() bool {
 
 fn (t Tokens) clone_slice(start int, end int) []Token {
 	mut cloned := []Token{}
-	for tok in t.tokens[start..end] {
+	for i := start; i < end; i++ {
+		tok := t.tokens[i]
 		cloned << tok.clone()
 	}
 	return cloned
@@ -222,7 +234,7 @@ fn glob_options_default() GlobOptions {
 	return GlobOptions{
 		case_insensitive:     false
 		literal_separator:    false
-		backslash_escape:     true
+		backslash_escape:     !is_separator(`\\`)
 		empty_alternates:     false
 		allow_unclosed_class: false
 	}
@@ -313,7 +325,8 @@ fn (g Glob) ext() ?string {
 		return none
 	}
 	mut lit := '.'
-	for tok in g.tokens.tokens[start + 2..] {
+	for i := start + 2; i < g.tokens.tokens.len; i++ {
+		tok := g.tokens.tokens[i]
 		if tok.kind != .literal || tok.ch == `.` || tok.ch == `/` {
 			return none
 		}
@@ -367,7 +380,8 @@ fn (g Glob) prefix() ?string {
 		need_sep = true
 	}
 	mut lit := ''
-	for tok in g.tokens.tokens[..end] {
+	for i := 0; i < end; i++ {
+		tok := g.tokens.tokens[i]
 		if tok.kind != .literal {
 			return none
 		}
@@ -405,7 +419,8 @@ fn (g Glob) suffix() ?(string, bool) {
 		}
 		start++
 	}
-	for tok in g.tokens.tokens[start..] {
+	for i := start; i < g.tokens.tokens.len; i++ {
+		tok := g.tokens.tokens[i]
 		if tok.kind != .literal {
 			return none
 		}
@@ -427,7 +442,8 @@ fn (g Glob) basename_tokens() ?[]Token {
 	if g.tokens.tokens.len == 1 {
 		return none
 	}
-	for tok in g.tokens.tokens[1..] {
+	for i := 1; i < g.tokens.tokens.len; i++ {
+		tok := g.tokens.tokens[i]
 		match tok.kind {
 			.literal {
 				if tok.ch == `/` {
@@ -445,7 +461,8 @@ fn (g Glob) basename_tokens() ?[]Token {
 		}
 	}
 	mut tokens := []Token{}
-	for tok in g.tokens.tokens[1..] {
+	for i := 1; i < g.tokens.tokens.len; i++ {
+		tok := g.tokens.tokens[i]
 		tokens << tok.clone()
 	}
 	return tokens
@@ -511,7 +528,7 @@ pub fn GlobBuilder.new[^a](glob &^a string) GlobBuilder[^a] {
 }
 
 /// Parses and builds the pattern.
-pub fn (builder GlobBuilder[^a]) build() !Glob {
+pub fn (builder GlobBuilder[^a]) build[^a]() !Glob {
 	parse_glob := if builder.opts.case_insensitive {
 		(*builder.glob).to_lower()
 	} else {
@@ -551,17 +568,17 @@ pub fn (builder GlobBuilder[^a]) build() !Glob {
 /// Toggle whether the pattern matches case insensitively or not.
 ///
 /// This is disabled by default.
-pub fn (mut builder GlobBuilder[^a]) case_insensitive(yes bool) &GlobBuilder[^a] {
+pub fn (mut builder GlobBuilder[^a]) case_insensitive[^a](yes bool) &GlobBuilder[^a] {
 	builder.opts.case_insensitive = yes
-	return &builder
+	return builder
 }
 
 /// Toggle whether a literal `/` is required to match a path separator.
 ///
 /// By default this is false: `*` and `?` will match `/`.
-pub fn (mut builder GlobBuilder[^a]) literal_separator(yes bool) &GlobBuilder[^a] {
+pub fn (mut builder GlobBuilder[^a]) literal_separator[^a](yes bool) &GlobBuilder[^a] {
 	builder.opts.literal_separator = yes
-	return &builder
+	return builder
 }
 
 /// When enabled, a back slash (`\`) may be used to escape
@@ -572,9 +589,9 @@ pub fn (mut builder GlobBuilder[^a]) literal_separator(yes bool) &GlobBuilder[^a
 /// This is enabled by default on platforms where `\` is not a
 /// path separator and disabled by default on platforms where `\`
 /// is a path separator.
-pub fn (mut builder GlobBuilder[^a]) backslash_escape(yes bool) &GlobBuilder[^a] {
+pub fn (mut builder GlobBuilder[^a]) backslash_escape[^a](yes bool) &GlobBuilder[^a] {
 	builder.opts.backslash_escape = yes
-	return &builder
+	return builder
 }
 
 /// Toggle whether an empty pattern in a list of alternates is accepted.
@@ -583,9 +600,9 @@ pub fn (mut builder GlobBuilder[^a]) backslash_escape(yes bool) &GlobBuilder[^a]
 /// `foo` and `foo.txt`.
 ///
 /// By default this is false.
-pub fn (mut builder GlobBuilder[^a]) empty_alternates(yes bool) &GlobBuilder[^a] {
+pub fn (mut builder GlobBuilder[^a]) empty_alternates[^a](yes bool) &GlobBuilder[^a] {
 	builder.opts.empty_alternates = yes
-	return &builder
+	return builder
 }
 
 /// Toggle whether unclosed character classes are allowed. When allowed,
@@ -599,13 +616,13 @@ pub fn (mut builder GlobBuilder[^a]) empty_alternates(yes bool) &GlobBuilder[^a]
 /// worse failure modes since the glob parser becomes more permissive. You
 /// might want to enable this when compatibility (e.g., with POSIX glob
 /// implementations) is more important than good error messages.
-pub fn (mut builder GlobBuilder[^a]) allow_unclosed_class(yes bool) &GlobBuilder[^a] {
+pub fn (mut builder GlobBuilder[^a]) allow_unclosed_class[^a](yes bool) &GlobBuilder[^a] {
 	builder.opts.allow_unclosed_class = yes
-	return &builder
+	return builder
 }
 
 fn (tokens Tokens) to_regex_with(options GlobOptions) string {
-	mut re := ''
+	mut re := '(?-u)'
 	if options.case_insensitive {
 		re += '(?i)'
 	}
@@ -765,7 +782,8 @@ fn (mut p Parser) pop_alternate() ! {
 	start := p.alternates_stack[p.alternates_stack.len - 1]
 	p.alternates_stack = p.alternates_stack[..p.alternates_stack.len - 1]
 	mut patterns := []Tokens{}
-	for branch in p.branches[start..] {
+	for i := start; i < p.branches.len; i++ {
+		branch := p.branches[i]
 		patterns << branch.clone()
 	}
 	p.branches = p.branches[..start]
@@ -1083,7 +1101,8 @@ fn glob_match_tokens_from(tokens []Token, opts GlobOptions, text []rune, pi int,
 				for item in branch.tokens {
 					combined << item.clone()
 				}
-				for item in tokens[pi + 1..] {
+				for i := pi + 1; i < tokens.len; i++ {
+					item := tokens[i]
 					combined << item.clone()
 				}
 				if glob_match_tokens_from(combined, opts, text, 0, ti) {

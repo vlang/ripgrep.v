@@ -196,6 +196,9 @@ fn test_update_encoding() {
 		UpdateStep{'no-encoding', flag_switch(true)},
 		UpdateStep{'encoding', flag_value('utf-16')},
 	]).encoding == encoding_some(new_encoding('utf-16') or { panic(err.msg()) })
+	assert must_apply([UpdateStep{'encoding', flag_value('latin1')}]).encoding == encoding_some(new_encoding('windows-1252') or {
+		panic(err.msg())
+	})
 }
 
 fn test_update_engine() {

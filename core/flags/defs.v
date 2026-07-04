@@ -2973,11 +2973,11 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.generate {
 			value := v.unwrap_value()
 			genmode := match value {
-						'man' { .man }
-						'complete-bash' { .complete_bash }
-						'complete-zsh' { .complete_zsh }
-						'complete-fish' { .complete_fish }
-						'complete-powershell' { .complete_powershell }
+						'man' { GenerateMode.man }
+						'complete-bash' { GenerateMode.complete_bash }
+						'complete-zsh' { GenerateMode.complete_zsh }
+						'complete-fish' { GenerateMode.complete_fish }
+						'complete-powershell' { GenerateMode.complete_powershell }
 						else { return error("choice '${value}' is unrecognized") }
 					}
 			args.mode.update(mode_generate(genmode))
@@ -3215,10 +3215,10 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 						return
 					}
 			kind := match value {
-						'path' { .path }
-						'modified' { .last_modified }
-						'accessed' { .last_accessed }
-						'created' { .created }
+						'path' { SortModeKind.path }
+						'modified' { SortModeKind.last_modified }
+						'accessed' { SortModeKind.last_accessed }
+						'created' { SortModeKind.created }
 						else { return error("choice '${value}' is unrecognized") }
 					}
 			args.sort = SortMode{
@@ -3233,10 +3233,10 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 						return
 					}
 			kind := match value {
-						'path' { .path }
-						'modified' { .last_modified }
-						'accessed' { .last_accessed }
-						'created' { .created }
+						'path' { SortModeKind.path }
+						'modified' { SortModeKind.last_modified }
+						'accessed' { SortModeKind.last_accessed }
+						'created' { SortModeKind.created }
 						else { return error("choice '${value}' is unrecognized") }
 					}
 			args.sort = SortMode{

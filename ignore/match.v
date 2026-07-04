@@ -72,7 +72,7 @@ pub fn (m Match[T]) inner() ?T {
 }
 
 /// Return the match if it is not none. Otherwise, return other.
-pub fn (m Match[T]) or(other Match[T]) Match[T] {
+pub fn (m Match[T]) or[T](other Match[T]) Match[T] {
 	if m.is_none() {
 		return other
 	}

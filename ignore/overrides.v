@@ -194,5 +194,5 @@ pub fn (mut builder OverrideBuilder) case_insensitive(yes bool) (bool, IgnoreErr
 /// messages.
 pub fn (mut builder OverrideBuilder) allow_unclosed_class(yes bool) &OverrideBuilder {
 	builder.builder.allow_unclosed_class(yes)
-	return &builder
+	return builder
 }

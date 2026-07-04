@@ -35,7 +35,8 @@ pub:
 	skip      u16
 }
 
-struct FlagDef {
+pub struct FlagDef implements IClone {
+pub:
 	field_name string
 	long_name  string
 	short_name string
@@ -287,12 +288,7 @@ fn (mut fm FlagMapper) parse_short_arg(arg string, pos int) !bool {
 	return true
 }
 
-pub fn (mut fm FlagMapper) parse[T]() ! {
-	fm.reset_state()
-	if fm.config.style != .short_long {
-		return error('ownflag only supports short_long parsing')
-	}
-	fm.build_schema[T]()!
+fn (mut fm FlagMapper) parse_registered_flags() ! {
 	start := int(fm.config.skip)
 	mut i := start
 	for i < fm.input.len {
@@ -314,15 +310,35 @@ pub fn (mut fm FlagMapper) parse[T]() ! {
 	}
 }
 
-pub fn (fm FlagMapper) parsed_flags() []ParsedFlag {
+pub fn (mut fm FlagMapper) parse_defs(defs []FlagDef) ! {
+	fm.reset_state()
+	if fm.config.style != .short_long {
+		return error('ownflag only supports short_long parsing')
+	}
+	for def in defs {
+		fm.register_flag(def.clone())!
+	}
+	fm.parse_registered_flags()!
+}
+
+pub fn (mut fm FlagMapper) parse[T]() ! {
+	fm.reset_state()
+	if fm.config.style != .short_long {
+		return error('ownflag only supports short_long parsing')
+	}
+	fm.build_schema[T]()!
+	fm.parse_registered_flags()!
+}
+
+pub fn (fm &FlagMapper) parsed_flags() []ParsedFlag {
 	return fm.all_flags.clone()
 }
 
-pub fn (fm FlagMapper) handled_positions() []int {
+pub fn (fm &FlagMapper) handled_positions() []int {
 	return fm.handled_pos.clone()
 }
 
-pub fn (fm FlagMapper) no_matches() []string {
+pub fn (fm &FlagMapper) no_matches() []string {
 	mut out := []string{cap: fm.no_match_pos.len}
 	for pos in fm.no_match_pos {
 		out << fm.input[pos].to_owned()

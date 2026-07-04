@@ -433,7 +433,7 @@ fn test_no_read_permissions() {
 }
 
 fn filter_not_a(entry DirEntry) bool {
-	return entry.file_name() != 'a'
+	return *entry.file_name() != 'a'
 }
 
 fn test_filter() {

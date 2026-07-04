@@ -121,6 +121,13 @@ fn match_from_types[^a](m Match[TypesGlob[^a]]) Match[IgnoreMatch[^a]] {
 	return Match[IgnoreMatch[^a]]{}
 }
 
+// V-specific: this constructs only the empty match, so it carries no borrowed
+// payload at runtime. It avoids a V2 local inference fallback for
+// `Match[IgnoreMatch[^a]]{}` while preserving the translated control flow.
+fn ignore_match_none() Match[IgnoreMatch] {
+	return Match[IgnoreMatch]{}
+}
+
 /// Options for the ignore matcher, shared between the matcher itself and the
 /// builder.
 struct IgnoreOptions implements IClone {
@@ -373,7 +380,7 @@ fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] 
 			return mat
 		}
 	}
-	mut whitelisted := Match[IgnoreMatch[^a]]{}
+	mut whitelisted := ignore_match_none()
 	if ig.has_any_ignore_rules() {
 		mat := ig.matched_ignore(path_value, is_dir)
 		if mat.is_ignore() {
@@ -396,11 +403,11 @@ fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] 
 /// Performs matching only on the ignore files for this directory and
 /// all parent directories.
 fn (ig &^a Ignore) matched_ignore[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] {
-	mut m_custom_ignore := Match[IgnoreMatch[^a]]{}
-	mut m_ignore := Match[IgnoreMatch[^a]]{}
-	mut m_gi := Match[IgnoreMatch[^a]]{}
-	mut m_gi_exclude := Match[IgnoreMatch[^a]]{}
-	mut m_explicit := Match[IgnoreMatch[^a]]{}
+	mut m_custom_ignore := ignore_match_none()
+	mut m_ignore := ignore_match_none()
+	mut m_gi := ignore_match_none()
+	mut m_gi_exclude := ignore_match_none()
+	mut m_explicit := ignore_match_none()
 
 	any_git := !ig.opts.require_git || ig.any_git_parent()
 	mut saw_git := false

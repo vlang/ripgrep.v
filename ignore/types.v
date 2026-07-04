@@ -312,7 +312,7 @@ pub fn (mut builder TypesBuilder) select(name string) &TypesBuilder {
 	} else {
 		builder.selections << selection_select(name)
 	}
-	return &builder
+	return builder
 }
 
 /// Ignore the file type given by `name`.
@@ -326,13 +326,13 @@ pub fn (mut builder TypesBuilder) negate(name string) &TypesBuilder {
 	} else {
 		builder.selections << selection_negate(name)
 	}
-	return &builder
+	return builder
 }
 
 /// Clear any file type definitions for the type name given.
 pub fn (mut builder TypesBuilder) clear(name string) &TypesBuilder {
 	builder.types.delete(name)
-	return &builder
+	return builder
 }
 
 /// Add a new file type definition. `name` can be arbitrary and `pat`
@@ -411,7 +411,7 @@ pub fn (mut builder TypesBuilder) add_defaults() &TypesBuilder {
 				}
 			}
 	}
-	return &builder
+	return builder
 }
 
 fn is_valid_file_type_name(name string) bool {
@@ -455,7 +455,8 @@ fn expand_file_type_glob_rec(glob string) []string {
 		return [glob.to_owned()]
 	}
 	mut expanded := []string{}
-	for part in parts {
+	for i := 0; i < parts.len; i++ {
+		part := parts[i].clone()
 		for item in expand_file_type_glob_rec(prefix + part + suffix) {
 			expanded << item
 		}

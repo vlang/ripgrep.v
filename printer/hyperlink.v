@@ -412,7 +412,7 @@ mut:
 	text []u8
 }
 
-fn (values Values[^a]) interpolate_to(part HyperlinkPart, env HyperlinkEnvironment, mut dest []u8) {
+fn (values Values[^a]) interpolate_to[^a](part HyperlinkPart, env HyperlinkEnvironment, mut dest []u8) {
 	match part.kind {
 		.text {
 			dest << part.text
