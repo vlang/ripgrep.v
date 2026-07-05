@@ -42,6 +42,21 @@ pub fn (builder RegexMatcherBuilder) build(pattern string) !RegexMatcher {
 /// given are joined together into a single alternation. That is, it
 /// reports matches where at least one of the given patterns matches.
 pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher {
+	if patterns.len == 0 {
+		mut config := builder.config.clone()
+		never := pcre.compile(r'\b\B') or { return Error.regex(err.msg()) }
+		config.line_terminator = builder.config.line_terminator
+		return RegexMatcher{
+			config:               config
+			regex:                never
+			byte_literal:         none
+			unicode_case_literal: none
+			fast_line_regex:      none
+			non_matching_bytes:   matcher.ByteSet.full()
+		}
+	}
+	byte_literal := byte_literal_from_patterns(patterns.clone())
+	unicode_case_literal := unicode_case_literal_from_patterns(patterns.clone(), builder.config)
 	mut chir := builder.config.build_many(patterns)!
 	// 'whole_line' is a strict subset of 'word', so when it is enabled,
 	// we don't need to both with any specific to word matching.
@@ -62,22 +77,24 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 	// regex engine is likely to handle this case for us since it's so
 	// simple, but the idea applies.)
 	//
-		fast := InnerLiterals.new(&chir, &regex).one_regex()!
-		mut fast_line_regex := ?pcre.Regex(none)
-		if fast.has_value {
-			fast_line_regex = ?pcre.Regex(fast.value)
-		}
-		// We override the line terminator in case the configured HIR doesn't
-		// support it.
-		mut config := builder.config.clone()
-		config.line_terminator = chir.line_terminator()
-		return RegexMatcher{
-			config:             config
-			regex:              regex
-			fast_line_regex:    fast_line_regex
-			non_matching_bytes: non_matching_bytes
-		}
+	fast := InnerLiterals.new(&chir, &regex).one_regex()!
+	mut fast_line_regex := ?pcre.Regex(none)
+	if fast.has_value {
+		fast_line_regex = ?pcre.Regex(fast.value)
 	}
+	// We override the line terminator in case the configured HIR doesn't
+	// support it.
+	mut config := builder.config.clone()
+	config.line_terminator = chir.line_terminator()
+	return RegexMatcher{
+		config:               config
+		regex:                regex
+		byte_literal:         byte_literal
+		unicode_case_literal: unicode_case_literal
+		fast_line_regex:      fast_line_regex
+		non_matching_bytes:   non_matching_bytes
+	}
+}
 
 /// Build a new matcher from a plain alternation of literals.
 ///
@@ -352,6 +369,11 @@ pub struct RegexMatcher implements IClone {
 	/// The regular expression compiled from the pattern provided by the
 	/// caller.
 	regex pcre.Regex
+	/// A raw byte literal matcher used for simple non-Unicode byte patterns.
+	byte_literal ?[]u8
+	/// A Unicode literal matcher used when the backend cannot case fold
+	/// non-ASCII literals.
+	unicode_case_literal ?string
 	/// A regex that never reports false negatives but may report false
 	/// positives that is believed to be capable of being matched more quickly
 	/// than `regex`. Typically, this is a single literal or an alternation
@@ -389,16 +411,27 @@ pub fn RegexMatcher.new_line_matcher(pattern string) !RegexMatcher {
 // for the line terminator optimization, which is possibly executed via
 // `fast_line_regex`.
 pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+	found, _ := re.capture_groups_at(haystack, at)!
+	return found
+}
+
+pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
 	if at > haystack.len {
-		return matcher.FallibleMatch.absent()
+		return matcher.FallibleMatch.absent(), []string{}
+	}
+	if literal := re.byte_literal {
+		return find_byte_literal_at(haystack, literal, at)!, []string{}
+	}
+	if literal := re.unicode_case_literal {
+		return find_unicode_case_literal_at(haystack, literal, at)!, []string{}
 	}
 	text := haystack.bytestr()
 	mut start := int(at)
 	for start <= text.len {
-		found := re.regex.find_from(text, start) or { return matcher.FallibleMatch.absent() }
+		found := re.regex.find_from(text, start) or { return matcher.FallibleMatch.absent(), []string{} }
 		mat := matcher.Match.new(usize(found.start), usize(found.end))
 		if re.accept_match(haystack, mat) {
-			return matcher.FallibleMatch.some(mat)
+			return matcher.FallibleMatch.some(mat), found.groups.clone()
 		}
 		next := if found.end > found.start { found.start + 1 } else { found.end + 1 }
 		if next <= start {
@@ -407,7 +440,7 @@ pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch
 			start = next
 		}
 	}
-	return matcher.FallibleMatch.absent()
+	return matcher.FallibleMatch.absent(), []string{}
 }
 
 pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
@@ -416,8 +449,7 @@ pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
 }
 
 pub fn (re RegexMatcher) capture_count() usize {
-	_ = re
-	return 0
+	return usize(re.regex.total_groups + 1)
 }
 
 pub fn (re RegexMatcher) capture_index(name string) ?usize {
@@ -441,6 +473,20 @@ pub fn (re RegexMatcher) line_terminator() ?matcher.LineTerminator {
 }
 
 pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+	if literal := re.byte_literal {
+		found := find_byte_literal_at(haystack, literal, 0)!
+		if found.has_value {
+			return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(found.value.end()))
+		}
+		return matcher.FallibleLineMatchKind.absent()
+	}
+	if literal := re.unicode_case_literal {
+		found := find_unicode_case_literal_at(haystack, literal, 0)!
+		if found.has_value {
+			return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(found.value.end()))
+		}
+		return matcher.FallibleLineMatchKind.absent()
+	}
 	if fast := re.fast_line_regex {
 		text := haystack.bytestr()
 		if mat := fast.find(text) {
@@ -499,4 +545,98 @@ fn is_word_match(haystack []u8, mat matcher.Match) bool {
 fn is_word_byte(byte u8) bool {
 	return (byte >= `A` && byte <= `Z`) || (byte >= `a` && byte <= `z`)
 		|| (byte >= `0` && byte <= `9`) || byte == `_`
+}
+
+fn byte_literal_from_patterns(patterns []string) ?[]u8 {
+	if patterns.len != 1 {
+		return none
+	}
+	return byte_literal_from_pattern(patterns[0].clone())
+}
+
+fn unicode_case_literal_from_patterns(patterns []string, config Config) ?string {
+	if !config.unicode || !config.case_insensitive || patterns.len != 1 {
+		return none
+	}
+	pattern := patterns[0]
+	if !pattern_has_non_ascii(pattern) {
+		return none
+	}
+	for ch in pattern {
+		if is_regex_meta_character(ch) {
+			return none
+		}
+	}
+	return pattern.to_owned()
+}
+
+fn pattern_has_non_ascii(pattern string) bool {
+	for b in pattern.bytes() {
+		if b >= 0x80 {
+			return true
+		}
+	}
+	return false
+}
+
+fn byte_literal_from_pattern(pattern string) ?[]u8 {
+	if !pattern.starts_with('(?-u)') {
+		return none
+	}
+	mut i := 5
+	if i >= pattern.len {
+		return none
+	}
+	mut bytes := []u8{}
+	for i < pattern.len {
+		if pattern[i] == `\\` {
+			has_byte, byte, next := parse_escape_byte(pattern, i)
+			if !has_byte {
+				return none
+			}
+			bytes << byte
+			i = next
+			continue
+		}
+		if pattern[i] in [`.`, `+`, `*`, `?`, `(`, `)`, `|`, `[`, `]`, `{`, `}`, `^`, `$`] {
+			return none
+		}
+		bytes << pattern[i]
+		i++
+	}
+	return bytes
+}
+
+fn find_byte_literal_at(haystack []u8, literal []u8, at usize) !matcher.FallibleMatch {
+	if literal.len == 0 || at > haystack.len || literal.len > haystack.len {
+		return matcher.FallibleMatch.absent()
+	}
+	mut i := int(at)
+	for i + literal.len <= haystack.len {
+		mut matched := true
+		for j in 0 .. literal.len {
+			if haystack[i + j] != literal[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return matcher.FallibleMatch.some(matcher.Match.new(usize(i), usize(i + literal.len)))
+		}
+		i++
+	}
+	return matcher.FallibleMatch.absent()
+}
+
+fn find_unicode_case_literal_at(haystack []u8, literal string, at usize) !matcher.FallibleMatch {
+	if literal.len == 0 || at > haystack.len {
+		return matcher.FallibleMatch.absent()
+	}
+	text := haystack.bytestr()
+	lower_text := text.to_lower()
+	lower_literal := literal.to_lower()
+	index := lower_text.index_after(lower_literal, int(at)) or {
+		return matcher.FallibleMatch.absent()
+	}
+	return matcher.FallibleMatch.some(matcher.Match.new(usize(index), usize(index + lower_literal.len)))
 }

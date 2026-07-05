@@ -176,6 +176,7 @@ pub fn (mut buffer Buffer) set_color(spec printer.ColorSpec) ! {
 	if !buffer.supports_color() {
 		return
 	}
+	buffer.bytes << '\x1b[0m'.bytes()
 	ansi := ansi_for_color_spec(spec)
 	if ansi.len == 0 {
 		return
@@ -294,6 +295,7 @@ pub fn (mut stream StandardStream) set_color(spec printer.ColorSpec) ! {
 	if !stream.supports_color() {
 		return
 	}
+	stream.emit('\x1b[0m'.bytes())!
 	ansi := ansi_for_color_spec(spec)
 	if ansi.len == 0 {
 		return

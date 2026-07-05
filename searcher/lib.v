@@ -1,5 +1,6 @@
 module searcher
 
+import encoding.iconv
 import encoding.utf8.validate
 import io
 import matcher
@@ -244,6 +245,8 @@ enum EncodingKind {
 	utf32le
 	utf32be
 	windows1252
+	shiftjis
+	eucjp
 }
 
 /// Create a new encoding for the specified label.
@@ -283,6 +286,12 @@ fn encoding_for_label(label string) ?(EncodingKind, string) {
 		}
 		'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100', 'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252', 'x-cp1252' {
 			return EncodingKind.windows1252, 'windows-1252'
+		}
+		'csshiftjis', 'ms932', 'ms_kanji', 'shift-jis', 'shift_jis', 'sjis', 'windows-31j', 'x-sjis' {
+			return EncodingKind.shiftjis, 'Shift_JIS'
+		}
+		'cseucpkdfmtjapanese', 'euc-jp', 'eucjp', 'x-euc-jp' {
+			return EncodingKind.eucjp, 'EUC-JP'
 		}
 		else {
 			return none
@@ -707,12 +716,12 @@ pub fn Searcher.new() Searcher {
 	}
 }
 
-pub fn (s Searcher) multi_line_with_matcher(matcher_ &matcher.Matcher) bool {
+pub fn (s Searcher) multi_line_with_matcher(matcher_ matcher.Matcher) bool {
 	if !s.multi_line() {
 		return false
 	}
 	if line_term := matcher_.line_terminator() {
-		if line_term == s.line_terminator() {
+		if line_term.equals(s.line_terminator()) {
 			return false
 		}
 	}
@@ -758,12 +767,12 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ matcher.Matcher, mut file os
 			return s.search_slice(matcher_, mmap.bytes(), write_to)
 		}
 	}
-	s.check_config(&matcher_)!
+	s.check_config(matcher_)!
 	mut needs_transcoding := false
-	if !s.multi_line_with_matcher(&matcher_) {
+	if !s.multi_line_with_matcher(matcher_) {
 		needs_transcoding = file_needs_transcoding(s.config, mut file, path, has_path)
 	}
-	if s.multi_line_with_matcher(&matcher_) {
+	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_file(mut file, path, has_path)!
 			mut search := MultiLine.new(s, matcher_ref_value(&matcher_), s.multi_line_buffer,
 				sink_ref_value(&write_to))
@@ -783,9 +792,9 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ matcher.Matcher, mut file os
 /// Execute a search over any implementation of `std::io::Read` and write
 /// the results to the given sink.
 pub fn (mut s Searcher) search_reader(matcher_ matcher.Matcher, mut read_from io.Reader, write_to Sink) ! {
-	s.check_config(&matcher_)!
+	s.check_config(matcher_)!
 
-	if s.multi_line_with_matcher(&matcher_) {
+	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_reader(mut read_from)!
 			mut search := MultiLine.new(s, matcher_ref_value(&matcher_), s.multi_line_buffer,
 				sink_ref_value(&write_to))
@@ -805,12 +814,12 @@ pub fn (mut s Searcher) search_reader(matcher_ matcher.Matcher, mut read_from io
 /// Execute a search over the given slice and write the results to the
 /// given sink.
 pub fn (mut s Searcher) search_slice(matcher_ matcher.Matcher, slice []u8, write_to Sink) ! {
-	s.check_config(&matcher_)!
+	s.check_config(matcher_)!
 
 	// We can search the slice directly, unless we need to do transcoding.
 	if s.slice_needs_transcoding(slice) {
 		transcoded := s.transcode_slice(slice)!
-		if s.multi_line_with_matcher(&matcher_) {
+		if s.multi_line_with_matcher(matcher_) {
 				mut search := MultiLine.new(s, matcher_ref_value(&matcher_), transcoded,
 					sink_ref_value(&write_to))
 			search.run()!
@@ -821,7 +830,7 @@ pub fn (mut s Searcher) search_slice(matcher_ matcher.Matcher, slice []u8, write
 		}
 		return
 	}
-	if s.multi_line_with_matcher(&matcher_) {
+	if s.multi_line_with_matcher(matcher_) {
 			mut search := MultiLine.new(s, matcher_ref_value(&matcher_), slice, sink_ref_value(&write_to))
 		search.run()!
 	} else {
@@ -833,7 +842,7 @@ pub fn (mut s Searcher) search_slice(matcher_ matcher.Matcher, slice []u8, write
 
 /// Check that the searcher's configuration and the matcher are consistent
 /// with each other.
-fn (s Searcher) check_config(matcher_ &matcher.Matcher) ! {
+fn (s Searcher) check_config(matcher_ matcher.Matcher) ! {
 	if limit := s.config.heap_limit {
 		if limit == 0 && !s.config.mmap.is_enabled() {
 			return ConfigError.search_unavailable()
@@ -842,7 +851,7 @@ fn (s Searcher) check_config(matcher_ &matcher.Matcher) ! {
 	matcher_line_term := matcher_.line_terminator() or {
 		return
 	}
-	if matcher_line_term != s.config.line_term {
+	if !matcher_line_term.equals(s.config.line_term) {
 		return ConfigError.mismatched_line_terminators(matcher_line_term, s.config.line_term)
 	}
 }
@@ -927,9 +936,20 @@ fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
 			.windows1252 {
 				return decode_windows1252(slice)
 			}
+			.shiftjis {
+				return decode_iconv(slice, 'SHIFT_JIS')
+			}
+			.eucjp {
+				return decode_iconv(slice, 'EUC-JP')
+			}
 		}
 	}
 	return slice.clone()
+}
+
+fn decode_iconv(slice []u8, label string) ![]u8 {
+	decoded := iconv.encoding_to_vstring(slice, label)!
+	return decoded.bytes()
 }
 
 fn (mut s Searcher) fill_transcoded_buffer_from_file(mut file os.File, path string, has_path bool) ! {
@@ -1043,8 +1063,7 @@ fn read_to_end(mut read_from &io.Reader, mut dst []u8) ! {
 }
 
 fn reader_ref_read(mut read_from &io.Reader, mut buf []u8) !int {
-	mut reader := *read_from
-	return reader.read(mut buf)!
+	return read_from.read(mut buf)!
 }
 
 fn decode_utf16(slice []u8, big_endian bool) []u8 {
@@ -2088,11 +2107,7 @@ fn (mut core Core[^s]) is_match[^s](line []u8) !bool {
 	// line terminator, which is non-sensical in line oriented
 	// matching.
 	line_without_term := without_terminator(line, core.config.line_term)
-	maybe_match := core.shortest_match(line_without_term)!
-	if _ := maybe_match.get() {
-		return true
-	}
-	return false
+	return core.matcher_.find_at(line_without_term, 0)!.is_some()
 }
 
 fn (mut core Core[^s]) find[^s](slice []u8) !matcher.FallibleMatch {

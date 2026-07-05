@@ -1,5 +1,6 @@
 module ignore
 
+import globset
 import os
 
 /*
@@ -449,10 +450,21 @@ fn gitignore_builder_add_line(mut builder GitignoreBuilder, from ?string, line s
 	if glob.actual.ends_with('/**') {
 		glob.actual += '/*'
 	}
-	if invalid_glob(&glob.actual, builder.allow_unclosed_class) {
-		return true, glob_error(glob.original, 'invalid glob')
+	parse_glob := glob.actual.clone()
+	mut glob_builder := globset.GlobBuilder.new(&parse_glob)
+	glob_builder.literal_separator(true)
+	glob_builder.case_insensitive(builder.case_insensitive_)
+	glob_builder.backslash_escape(true)
+	glob_builder.allow_unclosed_class(builder.allow_unclosed_class)
+	_ := glob_builder.build() or { return true, glob_error(glob.original, err.msg()) }
+	for expanded in expand_glob_alternates(glob.actual.clone()) {
+		mut expanded_glob := glob.clone()
+		expanded_glob.actual = expanded.to_owned()
+		if invalid_glob(&expanded_glob.actual, builder.allow_unclosed_class) {
+			return true, glob_error(glob.original, 'invalid glob')
+		}
+		builder.globs << expanded_glob
 	}
-	builder.globs << glob
 	return false, IgnoreError{}
 }
 

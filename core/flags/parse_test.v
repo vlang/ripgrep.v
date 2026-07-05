@@ -33,6 +33,14 @@ fn test_parse_low_raw_suggests_similar_long_flags() {
 	assert false
 }
 
+fn test_parse_low_raw_wraps_flag_parse_errors() {
+	_ := parse_low_raw(['--colors', 'match:style:']) or {
+		assert err.msg().starts_with("error parsing flag --colors: unrecognized style attribute ''")
+		return
+	}
+	assert false
+}
+
 fn test_parse_low_from_raw_special_skips_config() {
 	previous := os.getenv_opt('RIPGREP_CONFIG_PATH')
 	path := os.join_path(os.temp_dir(), 'ripgrep_v_parse_special_config')
@@ -79,4 +87,35 @@ fn test_parse_low_from_raw_no_config_skips_config_args() {
 	assert result.value.no_config
 	assert !result.value.hidden
 	assert result.value.positional == ['needle']
+}
+
+fn test_parse_from_raw_reads_file_patterns() {
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_parse_file_patterns_${os.getpid()}')
+	os.write_file(path, 'Sherlock\nHolmes')!
+	defer {
+		os.rm(path) or {}
+	}
+
+	low := parse_low_raw(['-f', path, 'sherlock'])!
+	assert low.patterns.len == 1
+	assert low.patterns[0].kind == .file
+	assert low.patterns[0].value == path
+	assert low.positional == ['sherlock']
+
+	mut step_low := low
+	mut state := State.new()!
+	step_patterns := Patterns.from_low_args(mut state, mut step_low)!
+	assert step_patterns.patterns == ['Sherlock', 'Holmes']
+	step_paths := Paths.from_low_args(mut state, step_patterns, mut step_low)!
+	assert step_paths.paths == ['sherlock']
+	_ = take_color_specs(mut state, mut step_low)!
+	_ = take_hyperlink_config(mut state, mut step_low)!
+	_ = types(step_low)!
+	_ = globs(state, step_low)!
+	_ = preprocessor_globs(state, step_low)!
+
+	mut high_low := low
+	hi := HiArgs.from_low_args(mut high_low)!
+	assert hi.patterns.patterns == ['Sherlock', 'Holmes']
+	assert hi.paths.paths == ['sherlock']
 }

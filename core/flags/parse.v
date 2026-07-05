@@ -119,6 +119,7 @@ fn set_log_levels(low LowArgs) {
 	// V-specific: the translated logger does not expose global level filtering
 	// yet, so `--debug` and `--trace` are parsed but do not change a global
 	// log max-level here.
+	_ = low.has_logging
 	_ = low.logging
 }
 

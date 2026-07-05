@@ -166,6 +166,7 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	if stats_value := visitor.stats {
 		mut wtr := visitor.searcher.printer().get_mut()
+		wtr.clear()
 		print_stats(mode, stats_value, started_at, mut wtr) or {}
 		visitor.bufwtr.print(wtr) or {}
 	}

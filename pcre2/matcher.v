@@ -55,6 +55,7 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 	} else {
 		pats.join('|')
 	}
+	singlepat = normalize_backend_pattern(singlepat, builder.crlf)
 	mut flags := ''
 	if builder.caseless || (builder.case_smart && !has_uppercase_literal(&singlepat)) {
 		flags += 'i'
@@ -316,16 +317,21 @@ pub fn RegexMatcher.new(pattern string) !RegexMatcher {
 }
 
 pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+	found, _ := re.capture_groups_at(haystack, at)!
+	return found
+}
+
+pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
 	if at > haystack.len {
-		return matcher.FallibleMatch.absent()
+		return matcher.FallibleMatch.absent(), []string{}
 	}
 	text := haystack.bytestr()
 	mut start := int(at)
 	for start <= text.len {
-		found := re.regex.find_from(text, start) or { return matcher.FallibleMatch.absent() }
+		found := re.regex.find_from(text, start) or { return matcher.FallibleMatch.absent(), []string{} }
 		mat := matcher.Match.new(usize(found.start), usize(found.end))
 		if re.accept_match(haystack, mat) {
-			return matcher.FallibleMatch.some(mat)
+			return matcher.FallibleMatch.some(mat), found.groups.clone()
 		}
 		next := if found.end > found.start { found.start + 1 } else { found.end + 1 }
 		if next <= start {
@@ -334,7 +340,7 @@ pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch
 			start = next
 		}
 	}
-	return matcher.FallibleMatch.absent()
+	return matcher.FallibleMatch.absent(), []string{}
 }
 
 pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
@@ -434,6 +440,35 @@ fn has_uppercase_literal(pattern &string) bool {
 		i++
 	}
 	return false
+}
+
+fn normalize_backend_pattern(pattern string, crlf bool) string {
+	if !crlf {
+		return pattern
+	}
+	bytes := pattern.bytes()
+	mut out := []u8{cap: bytes.len}
+	mut i := 0
+	mut in_class := false
+	mut escaped := false
+	for i < bytes.len {
+		ch := bytes[i]
+		if !escaped && !in_class && ch == `$` {
+			out << r'\x0D?$'.bytes()
+			i++
+			escaped = false
+			continue
+		}
+		if !escaped && ch == `[` {
+			in_class = true
+		} else if !escaped && ch == `]` {
+			in_class = false
+		}
+		out << ch
+		escaped = !escaped && ch == `\\`
+		i++
+	}
+	return out.bytestr()
 }
 
 fn pcre_escape(pattern string) string {

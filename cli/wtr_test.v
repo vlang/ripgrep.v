@@ -26,7 +26,18 @@ fn test_buffer_color_emits_ansi_when_enabled() {
 	buffer.write('x'.bytes()) or { panic(err.msg()) }
 	buffer.reset() or { panic(err.msg()) }
 
-	assert buffer.as_slice().bytestr() == '\x1b[31mx\x1b[0m'
+	assert buffer.as_slice().bytestr() == '\x1b[0m\x1b[31mx\x1b[0m'
+}
+
+fn test_buffer_empty_color_spec_resets_when_enabled() {
+	wtr := BufferWriter.stdout(.always)
+	mut buffer := wtr.buffer()
+	spec := printer.ColorSpec{}
+
+	buffer.set_color(spec) or { panic(err.msg()) }
+	buffer.write('x'.bytes()) or { panic(err.msg()) }
+
+	assert buffer.as_slice().bytestr() == '\x1b[0mx'
 }
 
 fn test_buffer_writer_prints_separator_between_non_empty_buffers() {

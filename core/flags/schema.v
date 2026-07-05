@@ -1257,8 +1257,16 @@ pub fn parse_low_raw(rawargs []string) !LowArgs {
 			args.special = if parsed.name == 'V' { .version_short } else { .version_long }
 			continue
 		}
+		mut flag_display := '--${parsed.name}'
+		if short_name := occ.id.name_short() {
+			if parsed.name.len == 1 && parsed.name[0] == short_name {
+				flag_display = '-${parsed.name}'
+			}
+		}
 		for _ in 0 .. occ.repeats {
-			occ.id.update(occ.value, mut args)!
+			occ.id.update(occ.value, mut args) or {
+				return error('error parsing flag ${flag_display}: ${err.msg()}')
+			}
 		}
 	}
 	mut stop_index := -1

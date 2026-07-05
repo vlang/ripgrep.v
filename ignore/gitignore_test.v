@@ -103,6 +103,13 @@ fn test_ig20() {
 	assert_ignored(root, 'a/**/b', 'a/x/y/b', false)
 }
 
+fn test_ig_brace_alternates() {
+	assert_ignored(root, '*.{js,json,py}', 'src/main.py', false)
+	assert_not_ignored(root, '*.{js,json,py}', 'src/main.rs', false)
+	assert_ignored(root, '{.git,node_modules,plugged}/**', 'node_modules/pkg/index.js',
+		false)
+}
+
 fn test_ig21() {
 	assert_ignored(root, '\\!xy', '!xy', false)
 }

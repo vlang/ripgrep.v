@@ -432,18 +432,22 @@ fn types_glob_matches(glob string, name string) bool {
 
 // V-specific helper to expand glob alternations because the port does not use
 // `globset::GlobBuilder`.
+fn expand_glob_alternates(glob string) []string {
+	return expand_file_type_glob_rec(glob)
+}
+
 fn expand_file_type_glob(glob string) []string {
-	mut expanded := expand_file_type_glob_rec(glob)
+	mut expanded := expand_glob_alternates(glob)
 	expanded.sort(a < b)
 	return expanded
 }
 
 fn expand_file_type_glob_rec(glob string) []string {
-	open := find_glob_brace_open(glob)
+	open := find_glob_brace_open(glob.clone())
 	if open < 0 {
 		return [glob.to_owned()]
 	}
-	close := find_glob_brace_close(glob, open)
+	close := find_glob_brace_close(glob.clone(), open)
 	if close < 0 {
 		return [glob.to_owned()]
 	}

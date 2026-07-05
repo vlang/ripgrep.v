@@ -16,6 +16,28 @@ fn test_word() {
 	assert !matcher.is_match(boundary_matcher, 'abc -2 foo'.bytes())!
 }
 
+// Test that enabling CRLF permits `$` to match at the end of a line.
+fn test_line_terminator_crlf() {
+	// Test normal use of `$` with a `\n` line terminator.
+	mut lf_builder := RegexMatcherBuilder.new()
+	lf_builder.multi_line(true)
+	lf_matcher := lf_builder.build(r'abc$') or { panic(err) }
+	assert matcher.is_match(lf_matcher, 'abc\n'.bytes())!
+
+	// Test that `$` doesn't match at `\r\n` boundary normally.
+	mut crlf_off_builder := RegexMatcherBuilder.new()
+	crlf_off_builder.multi_line(true)
+	crlf_off_matcher := crlf_off_builder.build(r'abc$') or { panic(err) }
+	assert !matcher.is_match(crlf_off_matcher, 'abc\r\n'.bytes())!
+
+	// Now check the CRLF handling.
+	mut crlf_builder := RegexMatcherBuilder.new()
+	crlf_builder.multi_line(true)
+	crlf_builder.crlf(true)
+	crlf_matcher := crlf_builder.build(r'abc$') or { panic(err) }
+	assert matcher.is_match(crlf_matcher, 'abc\r\n'.bytes())!
+}
+
 // Test that smart case works.
 fn test_case_smart() {
 	mut builder := RegexMatcherBuilder.new()

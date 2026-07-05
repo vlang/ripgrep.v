@@ -226,11 +226,60 @@ fn (ex Extractor) extract_alternation(hirs []Hir) TSeq {
 }
 
 fn (ex Extractor) extract_pattern(pattern string) TSeq {
-	mut parser := PatternLiteralParser.new(pattern)
+	mut parser := PatternLiteralParser.new(pattern, ex)
 	return TSeq{
 		seq:    parser.parse()
 		prefix: true
 	}
+}
+
+fn (ex Extractor) extract_repetition_from_seq(seq TSeq, quant Quantifier) TSeq {
+	mut subseq := seq.clone()
+	if quant.min == 0 && quant.has_max && quant.max == 0 {
+		return TSeq.singleton(Literal.exact([]u8{}))
+	}
+	if quant.min == 0 {
+		if !(quant.has_max && quant.max == 1) {
+			subseq.make_inexact()
+		}
+		mut empty := TSeq.singleton(Literal.exact([]u8{}))
+		if !quant.greedy {
+			tmp := subseq
+			subseq = empty
+			empty = tmp
+		}
+		return ex.union(subseq, mut empty)
+	}
+	if quant.has_max && quant.min == quant.max {
+		limit := u64(ex.limit_repeat)
+		mut out := TSeq.singleton(Literal.exact([]u8{}))
+		stop := if quant.min < limit { quant.min } else { limit }
+		for _ in u64(0) .. stop {
+			if out.is_inexact() {
+				break
+			}
+			out = ex.cross(out, subseq.clone())
+		}
+		if quant.min > limit {
+			out.make_inexact()
+		}
+		return out
+	}
+	if quant.has_max && quant.min < quant.max {
+		limit := u64(ex.limit_repeat)
+		mut out := TSeq.singleton(Literal.exact([]u8{}))
+		stop := if quant.min < limit { quant.min } else { limit }
+		for _ in u64(0) .. stop {
+			if out.is_inexact() {
+				break
+			}
+			out = ex.cross(out, subseq.clone())
+		}
+		out.make_inexact()
+		return out
+	}
+	subseq.make_inexact()
+	return subseq
 }
 
 /// Compute the cross product of the two sequences if the result would be
@@ -302,6 +351,13 @@ fn TSeq.singleton(lit Literal) TSeq {
 	return TSeq{
 		seq:    Seq.singleton(lit)
 		prefix: true
+	}
+}
+
+fn (seq TSeq) clone() TSeq {
+	return TSeq{
+		seq:    seq.seq.clone()
+		prefix: seq.prefix
 	}
 }
 
@@ -434,10 +490,10 @@ fn (seq TSeq) choose(other TSeq) TSeq {
 	}
 	len1 := seq1.len() or { return seq2 }
 	len2 := seq2.len() or { return seq1 }
-	if len1 > len2 {
+	if len1 < len2 {
 		return seq2
 	}
-	if len2 > len1 {
+	if len2 < len1 {
 		return seq1
 	}
 	return seq1
@@ -540,12 +596,28 @@ fn (mut seq Seq) make_infinite() {
 }
 
 fn (mut seq Seq) cross_forward(mut other Seq) {
-	if seq.infinite || other.infinite {
+	if other.infinite {
+		if min := seq.min_literal_len() {
+			if min == 0 {
+				seq.make_infinite()
+			} else {
+				seq.make_inexact()
+			}
+		} else {
+			seq.make_inexact()
+		}
+		return
+	}
+	if seq.infinite {
 		seq.make_infinite()
 		return
 	}
 	mut crossed := []Literal{cap: seq.lits.len * other.lits.len}
 	for left in seq.lits {
+		if !left.exact {
+			crossed << left.clone()
+			continue
+		}
 		for right in other.lits {
 			mut bytes := []u8{cap: left.bytes.len + right.bytes.len}
 			bytes << left.bytes
@@ -636,6 +708,18 @@ fn (seq Seq) is_inexact() bool {
 	return true
 }
 
+fn (seq Seq) is_exact() bool {
+	if seq.infinite {
+		return false
+	}
+	for lit in seq.lits {
+		if !lit.exact {
+			return false
+		}
+	}
+	return true
+}
+
 fn (seq Seq) max_union_len(other Seq) ?usize {
 	if seq.infinite || other.infinite {
 		return none
@@ -664,14 +748,53 @@ fn (seq Seq) min_literal_len() ?usize {
 }
 
 fn (mut seq Seq) optimize_for_prefix_by_preference() {
-	if seq.infinite || seq.lits.len <= 1 {
+	if seq.infinite {
+		return
+	}
+	if min := seq.min_literal_len() {
+		if min == 0 {
+			seq.make_infinite()
+			return
+		}
+	}
+	origlen := seq.lits.len
+	if origlen <= 1 {
 		return
 	}
 	seq.dedup()
+	seq.minimize_by_preference_prefix()
 	prefix := common_literal_prefix(seq.lits)
-	if prefix.len >= 2 {
-		seq.lits = [Literal.inexact(prefix)]
+	if prefix.len > 0 {
+		isfast := seq.is_exact() && seq.lits.len <= 16
+		usefix := prefix.len > 4 || (prefix.len > 1 && !isfast)
+		if usefix {
+			seq.keep_first_bytes(usize(prefix.len))
+			seq.dedup()
+		}
 	}
+}
+
+fn (mut seq Seq) minimize_by_preference_prefix() {
+	if seq.infinite || seq.lits.len <= 1 {
+		return
+	}
+	mut minimized := []Literal{cap: seq.lits.len}
+	for lit in seq.lits {
+		mut skip := false
+		for i in 0 .. minimized.len {
+			if literal_has_prefix(lit, minimized[i]) {
+				if literal_bytes_equal(lit, minimized[i]) && !lit.exact {
+					minimized[i].exact = false
+				}
+				skip = true
+				break
+			}
+		}
+		if !skip {
+			minimized << lit.clone()
+		}
+	}
+	seq.lits = minimized
 }
 
 fn clone_literals(lits []Literal) []Literal {
@@ -688,6 +811,18 @@ fn literal_bytes_equal(left Literal, right Literal) bool {
 	}
 	for i in 0 .. left.bytes.len {
 		if left.bytes[i] != right.bytes[i] {
+			return false
+		}
+	}
+	return true
+}
+
+fn literal_has_prefix(lit Literal, prefix Literal) bool {
+	if prefix.bytes.len > lit.bytes.len {
+		return false
+	}
+	for i in 0 .. prefix.bytes.len {
+		if lit.bytes[i] != prefix.bytes[i] {
 			return false
 		}
 	}
@@ -728,7 +863,8 @@ fn is_poisonous(lit Literal) bool {
 	if lit.bytes.len != 1 {
 		return false
 	}
-	return lit.bytes[0] in [` `, `\t`, `\n`, `\r`]
+	byte := lit.bytes[0]
+	return byte == ` ` || byte == `e` || byte == `t` || byte >= 0xc0
 }
 
 enum PatternTokenKind {
@@ -742,6 +878,7 @@ struct PatternToken {
 	kind PatternTokenKind
 	bytes []u8
 	seq   Seq
+	prefix bool
 }
 
 fn PatternToken.literal(bytes []u8) PatternToken {
@@ -753,8 +890,17 @@ fn PatternToken.literal(bytes []u8) PatternToken {
 
 fn PatternToken.candidate(seq Seq) PatternToken {
 	return PatternToken{
-		kind: .candidate
-		seq:  seq.clone()
+		kind:   .candidate
+		seq:    seq.clone()
+		prefix: true
+	}
+}
+
+fn PatternToken.candidate_tseq(seq TSeq) PatternToken {
+	return PatternToken{
+		kind:   .candidate
+		seq:    seq.seq.clone()
+		prefix: seq.prefix
 	}
 }
 
@@ -770,15 +916,212 @@ fn PatternToken.breaker() PatternToken {
 	}
 }
 
-struct PatternLiteralParser {
-	pattern string
-mut:
-	pos int
+fn (token PatternToken) to_tseq() TSeq {
+	return match token.kind {
+		.literal {
+			TSeq.singleton(Literal.exact(token.bytes))
+		}
+			.candidate {
+				TSeq{
+					seq:    token.seq.clone()
+					prefix: token.prefix
+				}
+			}
+		.zero_width {
+			TSeq.singleton(Literal.exact([]u8{}))
+		}
+		.breaker {
+			TSeq.infinite()
+		}
+	}
 }
 
-fn PatternLiteralParser.new(pattern string) PatternLiteralParser {
+struct Quantifier {
+	min     u64
+	has_max bool
+	max     u64
+	greedy  bool
+	end     int
+}
+
+fn parse_quantifier(pattern string, start int) ?Quantifier {
+	if start >= pattern.len {
+		return none
+	}
+	match pattern[start] {
+		`*` {
+			mut end := start + 1
+			mut greedy := true
+			if end < pattern.len && pattern[end] == `?` {
+				greedy = false
+				end++
+			}
+			return Quantifier{
+				min:     u64(0)
+				has_max: false
+				max:     u64(0)
+				greedy:  greedy
+				end:     end
+			}
+		}
+		`+` {
+			mut end := start + 1
+			mut greedy := true
+			if end < pattern.len && pattern[end] == `?` {
+				greedy = false
+				end++
+			}
+			return Quantifier{
+				min:     u64(1)
+				has_max: false
+				max:     u64(0)
+				greedy:  greedy
+				end:     end
+			}
+		}
+		`?` {
+			mut end := start + 1
+			mut greedy := true
+			if end < pattern.len && pattern[end] == `?` {
+				greedy = false
+				end++
+			}
+			return Quantifier{
+				min:     u64(0)
+				has_max: true
+				max:     u64(1)
+				greedy:  greedy
+				end:     end
+			}
+		}
+		`{` {
+			mut i := start + 1
+			min_start := i
+			for i < pattern.len && pattern[i] >= `0` && pattern[i] <= `9` {
+				i++
+			}
+			if i == min_start {
+				return none
+			}
+			min := parse_decimal_u64(pattern[min_start..i]) or { return none }
+			mut has_max := true
+			mut max := min
+			if i < pattern.len && pattern[i] == `,` {
+				i++
+				max_start := i
+				for i < pattern.len && pattern[i] >= `0` && pattern[i] <= `9` {
+					i++
+				}
+				if i == max_start {
+					has_max = false
+					max = u64(0)
+				} else {
+					max = parse_decimal_u64(pattern[max_start..i]) or { return none }
+				}
+			}
+			if i >= pattern.len || pattern[i] != `}` {
+				return none
+			}
+			i++
+			mut greedy := true
+			if i < pattern.len && pattern[i] == `?` {
+				greedy = false
+				i++
+			}
+			return Quantifier{
+				min:     min
+				has_max: has_max
+				max:     max
+				greedy:  greedy
+				end:     i
+			}
+		}
+		else {
+			return none
+		}
+	}
+}
+
+fn parse_decimal_u64(s string) ?u64 {
+	if s.len == 0 {
+		return none
+	}
+	mut n := u64(0)
+	for b in s.bytes() {
+		if b < `0` || b > `9` {
+			return none
+		}
+		n = (n * u64(10)) + u64(b - `0`)
+	}
+	return n
+}
+
+fn next_utf8_text(text string, pos int) (string, int) {
+	if pos >= text.len {
+		return '', pos
+	}
+	first := text[pos]
+	mut len := 1
+	if first & 0xe0 == 0xc0 {
+		len = 2
+	} else if first & 0xf0 == 0xe0 {
+		len = 3
+	} else if first & 0xf8 == 0xf0 {
+		len = 4
+	}
+	next := min_int(pos + len, text.len)
+	return text[pos..next], next
+}
+
+fn case_fold_seq(text string, unicode bool) Seq {
+	if unicode {
+		match text {
+			'S', 's', 'ſ' {
+				return exact_case_variants(['S', 's', 'ſ'])
+			}
+			'Ε', 'ε', 'ϵ' {
+				return exact_case_variants(['Ε', 'ε', 'ϵ'])
+			}
+			else {}
+		}
+	}
+	mut variants := []string{}
+	add_case_variant(mut variants, text.to_upper())
+	add_case_variant(mut variants, text.to_lower())
+	return exact_case_variants(variants)
+}
+
+fn exact_case_variants(variants []string) Seq {
+	mut lits := []Literal{cap: variants.len}
+	for variant in variants {
+		lits << Literal.exact(variant.bytes())
+	}
+	return Seq.new(lits)
+}
+
+fn add_case_variant(mut variants []string, variant string) {
+	for existing in variants {
+		if existing == variant {
+			return
+		}
+	}
+	variants << variant
+}
+
+struct PatternLiteralParser {
+	pattern string
+	ex      Extractor
+mut:
+	pos              int
+	case_insensitive bool
+	unicode          bool
+}
+
+fn PatternLiteralParser.new(pattern string, ex Extractor) PatternLiteralParser {
 	return PatternLiteralParser{
 		pattern: pattern.to_owned()
+		ex:      ex
+		unicode:  true
 	}
 }
 
@@ -787,11 +1130,11 @@ fn (mut p PatternLiteralParser) parse() Seq {
 	if p.pos != p.pattern.len {
 		return Seq.infinite()
 	}
-	return seq
+	return seq.seq
 }
 
-fn (mut p PatternLiteralParser) parse_expr(end u8) Seq {
-	mut branches := []Seq{}
+fn (mut p PatternLiteralParser) parse_expr(end u8) TSeq {
+	mut branches := []TSeq{}
 	for {
 		branches << p.parse_branch(end)
 		if p.pos < p.pattern.len && p.pattern[p.pos] == `|` {
@@ -801,22 +1144,22 @@ fn (mut p PatternLiteralParser) parse_expr(end u8) Seq {
 		break
 	}
 	if branches.len == 0 {
-		return Seq.infinite()
+		return TSeq.infinite()
 	}
-	mut seq := Seq.empty()
+	mut seq := TSeq.empty()
 	for branch in branches {
 		if !branch.is_finite() {
-			return Seq.infinite()
+			return TSeq.infinite()
 		}
 		mut other := branch.clone()
-		seq.union(mut other)
+		seq = p.ex.union(seq, mut other)
 	}
 	return seq
 }
 
-fn (mut p PatternLiteralParser) parse_branch(end u8) Seq {
-	mut candidates := []Seq{}
-	mut run := []u8{}
+fn (mut p PatternLiteralParser) parse_branch(end u8) TSeq {
+	mut seq := TSeq.singleton(Literal.exact([]u8{}))
+	mut prev := ?TSeq(none)
 	for p.pos < p.pattern.len {
 		if end != 0 && p.pattern[p.pos] == end {
 			break
@@ -824,44 +1167,89 @@ fn (mut p PatternLiteralParser) parse_branch(end u8) Seq {
 		if p.pattern[p.pos] == `|` {
 			break
 		}
+		if seq.is_inexact() || p.should_cut_poisonous_case_fold(seq) {
+			if seq.is_empty() {
+				p.skip_branch_remainder(end)
+				return seq
+			}
+			if seq.is_really_good() {
+				p.skip_branch_remainder(end)
+				return seq
+			}
+			if pseq := prev {
+				prev = ?TSeq(pseq.choose(seq))
+			} else {
+				prev = ?TSeq(seq)
+			}
+			seq = TSeq.singleton(Literal.exact([]u8{}))
+			seq.make_not_prefix()
+		}
 		token := p.parse_token()
-		qend := quantifier_end(p.pattern, p.pos)
-		quantified := qend > p.pos
-		if quantified {
-			p.flush_run(mut candidates, mut run)
-			p.pos = qend
-			continue
+		mut atom := token.to_tseq()
+		for {
+			if q := parse_quantifier(p.pattern, p.pos) {
+				p.pos = q.end
+				atom = p.ex.extract_repetition_from_seq(atom, q)
+				continue
+			}
+			break
 		}
-		match token.kind {
-			.literal {
-				run << token.bytes
-			}
-			.candidate {
-				if lit := single_exact_literal(token.seq) {
-					run << lit.bytes
-				} else {
-					p.flush_run(mut candidates, mut run)
-					if token.seq.is_finite() && !token.seq.is_empty() {
-						candidates << token.seq.clone()
-					}
-				}
-			}
-			.zero_width {}
-			.breaker {
-				p.flush_run(mut candidates, mut run)
-			}
-		}
+		seq = p.ex.cross(seq, atom)
 	}
-	p.flush_run(mut candidates, mut run)
-	return choose_best_seq(candidates)
+	if pseq := prev {
+		return pseq.choose(seq)
+	}
+	return seq
 }
 
-fn (mut p PatternLiteralParser) flush_run(mut candidates []Seq, mut run []u8) {
-	if run.len == 0 {
-		return
+fn (p PatternLiteralParser) should_cut_poisonous_case_fold(seq TSeq) bool {
+	if !p.case_insensitive || seq.is_inexact() {
+		return false
 	}
-	candidates << Seq.singleton(Literal.exact(run))
-	run = []u8{}
+	len := seq.len() or { return false }
+	return len > 1 && seq.has_poisonous_literal()
+}
+
+fn (mut p PatternLiteralParser) skip_branch_remainder(end u8) {
+	mut depth := 0
+	for p.pos < p.pattern.len {
+		ch := p.pattern[p.pos]
+		if ch == `\\` {
+			p.pos = escape_tail_end(p.pattern, p.pos)
+			continue
+		}
+		if ch == `[` {
+			_, ok, next := parse_class_set(p.pattern, p.pos + 1)
+			if ok {
+				p.pos = next
+				continue
+			}
+			p.pos++
+			continue
+		}
+		if ch == `(` {
+			depth++
+			p.pos++
+			continue
+		}
+		if ch == `)` {
+			if depth == 0 && end == `)` {
+				return
+			}
+			if depth > 0 {
+				depth--
+			}
+			p.pos++
+			continue
+		}
+		if ch == `|` && depth == 0 {
+			return
+		}
+		if end != 0 && ch == end && depth == 0 {
+			return
+		}
+		p.pos++
+	}
 }
 
 fn (mut p PatternLiteralParser) parse_token() PatternToken {
@@ -896,8 +1284,12 @@ fn (mut p PatternLiteralParser) parse_token() PatternToken {
 				p.pos++
 				return PatternToken.breaker()
 			}
-			p.pos++
-			return PatternToken.literal([ch])
+			text, next := next_utf8_text(p.pattern, p.pos)
+			p.pos = next
+			if p.case_insensitive {
+				return PatternToken.candidate(case_fold_seq(text, p.unicode))
+			}
+			return PatternToken.literal(text.bytes())
 		}
 	}
 }
@@ -922,6 +1314,9 @@ fn (mut p PatternLiteralParser) parse_escape() PatternToken {
 			has_byte, byte, next_i := parse_escape_byte(p.pattern, start)
 			p.pos = next_i
 			if has_byte {
+				if p.case_insensitive {
+					return PatternToken.candidate(case_fold_seq([byte].bytestr(), p.unicode))
+				}
 				return PatternToken.literal([byte])
 			}
 			return PatternToken.breaker()
@@ -930,10 +1325,42 @@ fn (mut p PatternLiteralParser) parse_escape() PatternToken {
 }
 
 fn (mut p PatternLiteralParser) parse_class() PatternToken {
-	_, ok, next := parse_class_set(p.pattern, p.pos + 1)
-	if ok {
-		p.pos = next
+	start := p.pos
+	end := class_end(p.pattern, start)
+	if end < 0 {
+		p.pos++
 		return PatternToken.breaker()
+	}
+	body := p.pattern[start + 1..end]
+	if body.contains('&&') {
+		p.pos = end + 1
+		return PatternToken.candidate(Seq.empty())
+	}
+	class_set, ok, next := parse_class_set(p.pattern, p.pos + 1)
+	if ok && class_is_ascii(body) {
+		p.pos = next
+		mut variants := []string{}
+		for i, present in class_set {
+			if present {
+				if variants.len > int(p.ex.limit_class) {
+					return PatternToken.breaker()
+				}
+				text := [u8(i)].bytestr()
+				if p.case_insensitive {
+					add_seq_strings(mut variants, case_fold_seq(text, p.unicode))
+				} else {
+					add_case_variant(mut variants, text)
+				}
+			}
+		}
+		if variants.len > int(p.ex.limit_class) {
+			return PatternToken.breaker()
+		}
+		return PatternToken.candidate(exact_sorted_seq(variants))
+	}
+	if seq := p.parse_simple_unicode_class(body) {
+		p.pos = end + 1
+		return PatternToken.candidate(seq)
 	}
 	p.pos++
 	for p.pos < p.pattern.len {
@@ -948,6 +1375,71 @@ fn (mut p PatternLiteralParser) parse_class() PatternToken {
 		p.pos++
 	}
 	return PatternToken.breaker()
+}
+
+fn class_end(pattern string, start int) int {
+	mut i := start + 1
+	for i < pattern.len {
+		if pattern[i] == `\\` {
+			i = escape_tail_end(pattern, i)
+			continue
+		}
+		if pattern[i] == `]` {
+			return i
+		}
+		i++
+	}
+	return -1
+}
+
+fn class_is_ascii(body string) bool {
+	for b in body.bytes() {
+		if b >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
+fn (mut p PatternLiteralParser) parse_simple_unicode_class(body string) ?Seq {
+	if body.len == 0 {
+		return Seq.empty()
+	}
+	mut variants := []string{}
+	mut pos := 0
+	for pos < body.len {
+		if body[pos] in [`^`, `[`, `]`, `-`, `&`, `~`, `\\`] {
+			return none
+		}
+		text, next := next_utf8_text(body, pos)
+		pos = next
+		if p.case_insensitive {
+			add_seq_strings(mut variants, case_fold_seq(text, p.unicode))
+		} else {
+			add_case_variant(mut variants, text)
+		}
+		if variants.len > int(p.ex.limit_class) {
+			return none
+		}
+	}
+	return exact_sorted_seq(variants)
+}
+
+fn add_seq_strings(mut variants []string, seq Seq) {
+	lits := seq.literals() or { return }
+	for lit in lits {
+		add_case_variant(mut variants, lit.bytes.bytestr())
+	}
+}
+
+fn exact_sorted_seq(variants []string) Seq {
+	mut sorted := variants.clone()
+	sorted.sort()
+	mut lits := []Literal{cap: sorted.len}
+	for variant in sorted {
+		lits << Literal.exact(variant.bytes())
+	}
+	return Seq.new(lits)
 }
 
 fn (mut p PatternLiteralParser) parse_group() PatternToken {
@@ -991,10 +1483,19 @@ fn (mut p PatternLiteralParser) parse_group() PatternToken {
 			scan++
 		}
 		if scan < p.pattern.len && p.pattern[scan] == `:` {
+			flags := p.pattern[p.pos..scan]
 			p.pos = scan + 1
-			return p.parse_group_body()
+			old_case_insensitive := p.case_insensitive
+			old_unicode := p.unicode
+			p.apply_flags(flags)
+			token := p.parse_group_body()
+			p.case_insensitive = old_case_insensitive
+			p.unicode = old_unicode
+			return token
 		}
 		if scan < p.pattern.len && p.pattern[scan] == `)` {
+			flags := p.pattern[p.pos..scan]
+			p.apply_flags(flags)
 			p.pos = scan + 1
 			return PatternToken.zero_width()
 		}
@@ -1005,13 +1506,32 @@ fn (mut p PatternLiteralParser) parse_group() PatternToken {
 	return p.parse_group_body()
 }
 
+fn (mut p PatternLiteralParser) apply_flags(flags string) {
+	mut negated := false
+	for flag in flags.bytes() {
+		if flag == `-` {
+			negated = true
+			continue
+		}
+		match flag {
+			`i` {
+				p.case_insensitive = !negated
+			}
+			`u` {
+				p.unicode = !negated
+			}
+			else {}
+		}
+	}
+}
+
 fn (mut p PatternLiteralParser) parse_group_body() PatternToken {
 	seq := p.parse_expr(`)`)
 	if p.pos >= p.pattern.len || p.pattern[p.pos] != `)` {
 		return PatternToken.breaker()
 	}
 	p.pos++
-	return PatternToken.candidate(seq)
+	return PatternToken.candidate_tseq(seq)
 }
 
 fn (mut p PatternLiteralParser) skip_balanced_group() {

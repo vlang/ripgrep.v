@@ -3,6 +3,7 @@ module cli
 import io
 import os
 import strings
+import time
 
 enum CommandErrorKind {
 	io
@@ -122,6 +123,26 @@ pub fn (builder CommandReaderBuilder) clone() CommandReaderBuilder {
 /// returned.
 pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 	_ = builder
+	$if !windows {
+		stdout_path := process_temp_path('stdout')
+		stderr_path := process_temp_path('stderr')
+		mut words := []string{cap: command.args.len + 1}
+		words << shell_quote(command.program)
+		for arg in command.args {
+			words << shell_quote(arg)
+		}
+		line := '${words.join(' ')} > ${shell_quote(stdout_path)} 2> ${shell_quote(stderr_path)}'
+		result := os.execute(line)
+		stdout := os.read_bytes(stdout_path) or { []u8{} }
+		stderr := os.read_bytes(stderr_path) or { []u8{} }
+		os.rm(stdout_path) or {}
+		os.rm(stderr_path) or {}
+		return CommandReader{
+			stdout:    stdout
+			stderr:    stderr
+			exit_code: result.exit_code
+		}
+	}
 	mut process := os.new_process(command.program)
 	process.set_args(command.args)
 	process.set_redirect_stdio()
@@ -129,9 +150,9 @@ pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 	if process.err.len > 0 {
 		return CommandError.io(error(process.err))
 	}
+	process.wait()
 	stdout := process.stdout_slurp().bytes()
 	stderr := process.stderr_slurp().bytes()
-	process.wait()
 	code := process.code
 	process.close()
 	return CommandReader{
@@ -139,6 +160,23 @@ pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 		stderr:    stderr
 		exit_code: code
 	}
+}
+
+fn process_temp_path(label string) string {
+	return os.join_path(os.temp_dir(), 'ripgrep_v_process_${label}_${os.getpid()}_${time.now().unix_nano()}')
+}
+
+fn shell_quote(s string) string {
+	mut quoted := "'"
+	for b in s.bytes() {
+		if b == u8(`'`) {
+			quoted += "'\\''"
+		} else {
+			quoted += [b].bytestr()
+		}
+	}
+	quoted += "'"
+	return quoted
 }
 
 /// When enabled, the reader will asynchronously read the contents of the

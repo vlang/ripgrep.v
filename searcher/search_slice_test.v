@@ -32,12 +32,20 @@ fn (mut rdr ByteSliceReaderForSearch) read(mut buf []u8) !int {
 }
 
 struct LiteralMatcher {
-	needle []u8
+	needle    []u8
+	line_term ?matcher.LineTerminator
 }
 
 fn LiteralMatcher.new(needle string) LiteralMatcher {
 	return LiteralMatcher{
 		needle: needle.bytes()
+	}
+}
+
+fn (m LiteralMatcher) with_line_term(line_term ?matcher.LineTerminator) LiteralMatcher {
+	return LiteralMatcher{
+		needle:    m.needle.clone()
+		line_term: line_term
 	}
 }
 
@@ -95,8 +103,7 @@ fn (m &^a LiteralMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 }
 
 fn (m LiteralMatcher) line_terminator() ?matcher.LineTerminator {
-	_ = m
-	return none
+	return m.line_term
 }
 
 fn (m LiteralMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
@@ -154,6 +161,46 @@ fn (mut sink CollectSink) finish(searcher_ Searcher, finish SinkFinish) ! {
 	sink.finished = true
 	sink.byte_count = finish.byte_count()
 	sink.binary_offset = finish.binary_byte_offset()
+}
+
+fn test_searcher_mod_config_error_heap_limit() {
+	mut builder := SearcherBuilder.new()
+	builder.heap_limit(usize(0))
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_slice(LiteralMatcher.new(''), []u8{}, &sink) or {
+		assert true
+		return
+	}
+	assert false
+}
+
+fn test_searcher_mod_config_error_line_terminator() {
+	matcher_ := LiteralMatcher.new('').with_line_term(matcher.LineTerminator.byte(`z`))
+
+	mut sink := CollectSink{}
+	mut searcher_ := Searcher.new()
+	searcher_.search_slice(matcher_, []u8{}, &sink) or {
+		assert true
+		return
+	}
+	assert false
+}
+
+fn test_searcher_mod_uft8_bom_sniffing() {
+	// See: https://github.com/BurntSushi/ripgrep/issues/1638
+	// ripgrep must sniff utf-8 BOM, just like it does with utf-16
+	haystack := [u8(0xef), 0xbb, 0xbf, 0x66, 0x6f, 0x6f]
+	mut sink := CollectSink{}
+	mut searcher_ := SearcherBuilder.new().build()
+
+	searcher_.search_slice(LiteralMatcher.new('foo'), haystack, &sink)!
+
+	assert sink.matches == [
+		'1:0:foo',
+	]
+	assert sink.finished
+	assert sink.byte_count == 3
 }
 
 fn test_search_slice_reports_line_matches() {

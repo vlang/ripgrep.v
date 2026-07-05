@@ -57,6 +57,14 @@ fn test_override_gitignore_semantics() {
 	assert ov.matched('baz/a/b', false).is_whitelist()
 }
 
+fn test_override_brace_alternates() {
+	ov := override_from_globs(['!{.git,node_modules,plugged}/**', '*.{js,json,py}'])
+	assert ov.matched('.git/config', false).is_ignore()
+	assert ov.matched('node_modules/pkg/index.rs', false).is_ignore()
+	assert ov.matched('src/main.py', false).is_whitelist()
+	assert ov.matched('src/main.rs', false).is_ignore()
+}
+
 fn test_override_allow_directories() {
 	ov := override_from_globs(['*.rs'])
 	assert ov.matched('foo.rs', false).is_whitelist()

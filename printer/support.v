@@ -88,6 +88,13 @@ fn (pm PrinterMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoC
 	}
 }
 
+fn (pm PrinterMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+	return match pm.kind {
+		.rust_regex { pm.regex.capture_groups_at(haystack, at)! }
+		.pcre2 { pm.pcre2.capture_groups_at(haystack, at)! }
+	}
+}
+
 fn (pm &^a PrinterMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	return match pm.kind {
 		.rust_regex { pm.regex.non_matching_bytes() }
@@ -348,22 +355,22 @@ pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ PrinterMatc
 	})!
 }
 
-// V does not have Rust's associated `M::Captures` type here, so replacements
-// use the overall match found by `find_iter_at` for `$0` interpolation.
 struct ReplacementCaptures implements IClone {
 	overall     matcher.Match
 	has_overall bool
+	groups      []string
 }
 
-fn ReplacementCaptures.overall(mat matcher.Match) ReplacementCaptures {
+fn ReplacementCaptures.new(mat matcher.Match, groups []string) ReplacementCaptures {
 	return ReplacementCaptures{
 		overall:     mat
 		has_overall: true
+		groups:      groups.clone()
 	}
 }
 
 fn (caps ReplacementCaptures) len() usize {
-	return if caps.has_overall { usize(1) } else { usize(0) }
+	return if caps.has_overall { usize(caps.groups.len + 1) } else { usize(0) }
 }
 
 fn (caps ReplacementCaptures) get(i usize) ?matcher.Match {
@@ -373,9 +380,18 @@ fn (caps ReplacementCaptures) get(i usize) ?matcher.Match {
 	return none
 }
 
-fn replacement_no_capture_index(name string) ?usize {
-	_ = name
-	return none
+fn (caps ReplacementCaptures) append(i usize, haystack []u8, mut dst []u8) {
+	if i == 0 {
+		if overall := caps.get(0) {
+			append_match_bytes(mut dst, haystack, overall)
+		}
+		return
+	}
+	group_index := i - 1
+	if group_index >= usize(caps.groups.len) {
+		return
+	}
+	append_bytes(mut dst, caps.groups[group_index].bytes())
 }
 
 fn append_bytes(mut dst []u8, bytes []u8) {
@@ -427,24 +443,46 @@ pub fn (mut replacer Replacer) replace_all(searcher_ searcher.Searcher, matcher_
 	replacer.dst.clear()
 	replacer.matches.clear()
 	mut last_match := range.start()
-	printer_find_iter_at(matcher_, haystack, range.start(), fn [haystack, replacement, range, mut last_match, mut replacer] (mat matcher.Match) bool {
+	mut search_start := range.start()
+	mut has_last_match := false
+	mut last_match_end := usize(0)
+	for {
+		if search_start > haystack.len {
+			break
+		}
+		maybe_mat, groups := matcher_.capture_groups_at(haystack, search_start)!
+		if !maybe_mat.has_value {
+			break
+		}
+		mat := maybe_mat.value
 		if mat.start() >= range.end() {
-			return false
+			break
+		}
+		next_start := if mat.start() == mat.end() {
+			next := mat.end() + 1
+			if has_last_match && mat.end() == last_match_end {
+				search_start = next
+				continue
+			}
+			next
+		} else {
+			mat.end()
 		}
 		append_bytes(mut replacer.dst, haystack[last_match..mat.start()])
 		start := replacer.dst.len
-		caps := ReplacementCaptures.overall(mat)
+		caps := ReplacementCaptures.new(mat, groups)
 		matcher.interpolate(replacement, fn [caps, haystack] (i usize, mut dst []u8) {
-			cap_match := caps.get(i) or {
-				return
-			}
-			append_match_bytes(mut dst, haystack, cap_match)
-		}, replacement_no_capture_index, mut replacer.dst)
+			caps.append(i, haystack, mut dst)
+		}, fn [matcher_] (name string) ?usize {
+			return matcher_.capture_index(name)
+		}, mut replacer.dst)
 		end := replacer.dst.len
 		replacer.matches << match_new(start, end)
 		last_match = mat.end()
-		return true
-	})!
+		search_start = next_start
+		has_last_match = true
+		last_match_end = mat.end()
+	}
 	end := if last_match > range.end() {
 		haystack.len
 	} else if range.end() < haystack.len {

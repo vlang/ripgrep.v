@@ -292,6 +292,10 @@ fn (mut fm FlagMapper) parse_registered_flags() ! {
 	start := int(fm.config.skip)
 	mut i := start
 	for i < fm.input.len {
+		if i in fm.handled_pos {
+			i++
+			continue
+		}
 		arg := fm.input[i]
 		if stop := fm.config.stop {
 			if arg == stop {

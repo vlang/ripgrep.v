@@ -267,7 +267,7 @@ pub fn (chir ConfiguredHIR) into_word() ConfiguredHIR {
 
 fn (chir ConfiguredHIR) backend_pattern() string {
 	mut flags := ''
-	pattern := chir.hir.to_regex()
+	pattern := normalize_backend_pattern(chir.hir.to_regex(), chir.config)
 	analysis := AstAnalysis.from_pattern(pattern) or { AstAnalysis.new() }
 	if chir.config.is_case_insensitive(analysis) {
 		flags += 'i'
@@ -282,6 +282,45 @@ fn (chir ConfiguredHIR) backend_pattern() string {
 		return pattern
 	}
 	return '(?${flags})${pattern}'
+}
+
+fn normalize_backend_pattern(pattern string, config Config) string {
+	mut out := []u8{cap: pattern.len}
+	mut i := 0
+	mut in_class := false
+	mut escaped := false
+	for i < pattern.len {
+		ch := pattern[i]
+		if config.crlf && !escaped && !in_class && ch == `$` {
+			out << r'\x0D?$'.bytes()
+			i++
+			continue
+		}
+		if !escaped && ch == `[` {
+			in_class = true
+		} else if !escaped && ch == `]` {
+			in_class = false
+		}
+		if !escaped && i + 7 <= pattern.len && ch == `\\` && pattern[i + 2] == `{`
+			&& pattern[i + 3..i + 6] == 'Any' && pattern[i + 6] == `}` {
+			if pattern[i + 1] == `p` {
+				out << '(?:.|\n|\r)'.bytes()
+				i += 7
+				escaped = false
+				continue
+			}
+			if pattern[i + 1] == `P` {
+				out << r'(?!)'.bytes()
+				i += 7
+				escaped = false
+				continue
+			}
+		}
+		out << ch
+		escaped = !escaped && ch == `\\`
+		i++
+	}
+	return out.bytestr()
 }
 
 /// Returns true if the given literal string contains any byte from the line

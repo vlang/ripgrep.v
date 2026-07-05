@@ -2,6 +2,8 @@ module flags
 
 // This file is mechanically translated from ripgrep's crates/core/flags/defs.rs.
 
+import encoding.utf8
+
 pub enum FlagId {
 	after_context
 	auto_hybrid_regex
@@ -2916,6 +2918,7 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.debug {
 			assert v.unwrap_switch()
 			args.logging = .debug
+			args.has_logging = true
 		}
 		.dfa_size_limit {
 			args.dfa_size_limit = parse_human_readable_usize(v.unwrap_value())!
@@ -3188,6 +3191,9 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		}
 		.regexp {
 			regexp := v.unwrap_value()
+			if !utf8.validate_str(regexp) {
+				return error('value is not valid UTF-8')
+			}
 			args.patterns << pattern_regexp(regexp)
 		}
 		.replace {
@@ -3262,6 +3268,7 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		.trace {
 			assert v.unwrap_switch()
 			args.logging = .trace
+			args.has_logging = true
 		}
 		.trim {
 			args.trim = v.unwrap_switch()

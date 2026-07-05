@@ -2,6 +2,7 @@ module flags
 
 import encoding.utf8
 import os
+import printer
 import strconv
 
 pub enum Category {
@@ -179,6 +180,7 @@ pub:
 }
 
 pub fn parse_user_color_spec(spec string) !UserColorSpec {
+	_ = printer.parse_user_color_spec(spec)!
 	return UserColorSpec{
 		spec: spec.to_owned()
 	}
@@ -394,6 +396,12 @@ fn canonical_encoding_label(label string) ?string {
 		}
 		'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100', 'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252', 'x-cp1252' {
 			return 'windows-1252'
+		}
+		'csshiftjis', 'ms932', 'ms_kanji', 'shift-jis', 'shift_jis', 'sjis', 'windows-31j', 'x-sjis' {
+			return 'Shift_JIS'
+		}
+		'cseucpkdfmtjapanese', 'euc-jp', 'eucjp', 'x-euc-jp' {
+			return 'EUC-JP'
 		}
 		else {
 			return none
@@ -660,7 +668,10 @@ pub mut:
 	include_zero                 bool
 	invert_match                 bool
 	line_number                  ?bool
-	logging                      ?LoggingMode
+	// V-specific: `?LoggingMode` is represented explicitly because the current
+	// ownership frontend misreads optional enum fields.
+	logging                      LoggingMode
+	has_logging                  bool
 	max_columns                  ?u64
 	max_columns_preview          bool
 	max_count                    ?u64
@@ -723,7 +734,8 @@ pub fn default_low_args() LowArgs {
 		hostname_bin:            none
 		hyperlink_format:        parse_hyperlink_format('none') or { HyperlinkFormat{} }
 		line_number:             none
-		logging:                 none
+		logging:                 .debug
+		has_logging:             false
 		max_columns:             none
 		max_count:               none
 		max_depth:               none
@@ -740,6 +752,9 @@ pub fn default_low_args() LowArgs {
 }
 
 pub fn parse_usize(value string) !usize {
+	if !is_decimal_number(value) {
+		return error('value is not a valid number')
+	}
 	parsed := strconv.atou64(value) or { return error('value is not a valid number') }
 	cast := usize(parsed)
 	if u64(cast) != parsed {
@@ -749,7 +764,22 @@ pub fn parse_usize(value string) !usize {
 }
 
 pub fn parse_u64(value string) !u64 {
+	if !is_decimal_number(value) {
+		return error('value is not a valid number')
+	}
 	return strconv.atou64(value) or { return error('value is not a valid number') }
+}
+
+fn is_decimal_number(value string) bool {
+	if value.len == 0 {
+		return false
+	}
+	for byte in value.bytes() {
+		if byte < `0` || byte > `9` {
+			return false
+		}
+	}
+	return true
 }
 
 pub fn parse_human_readable_u64(value string) !u64 {

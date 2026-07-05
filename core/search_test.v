@@ -1,5 +1,7 @@
 module core
 
+import cli
+import ignore
 import os
 import printer
 import regex
@@ -92,4 +94,61 @@ fn test_search_worker_search_path_standard() {
 		json_printer)
 	json_result := json_worker.search_path(path) or { panic(err) }
 	assert json_result.has_match()
+}
+
+fn test_search_worker_search_reader_command() {
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_search_worker_command_${os.getpid()}.txt')
+	os.write_file(path, 'hay\nneedle\nstack\n') or { panic(err) }
+	defer {
+		os.rm(path) or {}
+	}
+
+	matcher_ := regex.RegexMatcher.new('needle') or { panic(err) }
+	standard := printer.StandardBuilder.new().build(BufferWriter{})
+	printer_ := Printer.standard(standard)
+	builder := SearchWorkerBuilder.new()
+	mut worker := builder.build(PatternMatcher.rust_regex(matcher_), searcher.Searcher.new(), printer_)
+
+	mut direct_cmd := cli.Command.new('cat')
+	direct_cmd.arg(path)
+	mut direct_rdr := cli.CommandReader.new(direct_cmd) or { panic(err.msg()) }
+	mut direct_buf := []u8{len: 64}
+	direct_nread := direct_rdr.read(mut direct_buf) or { panic(err.msg()) }
+	if direct_buf[..direct_nread].bytestr().index('needle') == none {
+		panic('command reader direct read failed: nread=${direct_nread} data=${direct_buf[..direct_nread].bytestr()}')
+	}
+
+	mut cmd := cli.Command.new('cat')
+	cmd.arg(path)
+	mut rdr := cli.CommandReader.new(cmd) or { panic(err.msg()) }
+	result := worker.search_reader(path, mut rdr) or { panic(err.msg()) }
+
+	wtr := worker.printer().get_mut()
+	if !result.has_match() || wtr.bytes.bytestr().index('needle') == none {
+		panic('command reader search failed: has_match=${result.has_match()} output=${wtr.bytes.bytestr()}')
+	}
+}
+
+fn test_search_worker_preprocessor() {
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_search_worker_pre_${os.getpid()}.txt')
+	os.write_file(path, 'hay\nneedle\nstack\n') or { panic(err) }
+	defer {
+		os.rm(path) or {}
+	}
+
+	mut walk := ignore.WalkBuilder.new(path).build()
+	walk_result := walk.next() or { panic('expected walk result') }
+	hay := HaystackBuilder.new().build_from_result(walk_result) or { panic('expected haystack') }
+	matcher_ := regex.RegexMatcher.new('needle') or { panic(err) }
+	standard := printer.StandardBuilder.new().build(BufferWriter{})
+	printer_ := Printer.standard(standard)
+	mut builder := SearchWorkerBuilder.new()
+	builder.preprocessor('cat') or { panic(err.msg()) }
+	mut worker := builder.build(PatternMatcher.rust_regex(matcher_), searcher.Searcher.new(), printer_)
+	result := worker.search(&hay) or { panic(err.msg()) }
+
+	wtr := worker.printer().get_mut()
+	if !result.has_match() || wtr.bytes.bytestr().index('needle') == none {
+		panic('preprocessor search failed: has_match=${result.has_match()} output=${wtr.bytes.bytestr()}')
+	}
 }

@@ -212,6 +212,10 @@ pub fn (line_term LineTerminator) is_crlf() bool {
 	return line_term.kind == .crlf
 }
 
+pub fn (line_term LineTerminator) equals(other LineTerminator) bool {
+	return line_term.kind == other.kind && line_term.byte == other.byte
+}
+
 /// Returns this line terminator as a single byte.
 ///
 /// If the line terminator is CRLF, then this returns `\n`. This is

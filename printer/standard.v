@@ -862,17 +862,17 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_colored_matches[^p, ^s](bytes []u8, m
 
 fn (mut imp StandardImpl[^p, ^s, W]) write_exceeded_line[^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
 	if imp.config().max_columns_preview {
-		original := line
+		original_end := line.end()
 		limit := usize(imp.config().max_columns or { 0 })
-		end := min_usize(line.start() + limit, line.end())
-		line = line.with_end(end)
+		preview_end := min_usize(line.start() + limit, original_end)
+		line = line.with_end(preview_end)
 		imp.write_colored_matches(bytes, line, matches, mut match_index)!
 		if matches.len == 0 {
 			imp.write(' [... omitted end of long line]'.bytes())!
 		} else {
 			mut remaining := 0
 			for m in matches {
-				if m.start() >= line.end() && m.start() < original.end() {
+				if m.start() >= preview_end && m.start() < original_end {
 					remaining++
 				}
 			}
@@ -938,13 +938,36 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_binary_message[^p, ^s](offset u64) ! 
 			imp.write_path_hyperlink(mut path)!
 			imp.write(': '.bytes())!
 		}
-		imp.write('WARNING: stopped searching binary file after match (found [${byte}] byte around offset ${offset})\n'.bytes())!
+		imp.write('WARNING: stopped searching binary file after match (found ${binary_byte_debug(byte)} byte around offset ${offset})\n'.bytes())!
 	} else if byte := bin.convert_byte() {
 		if mut path := imp.path() {
 			imp.write_path_hyperlink(mut path)!
 			imp.write(': '.bytes())!
 		}
-		imp.write('binary file matches (found [${byte}] byte around offset ${offset})\n'.bytes())!
+		imp.write('binary file matches (found ${binary_byte_debug(byte)} byte around offset ${offset})\n'.bytes())!
+	}
+}
+
+fn binary_byte_debug(byte u8) string {
+	return '"${binary_byte_debug_escape(byte)}"'
+}
+
+fn binary_byte_debug_escape(byte u8) string {
+	return match byte {
+		0 { '\\0' }
+		`\n` { '\\n' }
+		`\r` { '\\r' }
+		`\t` { '\\t' }
+		`\\` { '\\\\' }
+		`"` { '\\"' }
+		else {
+			if byte < 0x20 || byte == 0x7f || byte >= 0x80 {
+				hex := '0123456789ABCDEF'
+				'\\x${hex[int(byte >> 4)].ascii_str()}${hex[int(byte & 0x0f)].ascii_str()}'
+			} else {
+				byte.ascii_str()
+			}
+		}
 	}
 }
 

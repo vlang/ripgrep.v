@@ -216,7 +216,7 @@ fn (look HirLook) to_regex() string {
 		.start_lf { r'(?m:^)' }
 		.end_lf { r'(?m:$)' }
 		.start_crlf { r'(?m:^)' }
-		.end_crlf { r'(?m:$)' }
+		.end_crlf { r'\x0D?$' }
 		.word_start_half_ascii { r'(?<![A-Za-z0-9_])' }
 		.word_end_half_ascii { r'(?![A-Za-z0-9_])' }
 		.word_start_half_unicode { r'(?<![A-Za-z0-9_])' }

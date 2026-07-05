@@ -875,6 +875,14 @@ pub fn GlobSetBuilder.new() GlobSetBuilder {
 	}
 }
 
+pub fn (builder GlobSetBuilder) str() string {
+	mut pats := []string{cap: builder.pats.len}
+	for pat in builder.pats {
+		pats << 'Glob("${pat.str()}")'
+	}
+	return 'GlobSetBuilder { pats: [${pats.join(", ")}] }'
+}
+
 /// Builds a new matcher from all of the glob patterns added so far.
 ///
 /// Once a matcher is built, no new patterns can be added to it.

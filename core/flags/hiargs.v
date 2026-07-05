@@ -168,7 +168,9 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 		}
 	}
 
-	line_number := low.line_number or {
+	line_number := if line_number_value := low.line_number {
+		line_number_value
+	} else {
 		if low.quiet {
 			false
 		} else if low.mode.kind != .search {
@@ -918,13 +920,15 @@ fn Patterns.from_low_args(mut state State, mut low LowArgs) !Patterns {
 	// big impact on real world data.
 	mut seen := map[string]bool{}
 	mut patterns := []string{cap: low.patterns.len}
-	for source in low.patterns {
-		match source.kind {
+	for i in 0 .. low.patterns.len {
+		kind := low.patterns[i].kind
+		value := low.patterns[i].value.clone()
+		match kind {
 			.regexp {
-				add_pattern(mut seen, mut patterns, source.value)
+				add_pattern(mut seen, mut patterns, value)
 			}
 			.file {
-				if source.value == '-' {
+				if value == '-' {
 					if state.stdin_consumed {
 						return error('error reading -f/--file from stdin: stdin has already been consumed')
 					}
@@ -933,7 +937,10 @@ fn Patterns.from_low_args(mut state State, mut low LowArgs) !Patterns {
 					}
 					state.stdin_consumed = true
 				} else {
-					for pat in cli.patterns_from_path(source.value)! {
+					file_patterns := cli.patterns_from_path(value) or {
+						return error('failed to read pattern file ${value}: ${err.msg()}')
+					}
+					for pat in file_patterns {
 						add_pattern(mut seen, mut patterns, pat)
 					}
 				}

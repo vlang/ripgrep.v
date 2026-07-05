@@ -92,6 +92,14 @@ fn test_hiargs_rewrites_count_modes() {
 	assert must_hiargs(mut only_matching).mode() == mode_search(.count_matches)
 }
 
+fn test_hiargs_json_enables_line_numbers() {
+	mut low := default_low_args()
+	low.mode = mode_search(.json)
+	low.patterns = [pattern_regexp('foo')]
+	low.positional = ['haystack.txt']
+	assert must_hiargs(mut low).line_number
+}
+
 fn test_hiargs_matches_possible() {
 	mut low := default_low_args()
 	low.mode = mode_files()

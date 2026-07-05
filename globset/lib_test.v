@@ -52,6 +52,14 @@ fn test_set_does_not_remember_previous_searches() {
 	assert no_matches.len == 0
 }
 
+fn test_debug() {
+	mut builder := GlobSetBuilder.new()
+	builder.add(Glob.new('*foo*') or { panic(err) })
+	builder.add(Glob.new('*bar*') or { panic(err) })
+	builder.add(Glob.new('*quux*') or { panic(err) })
+	assert builder.str() == 'GlobSetBuilder { pats: [Glob("*foo*"), Glob("*bar*"), Glob("*quux*")] }'
+}
+
 fn test_matches_into_clears_destination() {
 	mut builder := GlobSetBuilder.new()
 	builder.add(Glob.new('*foo*') or { panic(err) })
