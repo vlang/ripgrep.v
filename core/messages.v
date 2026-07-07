@@ -4,9 +4,9 @@ module core
 import sync.stdatomic
 
 __global (
-	messages_state        &stdatomic.AtomicVal[bool] = stdatomic.new_atomic(false)
-	ignore_messages_state &stdatomic.AtomicVal[bool] = stdatomic.new_atomic(false)
-	errored_state         &stdatomic.AtomicVal[bool] = stdatomic.new_atomic(false)
+	messages_state        &stdatomic.AtomicVal[bool] = unsafe { nil }
+	ignore_messages_state &stdatomic.AtomicVal[bool] = unsafe { nil }
+	errored_state         &stdatomic.AtomicVal[bool] = unsafe { nil }
 )
 
 /*
@@ -59,19 +59,19 @@ pub fn ignore_message(msg string) {
 
 /// Returns true if and only if messages should be shown.
 pub fn messages() bool {
-	return messages_state.load()
+	return messages_state_ref().load()
 }
 
 /// Set whether messages should be shown or not.
 ///
 /// By default, they are not shown.
 pub fn set_messages(yes bool) {
-	messages_state.store(yes)
+	messages_state_ref().store(yes)
 }
 
 /// Returns true if and only if "ignore" related messages should be shown.
 pub fn ignore_messages() bool {
-	return ignore_messages_state.load()
+	return ignore_messages_state_ref().load()
 }
 
 /// Set whether "ignore" related messages should be shown or not.
@@ -82,12 +82,12 @@ pub fn ignore_messages() bool {
 /// `messages` is disabled, then "ignore" messages are never shown, regardless
 /// of this setting.
 pub fn set_ignore_messages(yes bool) {
-	ignore_messages_state.store(yes)
+	ignore_messages_state_ref().store(yes)
 }
 
 /// Returns true if and only if ripgrep came across a non-fatal error.
 pub fn errored() bool {
-	return errored_state.load()
+	return errored_state_ref().load()
 }
 
 /// Indicate that ripgrep has come across a non-fatal error.
@@ -95,5 +95,29 @@ pub fn errored() bool {
 /// Callers should not use this directly. Instead, it is called automatically
 /// via the `err_message` macro.
 pub fn set_errored() {
-	errored_state.store(true)
+	errored_state_ref().store(true)
+}
+
+// V-specific: the current ownership frontend can leave pointer-valued grouped
+// global initializers unset in the root executable, so allocate this state on
+// first use while preserving the Rust atomic representation.
+fn messages_state_ref() &stdatomic.AtomicVal[bool] {
+	if messages_state == unsafe { nil } {
+		messages_state = stdatomic.new_atomic(false)
+	}
+	return messages_state
+}
+
+fn ignore_messages_state_ref() &stdatomic.AtomicVal[bool] {
+	if ignore_messages_state == unsafe { nil } {
+		ignore_messages_state = stdatomic.new_atomic(false)
+	}
+	return ignore_messages_state
+}
+
+fn errored_state_ref() &stdatomic.AtomicVal[bool] {
+	if errored_state == unsafe { nil } {
+		errored_state = stdatomic.new_atomic(false)
+	}
+	return errored_state
 }

@@ -514,16 +514,26 @@ pub fn (args HiArgs) printer[W](search_mode SearchMode, wtr W) core.Printer[W] {
 
 /// Builds a JSON printer.
 fn (args HiArgs) printer_json[W](wtr W) printer.JSON[W] {
+	mut builder := args.printer_json_builder()
+	return builder.build(wtr)
+}
+
+fn (args HiArgs) printer_json_builder() printer.JSONBuilder {
 	mut builder := printer.JSONBuilder.new()
 	builder.pretty(false)
 	builder.always_begin_end(false)
 	builder.replacement(args.replacement_bytes())
-	return builder.build(wtr)
+	return builder
 }
 
 /// Builds a "standard" grep printer where matches are printed as plain
 /// text lines.
 fn (args HiArgs) printer_standard[W](wtr W) printer.Standard[W] {
+	mut builder := args.printer_standard_builder()
+	return builder.build(wtr)
+}
+
+fn (args HiArgs) printer_standard_builder() printer.StandardBuilder {
 	mut builder := printer.StandardBuilder.new()
 	builder.byte_offset(args.byte_offset)
 	builder.color_specs(args.colors.clone())
@@ -552,12 +562,17 @@ fn (args HiArgs) printer_standard[W](wtr W) printer.Standard[W] {
 	if args.threads == 1 {
 		builder.separator_search(optional_bytes_clone(args.file_separator))
 	}
-	return builder.build(wtr)
+	return builder
 }
 
 /// Builds a "summary" printer where search results are aggregated on a
 /// file-by-file basis.
 fn (args HiArgs) printer_summary[W](wtr W, kind printer.SummaryKind) printer.Summary[W] {
+	mut builder := args.printer_summary_builder(kind)
+	return builder.build(wtr)
+}
+
+fn (args HiArgs) printer_summary_builder(kind printer.SummaryKind) printer.SummaryBuilder {
 	mut builder := printer.SummaryBuilder.new()
 	builder.color_specs(args.colors.clone())
 	builder.exclude_zero(!args.include_zero)
@@ -568,7 +583,75 @@ fn (args HiArgs) printer_summary[W](wtr W, kind printer.SummaryKind) printer.Sum
 	builder.separator_field(':'.bytes())
 	builder.separator_path(args.path_separator)
 	builder.stats(args.stats != none)
-	return builder.build(wtr)
+	return builder
+}
+
+/// V-specific concrete stdout printer entry point for the CLI.
+///
+/// The current ownership frontend does not reliably monomorphize the nested
+/// generic `HiArgs.printer` call from `rg/main.v`, so the executable uses this
+/// concrete wrapper while preserving the translated generic API above.
+pub fn (args HiArgs) printer_standard_stream(search_mode SearchMode, wtr cli.StandardStream) core.Printer[cli.StandardStream] {
+	summary_kind := if args.quiet {
+		match search_mode {
+			.files_with_matches, .count, .count_matches, .json, .standard {
+				printer.SummaryKind.quiet_with_match
+			}
+			.files_without_match {
+				printer.SummaryKind.quiet_without_match
+			}
+		}
+	} else {
+		match search_mode {
+			.files_with_matches { printer.SummaryKind.path_with_match }
+			.files_without_match { printer.SummaryKind.path_without_match }
+			.count { printer.SummaryKind.count }
+			.count_matches { printer.SummaryKind.count_matches }
+			.json {
+				mut builder := args.printer_json_builder()
+				return core.Printer.json(builder.build(wtr))
+			}
+			.standard {
+				mut builder := args.printer_standard_builder()
+				return core.Printer.standard(builder.build(wtr))
+			}
+		}
+	}
+	mut builder := args.printer_summary_builder(summary_kind)
+	return core.Printer.summary(builder.build(wtr))
+}
+
+/// V-specific concrete buffer printer entry point for the CLI.
+///
+/// See `printer_standard_stream`.
+pub fn (args HiArgs) printer_buffer(search_mode SearchMode, wtr cli.Buffer) core.Printer[cli.Buffer] {
+	summary_kind := if args.quiet {
+		match search_mode {
+			.files_with_matches, .count, .count_matches, .json, .standard {
+				printer.SummaryKind.quiet_with_match
+			}
+			.files_without_match {
+				printer.SummaryKind.quiet_without_match
+			}
+		}
+	} else {
+		match search_mode {
+			.files_with_matches { printer.SummaryKind.path_with_match }
+			.files_without_match { printer.SummaryKind.path_without_match }
+			.count { printer.SummaryKind.count }
+			.count_matches { printer.SummaryKind.count_matches }
+			.json {
+				mut builder := args.printer_json_builder()
+				return core.Printer.json(builder.build(wtr))
+			}
+			.standard {
+				mut builder := args.printer_standard_builder()
+				return core.Printer.standard(builder.build(wtr))
+			}
+		}
+	}
+	mut builder := args.printer_summary_builder(summary_kind)
+	return core.Printer.summary(builder.build(wtr))
 }
 
 fn (args HiArgs) replacement_bytes() ?[]u8 {
@@ -620,12 +703,34 @@ pub fn (args HiArgs) quit_after_match() bool {
 /// given printer.
 pub fn (args HiArgs) search_worker[W](matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[W]) !core.SearchWorker[W] {
 	mut builder := core.SearchWorkerBuilder.new()
+	args.configure_search_worker_builder(mut builder)!
+	return builder.build(matcher_, searcher_, printer_)
+}
+
+fn (args HiArgs) configure_search_worker_builder(mut builder core.SearchWorkerBuilder) ! {
 	builder.preprocessor(optional_string_clone(args.pre))!
 	builder.preprocessor_globs(args.pre_globs.clone())
 	builder.search_zip(args.search_zip)
 	builder.binary_detection_explicit(args.binary.explicit.clone())
 	builder.binary_detection_implicit(args.binary.implicit.clone())
-	return builder.build(matcher_, searcher_, printer_)
+}
+
+/// V-specific concrete stdout search worker entry point for the CLI.
+///
+/// See `printer_standard_stream`.
+pub fn (args HiArgs) search_worker_standard_stream(matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[cli.StandardStream]) !core.SearchWorker[cli.StandardStream] {
+	mut builder := core.SearchWorkerBuilder.new()
+	args.configure_search_worker_builder(mut builder)!
+	return builder.build_standard_stream(matcher_, searcher_, printer_)
+}
+
+/// V-specific concrete buffer search worker entry point for the CLI.
+///
+/// See `printer_standard_stream`.
+pub fn (args HiArgs) search_worker_buffer(matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[cli.Buffer]) !core.SearchWorker[cli.Buffer] {
+	mut builder := core.SearchWorkerBuilder.new()
+	args.configure_search_worker_builder(mut builder)!
+	return builder.build_buffer(matcher_, searcher_, printer_)
 }
 
 /// Build a searcher from the command line parameters.

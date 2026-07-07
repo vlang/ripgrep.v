@@ -1,4 +1,4 @@
-module main
+module rg
 
 import cli
 import core
@@ -35,7 +35,7 @@ The main entry point into ripgrep.
 // V-specific: this port does not install a Rust-style global allocator.
 
 /// Then, as it was, then again it will be.
-fn main() {
+pub fn main() {
 	code := run(flags.parse()) or {
 		core.eprintln_locked(err.msg())
 		exit(2)
@@ -110,8 +110,11 @@ fn search(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	mut matched := false
 	mut searched := false
 	mut stats := args.stats()
-	mut searcher := args.search_worker(args.matcher()!, args.searcher()!, args.printer(mode,
-		args.stdout()))!
+	matcher_ := args.matcher()!
+	searcher_ := args.searcher()!
+	printer_ := args.printer_standard_stream(mode, args.stdout())
+	mut searcher := args.search_worker_standard_stream(matcher_, searcher_,
+		printer_)!
 	for haystack in haystacks {
 		searched = true
 		search_result := searcher.search(&haystack) or {
@@ -150,6 +153,10 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
 	haystack_builder := args.haystack_builder()
 	mut bufwtr := args.buffer_writer()
+	matcher_ := args.matcher()!
+	searcher_ := args.searcher()!
+	printer_ := args.printer_buffer(mode, bufwtr.buffer())
+	searcher_worker := args.search_worker_buffer(matcher_, searcher_, printer_)!
 	mut visitor := SearchParallelVisitor{
 		args:             args
 		mode:             mode
@@ -157,8 +164,7 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		haystack_builder: haystack_builder
 		bufwtr:           bufwtr
 		stats:            args.stats()
-		searcher:         args.search_worker(args.matcher()!, args.searcher()!, args.printer(mode,
-			bufwtr.buffer()))!
+		searcher:         searcher_worker
 	}
 	args.walk_builder()!.build_parallel().run(mut visitor)
 	if args.has_implicit_path() && !visitor.searched {

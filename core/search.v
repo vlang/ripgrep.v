@@ -96,6 +96,51 @@ pub fn (builder SearchWorkerBuilder) build[W](matcher_ PatternMatcher, searcher_
 	}
 }
 
+/// V-specific concrete stdout search worker builder.
+///
+/// The current ownership frontend does not reliably emit the
+/// `SearchWorkerBuilder.build[cli.StandardStream]` specialization used by the
+/// root CLI, so this keeps the translated build logic available for that
+/// concrete writer.
+pub fn (builder SearchWorkerBuilder) build_standard_stream(matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[cli.StandardStream]) SearchWorker[cli.StandardStream] {
+	config := builder.config.clone()
+	mut decomp_builder := ?cli.DecompressionReaderBuilder(none)
+	if config.search_zip {
+		mut builder_ := cli.new_decompression_reader_builder()
+		builder_.async_stderr(true)
+		decomp_builder = builder_
+	}
+	return SearchWorker[cli.StandardStream]{
+		config:          config
+		command_builder: builder.command_builder.clone()
+		decomp_builder:  decomp_builder
+		matcher:         matcher_
+		searcher:        searcher_
+		printer:         printer_
+	}
+}
+
+/// V-specific concrete buffer search worker builder.
+///
+/// See `build_standard_stream`.
+pub fn (builder SearchWorkerBuilder) build_buffer(matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[cli.Buffer]) SearchWorker[cli.Buffer] {
+	config := builder.config.clone()
+	mut decomp_builder := ?cli.DecompressionReaderBuilder(none)
+	if config.search_zip {
+		mut builder_ := cli.new_decompression_reader_builder()
+		builder_.async_stderr(true)
+		decomp_builder = builder_
+	}
+	return SearchWorker[cli.Buffer]{
+		config:          config
+		command_builder: builder.command_builder.clone()
+		decomp_builder:  decomp_builder
+		matcher:         matcher_
+		searcher:        searcher_
+		printer:         printer_
+	}
+}
+
 /// Set the path to a preprocessor command.
 ///
 /// When this is set, instead of searching files directly, the given
