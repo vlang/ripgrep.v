@@ -38,8 +38,8 @@ fn summary_no_color_buffer() cli.Buffer {
 	return cli.BufferWriter.stdout(.never).buffer()
 }
 
-fn summary_printer_contents(mut printer Summary[cli.Buffer]) string {
-	return printer.get_mut().as_slice().bytestr()
+fn summary_printer_contents(mut printer Summary[NoColor[cli.Buffer]]) string {
+	return printer.get_mut().get_mut().as_slice().bytestr()
 }
 
 fn summary_assert_eq_printed(expected string, got string) {

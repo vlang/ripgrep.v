@@ -143,12 +143,8 @@ pub fn (builder SummaryBuilder) build[W](wtr W) Summary[W] {
 ///
 /// This is a convenience routine for
 /// `SummaryBuilder::build(termcolor::NoColor::new(wtr))`.
-///
-/// V-specific: V2 cannot yet emit all generic sink specializations created by
-/// `Summary[NoColor[W]]`, so this currently returns the base writer-backed
-/// printer.
-pub fn (builder SummaryBuilder) build_no_color[W](wtr W) Summary[W] {
-	return builder.build(wtr)
+pub fn (builder SummaryBuilder) build_no_color[W](wtr W) Summary[NoColor[W]] {
+	return builder.build(NoColor.new(wtr))
 }
 
 /// Set the output mode for this printer.
@@ -281,9 +277,7 @@ pub fn Summary.new[W](wtr W) Summary[W] {
 /// constructor, the printer will never emit colors.
 ///
 /// The default configuration uses the `Count` summary mode.
-///
-/// V-specific: see `SummaryBuilder.build_no_color`.
-pub fn Summary.new_no_color[W](wtr W) Summary[W] {
+pub fn Summary.new_no_color[W](wtr W) Summary[NoColor[W]] {
 	return SummaryBuilder.new().build_no_color(wtr)
 }
 

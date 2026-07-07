@@ -97,12 +97,8 @@ pub fn (builder StandardBuilder) build[W](wtr W) Standard[W] {
 ///
 /// This is a convenience routine for
 /// `StandardBuilder::build(termcolor::NoColor::new(wtr))`.
-///
-/// V-specific: V2 cannot yet emit all generic sink specializations created by
-/// `Standard[NoColor[W]]`, so this currently returns the base writer-backed
-/// printer.
-pub fn (builder StandardBuilder) build_no_color[W](wtr W) Standard[W] {
-	return builder.build(wtr)
+pub fn (builder StandardBuilder) build_no_color[W](wtr W) Standard[NoColor[W]] {
+	return builder.build(NoColor.new(wtr))
 }
 
 /// Set the user color specifications to use for coloring in this printer.
@@ -273,9 +269,7 @@ pub fn Standard.new[W](wtr W) Standard[W] {
 
 /// Return a standard printer with a default configuration that writes
 /// matches to the given writer.
-///
-/// V-specific: see `StandardBuilder.build_no_color`.
-pub fn Standard.new_no_color[W](wtr W) Standard[W] {
+pub fn Standard.new_no_color[W](wtr W) Standard[NoColor[W]] {
 	return StandardBuilder.new().build_no_color(wtr)
 }
 

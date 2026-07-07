@@ -330,3 +330,7 @@ pub fn (w NoColor[W]) is_synchronous() bool {
 pub fn (w NoColor[W]) into_inner() W {
 	return w.wtr
 }
+
+pub fn (mut w NoColor[W]) get_mut() &W {
+	return unsafe { &w.wtr }
+}
