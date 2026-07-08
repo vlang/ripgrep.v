@@ -39,10 +39,26 @@ fn is_hidden(path string) bool {
 	if path == '' {
 		return false
 	}
-	for part in normalize_path(path).split(os.path_separator.str()) {
-		if part.len > 1 && part.starts_with('.') && part != '.' && part != '..' {
-			return true
+	sep := os.path_separator[0]
+	mut at_component_start := true
+	for i := 0; i < path.len; i++ {
+		ch := path[i]
+		if ch == sep {
+			at_component_start = true
+			continue
 		}
+		if at_component_start && ch == `.` {
+			next_is_sep_or_end := i + 1 >= path.len || path[i + 1] == sep
+			if next_is_sep_or_end {
+				at_component_start = false
+				continue
+			}
+			dotdot := path[i + 1] == `.` && (i + 2 >= path.len || path[i + 2] == sep)
+			if !dotdot {
+				return true
+			}
+		}
+		at_component_start = false
 	}
 	return false
 }

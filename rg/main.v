@@ -332,6 +332,9 @@ fn parallel_chunk_bounds(total int, chunks int, index int) (int, int) {
 /// This recursively steps through the file list (current directory by default)
 /// and prints each path sequentially using a single thread.
 fn files(args &flags.HiArgs) !bool {
+	if !args.has_sort() {
+		return files_stream(args)
+	}
 	haystacks := collect_haystacks(args)!
 
 	mut matched := false
@@ -356,10 +359,13 @@ fn files(args &flags.HiArgs) !bool {
 /// Requesting a sorted output from ripgrep (such as with `--sort path`) will
 /// automatically disable parallelism and hence sorting is not handled here.
 fn files_parallel(args &flags.HiArgs) !bool {
-	haystack_builder := args.haystack_builder()
+	return files_stream(args)
+}
+
+fn files_stream(args &flags.HiArgs) !bool {
 	mut visitor := FilesParallelVisitor{
 		args:             args
-		haystack_builder: haystack_builder
+		strip_dot_prefix: args.has_implicit_path()
 		path_printer:     args.path_printer_builder().build(args.stdout())
 	}
 	args.walk_builder()!.build_parallel().run(mut visitor)
@@ -372,7 +378,7 @@ fn files_parallel(args &flags.HiArgs) !bool {
 
 struct FilesParallelVisitor {
 	args             &flags.HiArgs
-	haystack_builder core.HaystackBuilder
+	strip_dot_prefix bool
 mut:
 	path_printer printer.PathPrinter[cli.StandardStream]
 	matched      bool
@@ -380,16 +386,47 @@ mut:
 }
 
 fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
+	if result.is_error {
+		core.err_message(result.err.msg())
+		return .continue_
+	}
+	dent := result.entry
+	if err := dent.error() {
+		core.ignore_message(err.msg())
+	}
+	if !files_should_print(&dent) {
+		return .continue_
+	}
 	visitor.matched = true
 	if visitor.args.quit_after_match() {
 		return .quit
 	}
-	visitor.path_printer.write(haystack.path()) or {
+	visitor.write_path(&dent) or {
 		visitor.err = err.msg()
 		return .quit
 	}
 	return .continue_
+}
+
+fn (mut visitor FilesParallelVisitor) write_path(dent &ignore.DirEntry) ! {
+	path := *dent.path()
+	if visitor.strip_dot_prefix && path.starts_with('./') {
+		path_value := path[2..].to_owned()
+		visitor.path_printer.write(&path_value)!
+		return
+	}
+	visitor.path_printer.write(dent.path())!
+}
+
+fn files_should_print(dent &ignore.DirEntry) bool {
+	if dent.is_stdin() {
+		return true
+	}
+	if dent.depth() == 0 && !dent.is_dir() {
+		return true
+	}
+	ft := dent.file_type() or { return false }
+	return ft == .file
 }
 
 /// The top-level entry point for `--type-list`.

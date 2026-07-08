@@ -66,6 +66,8 @@ pub:
 	root string
 	// The globs in this matcher.
 	globs []Glob
+	// V-specific compiled matcher for the globs above, in the same order.
+	set globset.GlobSet
 	// The total number of ignore globs.
 	num_ignores_ u64
 	// The total number of whitelisted globs.
@@ -123,6 +125,7 @@ pub fn Gitignore.empty() Gitignore {
 	return Gitignore{
 		root:             ''.to_owned()
 		globs:            []Glob{}
+		set:              globset.GlobSet.empty()
 		num_ignores_:     0
 		num_whitelists_:  0
 	}
@@ -137,7 +140,7 @@ pub fn (gi &^a Gitignore) path[^a]() &^a string {
 
 /// Returns true if and only if this gitignore has zero globs, and
 /// therefore never matches any file path.
-pub fn (gi Gitignore) is_empty() bool {
+pub fn (gi &Gitignore) is_empty() bool {
 	return gi.globs.len == 0
 }
 
@@ -172,7 +175,15 @@ pub fn (gi &^a Gitignore) matched[^a](path string, is_dir bool) Match[GitignoreG
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
-	return gi.matched_stripped(gi.strip(path), is_dir)
+	mut matches := []usize{}
+	return gi.matched_with_scratch(path, is_dir, mut matches)
+}
+
+fn (gi &^a Gitignore) matched_with_scratch[^a](path string, is_dir bool, mut matches []usize) Match[GitignoreGlobRef[^a]] {
+	if gi.is_empty() {
+		return Match[GitignoreGlobRef[^a]]{}
+	}
+	return gi.matched_stripped_with_scratch(gi.strip(path), is_dir, mut matches)
 }
 
 /// Returns whether the given path (file or directory, and expected to be
@@ -225,30 +236,37 @@ fn (gi &^a Gitignore) matched_stripped[^a](path string, is_dir bool) Match[Gitig
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
+	mut matches := []usize{}
+	return gi.matched_stripped_with_scratch(path, is_dir, mut matches)
+}
+
+fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool, mut matches []usize) Match[GitignoreGlobRef[^a]] {
+	if gi.is_empty() {
+		return Match[GitignoreGlobRef[^a]]{}
+	}
 	candidate := gitignore_path_for_matching(path)
-	for idx in 0 .. gi.globs.len {
-		i := gi.globs.len - 1 - idx
+	gi.set.matches_into(candidate, mut matches)
+	for idx in 0 .. matches.len {
+		i := int(matches[matches.len - 1 - idx])
 		glob := &gi.globs[i]
-		if gitignore_glob_matches(*glob, candidate, is_dir) {
-			if glob.is_only_dir() && !is_dir {
-				continue
+		if glob.is_only_dir() && !is_dir {
+			continue
+		}
+		return if glob.is_whitelist() {
+			Match[GitignoreGlobRef[^a]]{
+				kind:      .whitelist
+				value:     GitignoreGlobRef[^a]{
+					glob: glob
+				}
+				has_value: true
 			}
-			return if glob.is_whitelist() {
-				Match[GitignoreGlobRef[^a]]{
-					kind:      .whitelist
-					value:     GitignoreGlobRef[^a]{
-						glob: glob
-					}
-					has_value: true
+		} else {
+			Match[GitignoreGlobRef[^a]]{
+				kind:      .ignore
+				value:     GitignoreGlobRef[^a]{
+					glob: glob
 				}
-			} else {
-				Match[GitignoreGlobRef[^a]]{
-					kind:      .ignore
-					value:     GitignoreGlobRef[^a]{
-						glob: glob
-					}
-					has_value: true
-				}
+				has_value: true
 			}
 		}
 	}
@@ -257,7 +275,7 @@ fn (gi &^a Gitignore) matched_stripped[^a](path string, is_dir bool) Match[Gitig
 
 /// Strips the given path such that it's suitable for matching with this
 /// gitignore matcher.
-fn (gi Gitignore) strip(path string) string {
+fn (gi &Gitignore) strip(path string) string {
 	mut stripped := path
 	if p := gitignore_strip_prefix_opt('./', stripped) {
 		stripped = p
@@ -308,16 +326,27 @@ pub fn GitignoreBuilder.new(root string) GitignoreBuilder {
 pub fn (builder GitignoreBuilder) build() (Gitignore, bool, IgnoreError) {
 	mut nignore := u64(0)
 	mut nwhite := u64(0)
+	mut set_builder := globset.GlobSetBuilder.new()
 	for glob in builder.globs {
 		if glob.is_whitelist() {
 			nwhite++
 		} else {
 			nignore++
 		}
+		parse_glob := glob.actual.clone()
+		mut glob_builder := globset.GlobBuilder.new(&parse_glob)
+		glob_builder.literal_separator(true)
+		glob_builder.case_insensitive(glob.case_insensitive)
+		glob_builder.backslash_escape(true)
+		glob_builder.allow_unclosed_class(builder.allow_unclosed_class)
+		compiled := glob_builder.build() or { return Gitignore.empty(), true, glob_error(glob.original, err.msg()) }
+		set_builder.add(compiled)
 	}
+	set := set_builder.build() or { return Gitignore.empty(), true, glob_error('', err.msg()) }
 	return Gitignore{
 		root:             builder.root.clone()
 		globs:            builder.globs.clone()
+		set:              set
 		num_ignores_:     nignore
 		num_whitelists_:  nwhite
 	}, false, IgnoreError{}
@@ -651,19 +680,6 @@ fn gitignore_path_for_matching(path string) string {
 	return normalized
 }
 
-fn gitignore_glob_matches(glob Glob, path string, is_dir bool) bool {
-	if glob.is_only_dir() && !is_dir {
-		return false
-	}
-	mut candidate := gitignore_path_for_matching(path)
-	mut actual := glob.actual
-	if glob.case_insensitive {
-		candidate = candidate.to_lower()
-		actual = actual.to_lower()
-	}
-	return gitignore_glob_match_runes(actual.runes(), 0, candidate.runes(), 0)
-}
-
 fn gitignore_glob_match_runes(pattern []rune, pi int, text []rune, ti int) bool {
 	if pi >= pattern.len {
 		return ti >= text.len
@@ -712,11 +728,13 @@ fn gitignore_glob_match_runes(pattern []rune, pi int, text []rune, ti int) bool 
 		end := gitignore_find_class_end(pattern, pi)
 		if end > pi {
 			matches := gitignore_char_class_matches(pattern[pi + 1..end], text[ti])
-			return matches && text[ti] != `/` && gitignore_glob_match_runes(pattern, end + 1, text, ti + 1)
+			return matches && text[ti] != `/` && gitignore_glob_match_runes(pattern, end + 1, text,
+				ti + 1)
 		}
 	}
 	if pattern[pi] == `\\` && pi + 1 < pattern.len {
-		return pattern[pi + 1] == text[ti] && gitignore_glob_match_runes(pattern, pi + 2, text, ti + 1)
+		return pattern[pi + 1] == text[ti] && gitignore_glob_match_runes(pattern, pi + 2, text,
+			ti + 1)
 	}
 	return pattern[pi] == text[ti] && gitignore_glob_match_runes(pattern, pi + 1, text, ti + 1)
 }

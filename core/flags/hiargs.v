@@ -822,6 +822,14 @@ pub fn (args HiArgs) sort(haystacks []core.Haystack) []core.Haystack {
 	return sorted
 }
 
+/// Returns true if a sort mode was configured.
+pub fn (args HiArgs) has_sort() bool {
+	if _ := args.sort {
+		return true
+	}
+	return false
+}
+
 /// Returns a stats object if the user requested that ripgrep keep track
 /// of various metrics during a search.
 ///

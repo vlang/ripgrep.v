@@ -701,6 +701,7 @@ mut:
 	has_sort_by_name bool
 	sort_by_path     PathComparator = unsafe { nil }
 	has_sort_by_path bool
+	gitignore_matches []usize
 }
 
 // Creates a new recursive directory iterator using default settings.
@@ -797,7 +798,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	}
 	if !dent.is_dir() {
 		if !is_root {
-			if walk.skip_entry(ig, dent) {
+			if walk.skip_entry(&ig, &dent) {
 				return
 			}
 		}
@@ -824,7 +825,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 			dent.err = none_ignore_error()
 	}
 	if !is_root {
-		if walk.skip_entry(ig, dent) {
+		if walk.skip_entry(&ig, &dent) {
 			return
 		}
 	}
@@ -878,7 +879,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 	}
 	if !dent.is_dir() {
 		if !is_root {
-			if walk.skip_entry(ig, dent) {
+			if walk.skip_entry(&ig, &dent) {
 				return .continue_
 			}
 		}
@@ -911,7 +912,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 		dent.err = none_ignore_error()
 	}
 	if !is_root {
-		if walk.skip_entry(ig, dent) {
+		if walk.skip_entry(&ig, &dent) {
 			return .continue_
 		}
 	}
@@ -980,11 +981,11 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 	return .continue_
 }
 
-fn (walk Walk) can_trust_dirent_type() bool {
+fn (walk &Walk) can_trust_dirent_type() bool {
 	return !walk.follow_links && walk.max_filesize == none && walk.skip == none && !walk.same_file_system
 }
 
-fn (walk Walk) read_dir_children(path string) ![]DirChild {
+fn (walk &Walk) read_dir_children(path string) ![]DirChild {
 	mut children := read_dir_children(path)!
 	sort_children(mut children, path, walk.has_sort_by_name, walk.sort_by_name, walk.has_sort_by_path,
 		walk.sort_by_path)
@@ -1048,11 +1049,11 @@ fn entry_file_type_from_dirent(d_type int) (EntryFileType, bool) {
 	}
 }
 
-fn (walk Walk) skip_entry(ig Ignore, ent DirEntry) bool {
+fn (mut walk Walk) skip_entry(ig &Ignore, ent &DirEntry) bool {
 	if ent.depth() == 0 {
 		return false
 	}
-	if should_skip_entry(ig, ent) {
+	if should_skip_entry_with_scratch(ig, ent, mut walk.gitignore_matches) {
 		return true
 	}
 	if skip := walk.skip {
@@ -1181,15 +1182,15 @@ fn skip_filesize(max_filesize u64, path string, stat Metadata) bool {
 	return false
 }
 
-fn should_skip_entry(ig Ignore, dent DirEntry) bool {
-	matched := ig.matched_dir_entry(&dent)
+fn should_skip_entry_with_scratch(ig &Ignore, dent &DirEntry, mut gitignore_matches []usize) bool {
+	matched := ig.matched_dir_entry_with_scratch(dent, mut gitignore_matches)
 	if matched.is_ignore() {
 		return true
 	}
 	return false
 }
 
-fn never_equal(dent DirEntry, handle Handle) bool {
+fn never_equal(dent &DirEntry, handle Handle) bool {
 	$if linux || macos || freebsd || openbsd || netbsd || dragonfly || solaris {
 		if ino := dent.ino() {
 			return ino != handle.ino
@@ -1205,7 +1206,7 @@ fn never_equal(dent DirEntry, handle Handle) bool {
 // Returns true if and only if the given directory entry is believed to be
 // equivalent to the given handle. If there was a problem querying the path
 // for information to determine equality, then that error is returned.
-fn path_equals(dent DirEntry, handle Handle) !bool {
+fn path_equals(dent &DirEntry, handle Handle) !bool {
 	if dent.is_stdin() || never_equal(dent, handle) {
 		return false
 	}
