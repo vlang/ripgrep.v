@@ -947,11 +947,7 @@ fn file_needs_transcoding(config Config, mut file os.File, path string, has_path
 		return false
 	}
 	if has_path {
-		mut probe := os.open(path) or { return false }
-		defer {
-			probe.close()
-		}
-		return file_has_bom(mut probe)
+		return file_has_bom_at_current(mut file)
 	}
 	return file_has_bom_at_current(mut file)
 }
