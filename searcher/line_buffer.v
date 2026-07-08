@@ -2,8 +2,13 @@ module searcher
 
 import io
 
+$if !windows {
+	#include <string.h>
+	fn C.memchr(s voidptr, c int, n u64) voidptr
+}
+
 /// The default buffer capacity that we use for the line buffer.
-pub const default_buffer_capacity = 64 * (1 << 10) // 64 KB
+pub const default_buffer_capacity = 256 * (1 << 10) // 256 KB
 
 enum BufferAllocationKind {
 	eager
@@ -469,6 +474,19 @@ fn replace_bytes(mut bytes []u8, src u8, replacement u8) ?usize {
 }
 
 fn find_byte(bytes []u8, byte u8) ?usize {
+	if bytes.len == 0 {
+		return none
+	}
+	$if !windows {
+		unsafe {
+			base := voidptr(bytes.data)
+			found := C.memchr(base, int(byte), u64(bytes.len))
+			if isnil(found) {
+				return none
+			}
+			return usize(found) - usize(base)
+		}
+	}
 	for i, got in bytes {
 		if got == byte {
 			return usize(i)

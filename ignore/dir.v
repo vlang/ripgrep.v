@@ -173,6 +173,7 @@ pub struct Ignore implements IClone {
 mut:
 	nodes []IgnoreNode
 	has_ignore_rules bool
+	has_git_parent   bool
 	/// An override matcher (default is empty).
 	overrides Override
 	/// A file type matcher.
@@ -264,6 +265,7 @@ pub fn (ig Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 		next.absolute_base = ?string(absolute_base.to_owned())
 		next.nodes << absolute_node
 		next.has_ignore_rules = next.has_ignore_rules || ignore_node_has_rules(absolute_node)
+		next.has_git_parent = next.has_git_parent || absolute_node.has_git
 		built = next
 	}
 	final_has_err, final_err := errs.into_error_option()
@@ -283,6 +285,7 @@ pub fn (ig Ignore) add_child(dir string) (Ignore, bool, IgnoreError) {
 	mut next := ig
 	next.nodes << node
 	next.has_ignore_rules = next.has_ignore_rules || ignore_node_has_rules(node)
+	next.has_git_parent = next.has_git_parent || node.has_git
 	return next, has_err, err
 }
 
@@ -324,7 +327,7 @@ fn (ig Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
 		errs.maybe_push(has_err, err)
 		matcher
 	}
-	gi_exclude_matcher := if !ig.opts.git_exclude {
+	gi_exclude_matcher := if !ig.opts.git_exclude || (check_vcs_dir && !has_git) {
 		Gitignore.empty()
 	} else {
 		git_dir, resolve_has_err, resolve_err := resolve_git_commondir(dir, git_is_file)
@@ -359,7 +362,7 @@ fn (ig &Ignore) has_any_ignore_rules() bool {
 /// Like `matched`, but works with a directory entry instead.
 pub fn (ig &^a Ignore) matched_dir_entry[^a](dent &DirEntry) Match[IgnoreMatch[^a]] {
 	m := ig.matched(dent.path(), dent.is_dir())
-	if m.is_none() && ig.opts.hidden && is_hidden(dent.path()) {
+	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name()) {
 		return Match[IgnoreMatch[^a]]{
 			kind:      .ignore
 			value:     IgnoreMatch.hidden()
@@ -371,7 +374,7 @@ pub fn (ig &^a Ignore) matched_dir_entry[^a](dent &DirEntry) Match[IgnoreMatch[^
 
 fn (ig &^a Ignore) matched_dir_entry_with_scratch[^a](dent &DirEntry, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
 	m := ig.matched_with_scratch(dent.path(), dent.is_dir(), mut gitignore_matches)
-	if m.is_none() && ig.opts.hidden && is_hidden(dent.path()) {
+	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name()) {
 		return Match[IgnoreMatch[^a]]{
 			kind:      .ignore
 			value:     IgnoreMatch.hidden()
@@ -392,9 +395,8 @@ fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] 
 
 fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
 	mut path_value := path
-	stripped := strip_prefix(path_value, './')
-	if stripped != path_value {
-		path_value = stripped
+	if path_value.starts_with('./') {
+		path_value = strip_prefix(path_value, './')
 	}
 	if !ig.overrides.is_empty() {
 		mat := match_from_override(ig.overrides.matched(path_value, is_dir))
@@ -443,19 +445,19 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 		if node.is_absolute_parent {
 			break
 		}
-			if m_custom_ignore.is_none() {
+			if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
 				m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(path,
 					is_dir, mut gitignore_matches))
 			}
-			if m_ignore.is_none() {
+			if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
 				m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(path, is_dir,
 					mut gitignore_matches))
 			}
-			if any_git && !saw_git && m_gi.is_none() {
+			if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
 				m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(path, is_dir,
 					mut gitignore_matches))
 			}
-			if any_git && !saw_git && m_gi_exclude.is_none() {
+			if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
 				m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(path,
 					is_dir, mut gitignore_matches))
 			}
@@ -463,40 +465,27 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 	}
 	if ig.opts.parents {
 		if absolute_base := ig.absolute_base() {
-			mut absolute_path := absolute_base.clone()
-			mut path_to_join := path.to_owned()
-			relative_base := ig.last_relative_dir_before_absolute_path()
-			if relative_base != '' {
-					if relative_base == '.' {
-						path_to_join = path.to_owned()
-					} else {
-						without_dot_slash := strip_if_is_prefix('./', &relative_base)
-						relative_path := strip_if_is_prefix(without_dot_slash, &path)
-						path_to_join = strip_if_is_prefix('/', &relative_path)
-					}
-				}
-			if path_to_join != '' {
-				absolute_path = os.join_path(absolute_path, path_to_join.clone())
-			}
+			absolute_path := parent_absolute_match_path(*absolute_base,
+				ig.last_relative_dir_before_absolute_path(), path)
 			for i := ig.nodes.len - 1; i >= 0; i-- {
 				node := &ig.nodes[i]
 				if !node.is_absolute_parent {
 					continue
 				}
-					if m_custom_ignore.is_none() {
-						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(absolute_path,
+					if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
+						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(absolute_path.clone(),
 							is_dir, mut gitignore_matches))
 					}
-					if m_ignore.is_none() {
-						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(absolute_path,
+					if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
+						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(absolute_path.clone(),
 							is_dir, mut gitignore_matches))
 					}
-					if any_git && !saw_git && m_gi.is_none() {
-						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(absolute_path,
+					if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
+						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(absolute_path.clone(),
 							is_dir, mut gitignore_matches))
 					}
-					if any_git && !saw_git && m_gi_exclude.is_none() {
-						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(absolute_path,
+					if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
+						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(absolute_path.clone(),
 							is_dir, mut gitignore_matches))
 					}
 				saw_git = saw_git || node.has_git
@@ -508,19 +497,34 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 			break
 		}
 			explicit_ignore := &ig.explicit_ignores[i]
-			m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
-				mut gitignore_matches))
+			if !explicit_ignore.is_empty() {
+				m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
+					mut gitignore_matches))
+			}
 		}
-		m_global := if any_git {
+		m_global := if any_git && !ig.git_global_matcher.is_empty() {
 			match_from_gitignore(ig.git_global_matcher.matched_with_scratch(path, is_dir,
 				mut gitignore_matches))
 		} else {
 			Match[IgnoreMatch[^a]]{}
 		}
-	for mat in [m_custom_ignore, m_ignore, m_gi, m_gi_exclude, m_global, m_explicit] {
-		if !mat.is_none() {
-			return mat
-		}
+	if !m_custom_ignore.is_none() {
+		return m_custom_ignore
+	}
+	if !m_ignore.is_none() {
+		return m_ignore
+	}
+	if !m_gi.is_none() {
+		return m_gi
+	}
+	if !m_gi_exclude.is_none() {
+		return m_gi_exclude
+	}
+	if !m_global.is_none() {
+		return m_global
+	}
+	if !m_explicit.is_none() {
+		return m_explicit
 	}
 	return Match[IgnoreMatch[^a]]{}
 }
@@ -654,6 +658,7 @@ pub fn (builder IgnoreBuilder) build_with_cwd(cwd string) Ignore {
 		}]
 		has_ignore_rules:          !git_global_matcher.is_empty()
 			|| gitignore_list_has_rules(builder.explicit_ignores.clone())
+		has_git_parent:            false
 		overrides:                 builder.overrides
 		types:                     builder.types
 		absolute_base:             none_string()
@@ -796,20 +801,40 @@ pub fn (mut builder IgnoreBuilder) ignore_case_insensitive(yes bool) {
 ///
 /// I/O errors are ignored.
 pub fn create_gitignore(dir string, dir_for_ignorefile string, names []string, case_insensitive bool) (Gitignore, bool, IgnoreError) {
+	mut paths := []string{}
+	for name in names {
+		gipath := join_ignore_path(dir_for_ignorefile, name)
+		if os.user_os() == 'windows' || os.exists(gipath) {
+			paths << gipath
+		}
+	}
+	if paths.len == 0 {
+		return Gitignore.empty(), false, IgnoreError{}
+	}
 	mut builder := GitignoreBuilder.new(dir)
 	mut errs := PartialErrorBuilder{}
 	_, _ = builder.case_insensitive(case_insensitive)
-	for name in names {
-		gipath := os.join_path(dir_for_ignorefile, name)
-		if os.user_os() == 'windows' || os.exists(gipath) {
-			add_has_err, add_err := builder.add(gipath)
-			errs.maybe_push_ignore_io(add_has_err, add_err)
-		}
+	for gipath in paths {
+		add_has_err, add_err := builder.add(gipath)
+		errs.maybe_push_ignore_io(add_has_err, add_err)
 	}
 	gi, build_has_err, build_err := builder.build()
 	errs.maybe_push(build_has_err, build_err)
 	final_has_err, final_err := errs.into_error_option()
 	return gi, final_has_err, final_err
+}
+
+fn join_ignore_path(dir string, name string) string {
+	$if windows {
+		return os.join_path(dir, name)
+	}
+	if dir == '' {
+		return name.to_owned()
+	}
+	if dir[dir.len - 1] == `/` {
+		return dir + name
+	}
+	return dir + '/' + name
 }
 
 /// Find the GIT_COMMON_DIR for the given git worktree.
@@ -863,28 +888,68 @@ fn read_first_line(path string) (string, bool, IgnoreError) {
 /// Strips `prefix` from `path` if it's a prefix, otherwise returns `path`
 /// unchanged.
 fn strip_if_is_prefix[^a](prefix string, path &^a string) string {
-	return strip_prefix(*path, prefix)
+	value := *path
+	if prefix == './' {
+		if value.starts_with('./') {
+			return value[2..]
+		}
+		return value
+	}
+	if prefix == os.path_separator.str() {
+		if value.starts_with(prefix) {
+			return value[prefix.len..]
+		}
+		return value
+	}
+	if value == prefix {
+		return ''
+	}
+	prefix_with_sep := prefix + os.path_separator.str()
+	if value.starts_with(prefix_with_sep) {
+		return value[prefix_with_sep.len..]
+	}
+	return strip_prefix(value, prefix)
 }
 
-fn (ig Ignore) any_git_parent() bool {
-	for i := ig.nodes.len - 1; i >= 0; i-- {
-		if ig.nodes[i].has_git {
-			return true
+fn parent_absolute_match_path(absolute_base string, relative_base string, path string) string {
+	mut path_to_join := path
+	if relative_base != '' && relative_base != '.' {
+		without_dot_slash := if relative_base.starts_with('./') {
+			relative_base[2..]
+		} else {
+			relative_base
 		}
+		if path == without_dot_slash {
+			path_to_join = ''
+		} else if path.len > without_dot_slash.len && path.starts_with(without_dot_slash)
+			&& path[without_dot_slash.len] == os.path_separator[0] {
+			path_to_join = path[without_dot_slash.len + 1..]
+		} else {
+			relative_path := strip_if_is_prefix(without_dot_slash, &path)
+			path_to_join = strip_if_is_prefix('/', &relative_path)
+		}
+	} else if relative_base == '' {
+		path_to_join = path
 	}
-	return false
+	if path_to_join == '' {
+		return absolute_base.to_owned()
+	}
+	return join_ignore_path(absolute_base, path_to_join)
 }
 
-fn (ig Ignore) last_relative_dir_before_absolute_path() string {
-	mut last := ''
-	for i := ig.nodes.len - 1; i >= 0; i-- {
-		node := ig.nodes[i]
-		if node.is_absolute_parent {
-			break
-		}
-		last = node.dir.clone()
+fn (ig &Ignore) any_git_parent() bool {
+	return ig.has_git_parent
+}
+
+fn (ig &Ignore) last_relative_dir_before_absolute_path() string {
+	if ig.nodes.len == 0 {
+		return ''
 	}
-	return last
+	node := &ig.nodes[ig.nodes.len - 1]
+	if node.is_absolute_parent {
+		return ''
+	}
+	return node.dir
 }
 
 fn none_string() ?string {

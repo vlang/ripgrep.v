@@ -3,6 +3,9 @@ module globset
 enum MatchStrategyKind {
 	literal
 	basename_literal
+	basename_prefix
+	basename_suffix
+	path_has_slash
 	extension
 	prefix
 	suffix
@@ -24,10 +27,24 @@ struct MatchStrategy {
 /// possible to test whether any of those patterns matches by looking up a
 /// file path's extension in a hash table.
 fn match_strategy_new(pat Glob) MatchStrategy {
-	if lit := pat.basename_literal() {
+	if !pat.opts.case_insensitive && pat.opts.literal_separator && pat.glob_ == '*/**/*' {
+		return MatchStrategy{
+			kind: .path_has_slash
+		}
+	} else if lit := pat.basename_literal() {
 		return MatchStrategy{
 			kind:  .basename_literal
 			value: lit
+		}
+	} else if prefix := pat.basename_prefix() {
+		return MatchStrategy{
+			kind:  .basename_prefix
+			value: prefix
+		}
+	} else if suffix := pat.basename_suffix() {
+		return MatchStrategy{
+			kind:  .basename_suffix
+			value: suffix
 		}
 	} else if lit := pat.literal() {
 		return MatchStrategy{
@@ -476,6 +493,44 @@ fn (g Glob) basename_literal() ?string {
 			return none
 		}
 		lit += tok.ch.str()
+	}
+	return lit
+}
+
+fn (g Glob) basename_prefix() ?string {
+	tokens := g.basename_tokens() or { return none }
+	if tokens.len < 2 || tokens[tokens.len - 1].kind != .zero_or_more {
+		return none
+	}
+	mut lit := ''
+	for i := 0; i < tokens.len - 1; i++ {
+		tok := tokens[i]
+		if tok.kind != .literal {
+			return none
+		}
+		lit += tok.ch.str()
+	}
+	if lit == '' {
+		return none
+	}
+	return lit
+}
+
+fn (g Glob) basename_suffix() ?string {
+	tokens := g.basename_tokens() or { return none }
+	if tokens.len < 2 || tokens[0].kind != .zero_or_more {
+		return none
+	}
+	mut lit := ''
+	for i := 1; i < tokens.len; i++ {
+		tok := tokens[i]
+		if tok.kind != .literal {
+			return none
+		}
+		lit += tok.ch.str()
+	}
+	if lit == '' {
+		return none
 	}
 	return lit
 }
@@ -1003,6 +1058,14 @@ fn glob_matches_candidate[^a](glob Glob, candidate Candidate[^a]) bool {
 		candidate.path_
 	}
 	return glob_match_tokens(glob.tokens.tokens, glob.opts, path.runes())
+}
+
+fn glob_matches_candidate_runes[^a](glob Glob, candidate Candidate[^a], text []rune) bool {
+	if glob.opts.case_insensitive {
+		path := candidate.path_.to_lower()
+		return glob_match_tokens(glob.tokens.tokens, glob.opts, path.runes())
+	}
+	return glob_match_tokens(glob.tokens.tokens, glob.opts, text)
 }
 
 fn glob_match_tokens(tokens []Token, opts GlobOptions, text []rune) bool {

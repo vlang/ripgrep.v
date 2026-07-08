@@ -247,11 +247,11 @@ fn DirEntryRaw.from_path(depth int, path string, link bool) !DirEntryRaw {
 }
 
 fn DirEntryRaw.from_child(depth int, parent_path string, name string) !DirEntryRaw {
-	return DirEntryRaw.from_path(depth, os.join_path(parent_path, name), false)
+	return DirEntryRaw.from_path(depth, join_child_path(parent_path, name), false)
 }
 
 fn DirEntryRaw.from_child_known(depth int, parent_path string, name string, ty EntryFileType) DirEntryRaw {
-	path := os.join_path(parent_path, name)
+	path := join_child_path(parent_path, name)
 	return DirEntryRaw{
 		path:              path.to_owned()
 		file_name_value:   name.to_owned()
@@ -265,6 +265,19 @@ fn DirEntryRaw.from_child_known(depth int, parent_path string, name string, ty E
 		}
 		ino_value:         u64(0)
 	}
+}
+
+fn join_child_path(parent_path string, name string) string {
+	$if windows {
+		return os.join_path(parent_path, name)
+	}
+	if parent_path == '' {
+		return name.to_owned()
+	}
+	if parent_path[parent_path.len - 1] == `/` {
+		return parent_path + name
+	}
+	return parent_path + '/' + name
 }
 
 // Result item produced by the V walk APIs.
@@ -1139,6 +1152,9 @@ fn target_is_dir(path string) bool {
 }
 
 fn sort_children(mut children []DirChild, parent_path string, has_name_cmp bool, name_cmp NameComparator, has_path_cmp bool, path_cmp PathComparator) {
+	if !has_name_cmp && !has_path_cmp {
+		return
+	}
 	for i := 0; i < children.len; i++ {
 		for j := i + 1; j < children.len; j++ {
 			mut cmp := 0

@@ -946,6 +946,11 @@ fn file_needs_transcoding(config Config, mut file os.File, path string, has_path
 	if !config.bom_sniffing {
 		return false
 	}
+	$if !windows {
+		if has_path {
+			return file_has_bom_at(mut file, i64(0))
+		}
+	}
 	if has_path {
 		return file_has_bom_at_current(mut file)
 	}
@@ -960,13 +965,19 @@ fn file_has_bom(mut file os.File) bool {
 
 fn file_has_bom_at_current(mut file os.File) bool {
 	pos := file.tell() or { return false }
+	return file_has_bom_at(mut file, i64(pos))
+}
+
+fn file_has_bom_at(mut file os.File, pos i64) bool {
 	$if windows {
 		// V-specific: the Windows port still needs a positioned-read helper
 		// before bare `search_file` can sniff a BOM without moving the cursor.
+		_ = file
+		_ = pos
 		return false
 	} $else {
 		mut prefix := []u8{len: 3}
-		nread := C.pread(file.fd, prefix.data, u64(prefix.len), i64(pos))
+		nread := C.pread(file.fd, prefix.data, u64(prefix.len), pos)
 		if nread <= 0 {
 			return false
 		}

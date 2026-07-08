@@ -286,7 +286,7 @@ pub fn (mut stream StandardStream) write(buf []u8) !int {
 
 pub fn (mut stream StandardStream) flush() ! {
 	if stream.buffer.len > 0 {
-		buffer := stream.buffer.clone()
+		buffer := stream.buffer
 		stream.buffer = []u8{}
 		stream.write_direct(buffer)!
 	}

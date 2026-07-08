@@ -244,14 +244,22 @@ fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
-	candidate := gitignore_path_for_matching(path)
-	gi.set.matches_into(candidate, mut matches)
-	for idx in 0 .. matches.len {
-		i := int(matches[matches.len - 1 - idx])
+	candidate := gitignore_path_for_matching_if_needed(path)
+	gi.set.matches_into_unsorted(candidate, mut matches)
+	mut best := -1
+	for matched in matches {
+		i := int(matched)
+		if i <= best {
+			continue
+		}
 		glob := &gi.globs[i]
 		if glob.is_only_dir() && !is_dir {
 			continue
 		}
+		best = i
+	}
+	if best >= 0 {
+		glob := &gi.globs[best]
 		return if glob.is_whitelist() {
 			Match[GitignoreGlobRef[^a]]{
 				kind:      .whitelist
@@ -277,16 +285,19 @@ fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool
 /// gitignore matcher.
 fn (gi &Gitignore) strip(path string) string {
 	mut stripped := path
-	if p := gitignore_strip_prefix_opt('./', stripped) {
-		stripped = p
+	if stripped.starts_with('./') {
+		stripped = stripped[2..]
 	}
-	if gi.root != '.' && !gitignore_is_file_name(stripped) {
-		if p := gitignore_strip_prefix_opt(gi.root, stripped) {
-			stripped = p
-			if p2 := gitignore_strip_prefix_opt('/', stripped) {
-				stripped = p2
+	if gi.root != '' && gi.root != '.' {
+		if stripped.starts_with(gi.root) {
+			stripped = stripped[gi.root.len..]
+			if stripped.starts_with('/') {
+				stripped = stripped[1..]
 			}
 		}
+	}
+	$if !windows {
+		return stripped
 	}
 	return gitignore_path_for_matching(stripped)
 }
@@ -309,7 +320,7 @@ mut:
 /// to the *directory* containing a `.gitignore` file.
 pub fn GitignoreBuilder.new(root string) GitignoreBuilder {
 	mut path := gitignore_path_for_matching(root)
-	if stripped := gitignore_strip_prefix_opt('./', path) {
+	if stripped := gitignore_strip_prefix_opt('./', path.clone()) {
 		path = stripped
 	}
 	return GitignoreBuilder{
@@ -678,6 +689,43 @@ fn gitignore_path_for_matching(path string) string {
 		normalized = normalized.replace(os.path_separator.str(), '/')
 	}
 	return normalized
+}
+
+fn gitignore_path_for_matching_if_needed(path string) string {
+	$if !windows {
+		if !gitignore_path_needs_normalization(path) {
+			return path
+		}
+	}
+	return gitignore_path_for_matching(path)
+}
+
+fn gitignore_path_needs_normalization(path string) bool {
+	if path == '' {
+		return false
+	}
+	mut component_start := 0
+	for i := 0; i <= path.len; i++ {
+		if i < path.len && path[i] != `/` {
+			continue
+		}
+		if i == component_start {
+			if i == 0 {
+				component_start = i + 1
+				continue
+			}
+			return true
+		}
+		component_len := i - component_start
+		if component_len == 1 && path[component_start] == `.` {
+			return true
+		}
+		if component_len == 2 && path[component_start] == `.` && path[component_start + 1] == `.` {
+			return true
+		}
+		component_start = i + 1
+	}
+	return false
 }
 
 fn gitignore_glob_match_runes(pattern []rune, pi int, text []rune, ti int) bool {

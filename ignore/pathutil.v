@@ -63,6 +63,10 @@ fn is_hidden(path string) bool {
 	return false
 }
 
+fn is_hidden_file_name(name string) bool {
+	return name.len > 0 && name[0] == `.` && name != '.' && name != '..'
+}
+
 fn path_components(path string) []string {
 	if path == '' {
 		return []string{}

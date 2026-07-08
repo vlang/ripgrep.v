@@ -705,21 +705,13 @@ fn find_byte_literal_index(haystack []u8, literal []u8, at usize) ?usize {
 		return none
 	}
 	if literal.len >= 8 {
-		return find_byte_literal_memchr(haystack, literal, at)
+		return find_byte_literal_memmem(haystack, literal, at)
 	}
 	if literal.len >= 5 {
 		return find_byte_literal_bmh(haystack, literal, at)
 	}
 	$if !windows {
-		unsafe {
-			base := voidptr(&haystack[at])
-			found := C.memmem(base, usize(haystack.len) - at, voidptr(&literal[0]),
-				usize(literal.len))
-			if isnil(found) {
-				return none
-			}
-			return at + (usize(found) - usize(base))
-		}
+		return find_byte_literal_memmem(haystack, literal, at)
 	} $else {
 		mut i := int(at)
 		for i + literal.len <= haystack.len {
@@ -736,6 +728,22 @@ fn find_byte_literal_index(haystack []u8, literal []u8, at usize) ?usize {
 			i++
 		}
 		return none
+	}
+}
+
+fn find_byte_literal_memmem(haystack []u8, literal []u8, at usize) ?usize {
+	$if windows {
+		return find_byte_literal_bmh(haystack, literal, at)
+	} $else {
+		unsafe {
+			base := voidptr(&haystack[at])
+			found := C.memmem(base, usize(haystack.len) - at, voidptr(&literal[0]),
+				usize(literal.len))
+			if isnil(found) {
+				return none
+			}
+			return at + (usize(found) - usize(base))
+		}
 	}
 }
 
