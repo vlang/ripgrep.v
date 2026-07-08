@@ -830,6 +830,13 @@ pub fn (args HiArgs) has_sort() bool {
 	return false
 }
 
+/// Returns true when the requested sort cannot be satisfied by traversal
+/// order and therefore requires collecting all haystacks before searching.
+pub fn (args HiArgs) sort_requires_buffering() bool {
+	sort := args.sort or { return false }
+	return sort.kind != .path || sort.reverse
+}
+
 /// Returns a stats object if the user requested that ripgrep keep track
 /// of various metrics during a search.
 ///
@@ -898,11 +905,7 @@ pub fn (args HiArgs) walk_builder() !ignore.WalkBuilder {
 		for path in args.ignore_file {
 			has_err, err := builder.add_ignore(path)
 			if has_err {
-				// V-specific: the translated flags module cannot import the
-				// parent `core` module when compiled directly with V2 tests.
-				// Preserve the non-fatal behavior here; the message hook will be
-				// restored when the crate-level module layout is translated.
-				_ = err
+				core.ignore_message(err.msg())
 			}
 		}
 	}
@@ -1457,10 +1460,7 @@ fn sort_key_for_haystack(hay &core.Haystack, kind SortModeKind) ?i64 {
 			return stat.atime
 		}
 		.created {
-			// V-specific: V's portable `os.Stat` surface exposes status-change
-			// time here, not creation time. `SortMode.supported` is where this
-			// can be tightened once birth time is available from the local V stdlib.
-			return stat.ctime
+			return creation_time_for_path(*hay.path())
 		}
 	}
 }

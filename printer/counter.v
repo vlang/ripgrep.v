@@ -34,7 +34,7 @@ pub fn (mut w CounterWriter[W]) reset_count() {
 
 /// Return a mutable reference to the underlying writer.
 pub fn (mut w CounterWriter[W]) get_mut() &W {
-	return unsafe { &w.wtr }
+	return &w.wtr
 }
 
 pub fn (mut w CounterWriter[W]) write(buf []u8) !int {

@@ -5,6 +5,8 @@ import os
 import strings
 import time
 
+#include <errno.h>
+
 enum CommandErrorKind {
 	io
 	stderr
@@ -75,6 +77,8 @@ pub mut:
 	has_work_folder bool
 	env             map[string]string
 	has_env         bool
+	stdin_path      string
+	has_stdin_path  bool
 }
 
 /// Create a new command that runs `program`.
@@ -122,6 +126,13 @@ pub fn (mut command Command) envs(envs map[string]string) &Command {
 	return &command
 }
 
+/// Use the file at `path` as the command's stdin.
+pub fn (mut command Command) stdin_path(path string) &Command {
+	command.stdin_path = path.to_owned()
+	command.has_stdin_path = true
+	return &command
+}
+
 /// Configures and builds a streaming reader for process output.
 pub struct CommandReaderBuilder implements IClone {
 mut:
@@ -150,6 +161,11 @@ pub fn (builder CommandReaderBuilder) clone() CommandReaderBuilder {
 /// If there was a problem spawning the given command, then its error is
 /// returned.
 pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
+	if command.has_stdin_path {
+		$if !windows {
+			return builder.build_with_stdin_path(command)
+		}
+	}
 	mut process := os.new_process(command.program)
 	process.set_args(command.args.clone())
 	if command.has_work_folder {
@@ -164,14 +180,153 @@ pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 		process.close()
 		return error(CommandError.io(error(process.err)).msg())
 	}
+	if command.has_stdin_path {
+		builder.write_buffered_stdin(mut process, command.stdin_path)!
+	}
 	stderr := if builder.async_stderr {
 		StderrReader.new_async()
 	} else {
 		StderrReader.sync()
+		}
+		return CommandReader{
+			process:     process
+			has_process: true
+			stderr:      stderr
+		}
 	}
-	return CommandReader{
-		process: process
-		stderr:  stderr
+
+fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !CommandReader {
+	_ = builder
+	mut stdin_file := os.open(command.stdin_path) or { return error(CommandError.io(err).msg()) }
+	mut stdout_pipe := os.pipe() or {
+		stdin_file.close()
+		return error(CommandError.io(err).msg())
+	}
+	mut stderr_pipe := os.pipe() or {
+		stdin_file.close()
+		stdout_pipe.close()
+		return error(CommandError.io(err).msg())
+	}
+	env := command_environment(command)
+	program := command_program_path(command, env) or {
+		stdin_file.close()
+		stdout_pipe.close()
+		stderr_pipe.close()
+		return error(CommandError.io(err).msg())
+	}
+	pid := os.fork()
+	if pid < 0 {
+		stdin_file.close()
+		stdout_pipe.close()
+		stderr_pipe.close()
+		return error(CommandError.io(error('fork failed')).msg())
+	}
+	if pid == 0 {
+		command_exec_child(command, program, env, stdin_file.fd, stdout_pipe.write_fd,
+			stderr_pipe.write_fd, stdout_pipe.read_fd, stderr_pipe.read_fd)
+		exit(1)
+	}
+	stdin_file.close()
+	os.fd_close(stdout_pipe.write_fd)
+	stdout_pipe.write_fd = -1
+	os.fd_close(stderr_pipe.write_fd)
+	stderr_pipe.write_fd = -1
+	mut process := os.new_process(command.program)
+	process.pid = pid
+	process.status = .running
+	process.code = -1
+	process.args = command.args.clone()
+	process.work_folder = if command.has_work_folder { command.work_folder.clone() } else { '' }
+	process.env_is_custom = true
+	process.env = env.clone()
+	process.use_stdio_ctl = true
+	process.stdio_fd = [-1, stdout_pipe.read_fd, stderr_pipe.read_fd]!
+	stderr := if builder.async_stderr {
+		StderrReader.new_async()
+	} else {
+		StderrReader.sync()
+		}
+		return CommandReader{
+			process:     process
+			has_process: true
+			stderr:      stderr
+		}
+	}
+
+fn (builder CommandReaderBuilder) write_buffered_stdin(mut process os.Process, path string) ! {
+	_ = builder
+	bytes := os.read_bytes(path) or { return error(CommandError.io(err).msg()) }
+	process.stdin_write(bytes.bytestr())
+	close_process_pipe(mut process, .stdin)
+}
+
+fn command_environment(command Command) []string {
+	envs := if command.has_env { command.env.clone() } else { os.environ() }
+	mut entries := []string{}
+	for key, value in envs {
+		entries << '${key}=${value}'
+	}
+	return entries
+}
+
+fn command_env_value(env []string, name string) ?string {
+	prefix := '${name}='
+	for entry in env {
+		if entry.starts_with(prefix) {
+			return entry[prefix.len..]
+		}
+	}
+	return none
+}
+
+fn command_program_path(command Command, env []string) !string {
+	program := command.program
+	if os.is_abs_path(program) {
+		return program.to_owned()
+	}
+	if program.contains(os.path_separator) {
+		if command.has_work_folder {
+			return os.abs_path(program)
+		}
+		return program.to_owned()
+	}
+	path_env := command_env_value(env, 'PATH') or { return os.find_abs_path_of_executable(program) }
+	for dir in path_env.split(os.path_delimiter) {
+		candidate := os.join_path(dir, program)
+		if os.is_file(candidate) && os.is_executable(candidate) {
+			return candidate
+		}
+	}
+	return os.find_abs_path_of_executable(program)
+}
+
+fn command_exec_child(command Command, program string, env []string, stdin_fd int, stdout_write_fd int, stderr_write_fd int, stdout_read_fd int, stderr_read_fd int) {
+	os.fd_close(stdout_read_fd)
+	os.fd_close(stderr_read_fd)
+	if os.fd_dup2(stdin_fd, 0) == -1 {
+		eprintln(os.posix_get_error_msg(C.errno))
+		exit(1)
+	}
+	if os.fd_dup2(stdout_write_fd, 1) == -1 {
+		eprintln(os.posix_get_error_msg(C.errno))
+		exit(1)
+	}
+	if os.fd_dup2(stderr_write_fd, 2) == -1 {
+		eprintln(os.posix_get_error_msg(C.errno))
+		exit(1)
+	}
+	os.fd_close(stdin_fd)
+	os.fd_close(stdout_write_fd)
+	os.fd_close(stderr_write_fd)
+	if command.has_work_folder {
+		os.chdir(command.work_folder) or {
+			eprintln(err.msg())
+			exit(1)
+		}
+	}
+	os.execve(program, command.args, env) or {
+		eprintln(err.msg())
+		exit(1)
 	}
 }
 
@@ -226,7 +381,8 @@ pub fn (mut builder CommandReaderBuilder) async_stderr(yes bool) &CommandReaderB
 /// ```
 pub struct CommandReader {
 mut:
-	process       &os.Process = unsafe { nil }
+	process       os.Process
+	has_process   bool
 	stderr        StderrReader
 	stdout_buffer []u8
 	stdout_pos    int
@@ -276,7 +432,7 @@ pub fn (mut reader CommandReader) close() ! {
 		return
 	}
 	reader.closed = true
-	if reader.process == unsafe { nil } {
+	if !reader.has_process {
 		return
 	}
 	// Dropping stdout closes the underlying file descriptor, which should
@@ -286,10 +442,12 @@ pub fn (mut reader CommandReader) close() ! {
 	reader.process.wait()
 	if reader.process.code == 0 {
 		reader.process.close()
+		reader.has_process = false
 		return
 	}
 	err := reader.read_stderr_to_end()
 	reader.process.close()
+	reader.has_process = false
 	// In the specific case where we haven't consumed the full data
 	// from the child process, then closing stdout above results in
 	// a pipe signal being thrown in most cases. But I don't think
@@ -312,7 +470,7 @@ pub fn (mut reader CommandReader) read(mut buf []u8) !int {
 	if buf.len == 0 {
 		return 0
 	}
-	if reader.closed || reader.process == unsafe { nil } {
+	if reader.closed || !reader.has_process {
 		return io.Eof{}
 	}
 	if reader.stdout_pos < reader.stdout_buffer.len {
@@ -357,21 +515,25 @@ fn (mut reader CommandReader) read_from_stdout_buffer(mut buf []u8) int {
 }
 
 fn (mut reader CommandReader) close_stdout() {
-	if reader.stdout_closed || reader.process == unsafe { nil } {
+	if reader.stdout_closed || !reader.has_process {
 		return
 	}
-	$if !windows {
-		stdout_idx := int(os.ChildProcessPipeKind.stdout)
-		if reader.process.stdio_fd[stdout_idx] != -1 {
-			os.fd_close(reader.process.stdio_fd[stdout_idx])
-			reader.process.stdio_fd[stdout_idx] = -1
-		}
-	}
+	close_process_pipe(mut reader.process, .stdout)
 	reader.stdout_closed = true
 }
 
+fn close_process_pipe(mut process os.Process, kind os.ChildProcessPipeKind) {
+	$if !windows {
+		idx := int(kind)
+		if process.stdio_fd[idx] != -1 {
+			os.fd_close(process.stdio_fd[idx])
+			process.stdio_fd[idx] = -1
+		}
+	}
+}
+
 fn (mut reader CommandReader) read_stderr_available() {
-	if reader.process == unsafe { nil } || reader.stderr.done {
+	if !reader.has_process || reader.stderr.done {
 		return
 	}
 	for {
@@ -391,7 +553,7 @@ fn (mut reader CommandReader) read_stderr_available() {
 /// If there was a problem reading stderr itself, then this returns an I/O
 /// command error.
 fn (mut reader CommandReader) read_stderr_to_end() CommandError {
-	if reader.stderr.done || reader.process == unsafe { nil } {
+	if reader.stderr.done || !reader.has_process {
 		return CommandError.stderr(reader.stderr.bytes)
 	}
 	reader.read_stderr_available()

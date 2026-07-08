@@ -12,6 +12,8 @@ pub enum MatchKind {
 	whitelist
 }
 
+// V-specific: Rust represents this as `enum Match<T>`. V generic enum payloads
+// are represented explicitly here with a tag plus an optional payload slot.
 pub struct Match[T] {
 	kind      MatchKind = .none
 	value     T
@@ -60,6 +62,7 @@ pub fn (m Match[T]) invert() Match[T] {
 			}
 		}
 	}
+
 	return Match[T]{}
 }
 

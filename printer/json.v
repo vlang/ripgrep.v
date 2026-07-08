@@ -212,7 +212,7 @@ pub fn (sink JSONSink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
 /// Return a reference to the stats produced by the printer for all
 /// searches executed on this sink.
 pub fn (sink &^a JSONSink[^p, ^s, W]) stats[^a, ^p, ^s]() &^a Stats {
-	return unsafe { &sink.stats_ }
+	return &sink.stats_
 }
 
 fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ searcher.Searcher, bytes []u8, range matcher.Match) ! {

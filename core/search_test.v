@@ -132,8 +132,12 @@ fn test_search_worker_search_reader_command() {
 fn test_search_worker_preprocessor() {
 	path := os.join_path(os.temp_dir(), 'ripgrep_v_search_worker_pre_${os.getpid()}.txt')
 	os.write_file(path, 'hay\nneedle\nstack\n') or { panic(err) }
+	pre := os.join_path(os.temp_dir(), 'ripgrep_v_search_worker_pre_${os.getpid()}.sh')
+	os.write_file(pre, '#!/bin/sh\ncat\n') or { panic(err) }
+	os.chmod(pre, 0o755) or { panic(err) }
 	defer {
 		os.rm(path) or {}
+		os.rm(pre) or {}
 	}
 
 	mut walk := ignore.WalkBuilder.new(path).build()
@@ -143,7 +147,7 @@ fn test_search_worker_preprocessor() {
 	standard := printer.StandardBuilder.new().build(BufferWriter{})
 	printer_ := Printer.standard(standard)
 	mut builder := SearchWorkerBuilder.new()
-	builder.preprocessor('cat') or { panic(err.msg()) }
+	builder.preprocessor(pre) or { panic(err.msg()) }
 	mut worker := builder.build(PatternMatcher.rust_regex(matcher_), searcher.Searcher.new(), printer_)
 	result := worker.search(&hay) or { panic(err.msg()) }
 

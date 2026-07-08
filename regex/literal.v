@@ -106,6 +106,7 @@ fn (lits InnerLiterals) one_regex() !MaybeRegex {
 	return MaybeRegex.some(regex)
 }
 
+// V-specific owned return shape for Rust's `Result<Option<Regex>, Error>`.
 struct MaybeRegex {
 	has_value bool
 	value     pcre.Regex
@@ -936,6 +937,7 @@ fn (token PatternToken) to_tseq() TSeq {
 	}
 }
 
+// V-specific parser helper for the port's string-based HIR analysis.
 struct Quantifier {
 	min     u64
 	has_max bool

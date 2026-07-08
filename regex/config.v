@@ -435,6 +435,7 @@ fn ban_check(pattern string, byte u8) ! {
 	}
 }
 
+// V-specific parser helper for class atoms in the port's local pattern checks.
 struct ClassAtom {
 	set        []bool
 	single     u8

@@ -51,6 +51,23 @@ fn test_case_smart() {
 	assert !matcher.is_match(upper_matcher, 'ABC'.bytes())!
 }
 
+fn test_extended() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.extended(true)
+	matcher_ := builder.build(r'a b c') or { panic(err) }
+	assert matcher.is_match(matcher_, 'abc'.bytes())!
+}
+
+fn test_required_jit_errors_when_unavailable() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.jit(true)
+	_ := builder.build(r'abc') or {
+		assert err.msg().contains('PCRE2 JIT is not available')
+		return
+	}
+	panic('expected required JIT to fail when unavailable')
+}
+
 // Test that finding candidate lines works as expected.
 fn test_candidate_lines() {
 	matcher_ := RegexMatcherBuilder.new().build(r'\wfoo\s') or { panic(err) }

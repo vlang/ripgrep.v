@@ -50,7 +50,7 @@ pub fn parse_result_err[T](err string) ParseResult[T] {
 
 /// Parse CLI arguments and convert then to their high level representation.
 pub fn parse() ParseResult[HiArgs] {
-	rawargs := if os.args.len > 1 { os.args[1..].clone() } else { []string{} }
+	rawargs := raw_os_args()
 	return parse_from_raw(rawargs)
 }
 
@@ -80,8 +80,16 @@ fn parse_from_raw(rawargs []string) ParseResult[HiArgs] {
 /// This will also set one-time global state flags, such as the log level and
 /// whether messages should be printed.
 fn parse_low() ParseResult[LowArgs] {
-	rawargs := if os.args.len > 1 { os.args[1..].clone() } else { []string{} }
+	rawargs := raw_os_args()
 	return parse_low_from_raw(rawargs)
+}
+
+fn raw_os_args() []string {
+	mut rawargs := []string{cap: if os.args.len > 1 { os.args.len - 1 } else { 0 }}
+	for i in 1 .. os.args.len {
+		rawargs << os.args[i].to_owned()
+	}
+	return rawargs
 }
 
 fn parse_low_from_raw(rawargs []string) ParseResult[LowArgs] {
@@ -116,11 +124,14 @@ fn parse_low_from_raw(rawargs []string) ParseResult[LowArgs] {
 fn set_log_levels(low LowArgs) {
 	core.set_messages(!low.no_messages)
 	core.set_ignore_messages(!low.no_ignore_messages)
-	// V-specific: the translated logger does not expose global level filtering
-	// yet, so `--debug` and `--trace` are parsed but do not change a global
-	// log max-level here.
-	_ = low.has_logging
-	_ = low.logging
+	if !low.has_logging {
+		core.set_log_level(.off)
+		return
+	}
+	match low.logging {
+		.debug { core.set_log_level(.debug) }
+		.trace { core.set_log_level(.trace) }
+	}
 }
 
 /// Possibly return a message suggesting flags similar in the name to the one

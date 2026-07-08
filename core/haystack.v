@@ -66,7 +66,7 @@ fn (builder HaystackBuilder) build(dent ignore.DirEntry) ?Haystack {
 	// directory. Otherwise, emitting messages for directories is just
 	// noisy.
 	if !hay.is_dir() {
-		_ = hay
+		debug_message('rg::haystack', '${*hay.path()}: ignored because it is not a file')
 	}
 	return none
 }

@@ -1,13 +1,31 @@
-@[has_globals]
 module core
 
 import sync.stdatomic
 
-__global (
-	messages_state        &stdatomic.AtomicVal[bool] = unsafe { nil }
-	ignore_messages_state &stdatomic.AtomicVal[bool] = unsafe { nil }
-	errored_state         &stdatomic.AtomicVal[bool] = unsafe { nil }
-)
+$if windows {
+	#include <io.h>
+}
+
+$if !windows {
+	#include <unistd.h>
+}
+
+#include <errno.h>
+
+const messages_errno_eintr = 4
+const messages_errno_epipe = 32
+
+$if windows {
+	fn C._write(fd int, buf voidptr, count int) int
+}
+
+$if !windows {
+	fn C.write(fd int, buf voidptr, count int) int
+}
+
+const messages_state = stdatomic.new_atomic(false)
+const ignore_messages_state = stdatomic.new_atomic(false)
+const errored_state = stdatomic.new_atomic(false)
 
 /*
 This module defines some macros and some light shared mutable state.
@@ -26,13 +44,50 @@ indicating that at least one error occurred. When ripgrep exits, this flag is
 consulted to determine what the exit status ought to be.
 */
 
-/// Like eprintln, but locks stdout to prevent interleaving lines.
+/// Like eprintln, but flushes stdout before writing stderr.
 ///
-/// This locks stdout, not stderr, even though this prints to stderr. This
-/// avoids the appearance of interleaving output when stdout and stderr both
-/// correspond to a tty.
+/// V-specific: the current port writes directly to stderr so broken pipes can
+/// be detected, but it does not expose Rust's stdout locking behavior here.
 pub fn eprintln_locked(msg string) {
-	eprintln('rg: ${msg}')
+	write_stderr_line('rg: ${msg}')
+}
+
+fn write_stderr_line(msg string) {
+	flush_stdout()
+	write_stderr_all(msg.bytes())
+	write_stderr_all('\n'.bytes())
+}
+
+fn write_stderr_all(buf []u8) {
+	mut written_total := 0
+	for written_total < buf.len {
+		ptr := unsafe { voidptr(usize(buf.data) + usize(written_total)) }
+		C.errno = 0
+		written := $if windows {
+			int(C._write(2, ptr, buf.len - written_total))
+		} $else {
+			int(C.write(2, ptr, buf.len - written_total))
+		}
+		if written < 0 {
+			mut code := int(C.errno)
+			$if !windows {
+				if code == 0 {
+					code = messages_errno_epipe
+				}
+			}
+			if code == messages_errno_eintr {
+				continue
+			}
+			if code == messages_errno_epipe {
+				exit(0)
+			}
+			return
+		}
+		if written == 0 {
+			return
+		}
+		written_total += written
+	}
 }
 
 /// Emit a non-fatal error message, unless messages were disabled.
@@ -98,26 +153,14 @@ pub fn set_errored() {
 	errored_state_ref().store(true)
 }
 
-// V-specific: the current ownership frontend can leave pointer-valued grouped
-// global initializers unset in the root executable, so allocate this state on
-// first use while preserving the Rust atomic representation.
 fn messages_state_ref() &stdatomic.AtomicVal[bool] {
-	if messages_state == unsafe { nil } {
-		messages_state = stdatomic.new_atomic(false)
-	}
 	return messages_state
 }
 
 fn ignore_messages_state_ref() &stdatomic.AtomicVal[bool] {
-	if ignore_messages_state == unsafe { nil } {
-		ignore_messages_state = stdatomic.new_atomic(false)
-	}
 	return ignore_messages_state
 }
 
 fn errored_state_ref() &stdatomic.AtomicVal[bool] {
-	if errored_state == unsafe { nil } {
-		errored_state = stdatomic.new_atomic(false)
-	}
 	return errored_state
 }

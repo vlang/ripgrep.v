@@ -70,3 +70,50 @@ fn test_buffer_writer_prints_separator_between_non_empty_buffers() {
 	n := pipe.read(mut out) or { panic(err.msg()) }
 	assert out[..n].bytestr() == 'one--two'
 }
+
+fn test_buffer_writer_reports_closed_fd_error() {
+	mut pipe := os.pipe() or { panic(err.msg()) }
+	os.fd_close(pipe.write_fd)
+	defer {
+		os.fd_close(pipe.read_fd)
+	}
+	mut wtr := BufferWriter{
+		color_choice: .never
+		fd:           pipe.write_fd
+		separator:    none
+		printed:      false
+	}
+	mut buffer := wtr.buffer()
+	buffer.write('data'.bytes()) or { panic(err.msg()) }
+	wtr.print(&buffer) or {
+		assert err.code() != 0
+		assert !is_broken_pipe_error(err)
+		return
+	}
+	panic('expected write to closed fd to fail')
+}
+
+fn test_buffer_writer_reports_broken_pipe() {
+	$if windows {
+		return
+	}
+	os.signal_ignore(.pipe)
+	mut pipe := os.pipe() or { panic(err.msg()) }
+	os.fd_close(pipe.read_fd)
+	defer {
+		os.fd_close(pipe.write_fd)
+	}
+	mut wtr := BufferWriter{
+		color_choice: .never
+		fd:           pipe.write_fd
+		separator:    none
+		printed:      false
+	}
+	mut buffer := wtr.buffer()
+	buffer.write('data'.bytes()) or { panic(err.msg()) }
+	wtr.print(&buffer) or {
+		assert is_broken_pipe_error(err)
+		return
+	}
+	panic('expected write to broken pipe to fail')
+}

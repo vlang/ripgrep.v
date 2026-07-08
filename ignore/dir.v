@@ -180,7 +180,8 @@ mut:
 	types Types
 	/// The absolute base path of this matcher. Populated only if parent
 	/// directories are added.
-	absolute_base ?string
+	absolute_base_value string
+	has_absolute_base  bool
 	/// The directory that gitignores should be interpreted relative to.
 	///
 	/// Usually this is the directory containing the gitignore file. But in
@@ -207,7 +208,7 @@ pub fn (ig &^a Ignore) path[^a]() &^a string {
 	if ig.nodes.len == 0 {
 		return &empty_ignore_string
 	}
-	return unsafe { &ig.nodes[ig.nodes.len - 1].dir }
+	return &ig.nodes[ig.nodes.len - 1].dir
 }
 
 pub fn (ig &Ignore) is_root() bool {
@@ -234,22 +235,22 @@ pub fn (ig Ignore) parent() ?Ignore {
 ///
 /// Note that this can only be called on an `Ignore` matcher with no
 /// parents (i.e., `is_root` returns `true`). This will panic otherwise.
-pub fn (ig Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
+pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 	if !ig.opts.parents && !ig.opts.git_ignore && !ig.opts.git_exclude && !ig.opts.git_global {
-		return ig, false, IgnoreError{}
+		return ig.clone(), false, IgnoreError{}
 	}
 	if !ig.is_root() {
 		panic('Ignore.add_parents called on non-root matcher')
 	}
 	if !os.exists(path) {
-		return ig, false, IgnoreError{}
+		return ig.clone(), false, IgnoreError{}
 	}
 	absolute_base := os.real_path(path)
 	if absolute_base == '' {
-		return ig, false, IgnoreError{}
+		return ig.clone(), false, IgnoreError{}
 	}
 	mut errs := PartialErrorBuilder{}
-	mut built := ig
+	mut built := ig.clone()
 	for parent in ancestor_dirs(absolute_base) {
 		node, has_err, err := built.add_child_path(parent)
 		errs.maybe_push(has_err, err)
@@ -262,7 +263,8 @@ pub fn (ig Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 		} else {
 			false
 		}
-		next.absolute_base = ?string(absolute_base.to_owned())
+		next.absolute_base_value = absolute_base.to_owned()
+		next.has_absolute_base = true
 		next.nodes << absolute_node
 		next.has_ignore_rules = next.has_ignore_rules || ignore_node_has_rules(absolute_node)
 		next.has_git_parent = next.has_git_parent || absolute_node.has_git
@@ -280,9 +282,9 @@ pub fn (ig Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 /// returned if it exists.
 ///
 /// Note that all I/O errors are completely ignored.
-pub fn (ig Ignore) add_child(dir string) (Ignore, bool, IgnoreError) {
+pub fn (ig &Ignore) add_child(dir string) (Ignore, bool, IgnoreError) {
 	node, has_err, err := ig.add_child_path(dir)
-	mut next := ig
+	mut next := ig.clone()
 	next.nodes << node
 	next.has_ignore_rules = next.has_ignore_rules || ignore_node_has_rules(node)
 	next.has_git_parent = next.has_git_parent || node.has_git
@@ -295,7 +297,7 @@ fn ignore_node_has_rules(node IgnoreNode) bool {
 }
 
 /// Like add_child, but takes a full path and returns an IgnoreInner.
-fn (ig Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
+fn (ig &Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
 	check_vcs_dir := ig.opts.require_git && (ig.opts.git_ignore || ig.opts.git_exclude)
 	git_path := os.join_path(dir, '.git')
 	git_is_file := check_vcs_dir && os.is_file(git_path)
@@ -546,8 +548,8 @@ pub fn (ig &^a Ignore) parents[^a]() Parents[^a] {
 /// Returns the first absolute path of the first absolute parent, if
 /// one exists.
 fn (ig &^a Ignore) absolute_base[^a]() ?&^a string {
-	if ig.absolute_base != none {
-		return unsafe { &ig.absolute_base? }
+	if ig.has_absolute_base {
+		return &ig.absolute_base_value
 	}
 	return none
 }
@@ -565,7 +567,7 @@ pub fn (mut p Parents[^a]) next[^a]() ?&^a Ignore {
 	if p.index >= p.items.len {
 		return none
 	}
-	item := unsafe { &p.items[p.index] }
+	item := &p.items[p.index]
 	p.index++
 	return item
 }
@@ -661,7 +663,8 @@ pub fn (builder IgnoreBuilder) build_with_cwd(cwd string) Ignore {
 		has_git_parent:            false
 		overrides:                 builder.overrides
 		types:                     builder.types
-		absolute_base:             none_string()
+		absolute_base_value:       ''.to_owned()
+		has_absolute_base:         false
 		global_gitignores_relative_to: global_gitignores_relative_to
 		explicit_ignores:          builder.explicit_ignores.clone()
 		custom_ignore_filenames:   builder.custom_ignore_filenames.clone()

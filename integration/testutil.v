@@ -267,7 +267,8 @@ fn (mut cmd TestCommand) assert_err() {
 fn (mut cmd TestCommand) assert_exit_code(expected_code int) {
 	o := cmd.raw_output()
 	if o.code != expected_code {
-		panic(command_failure_message(cmd, o, 'expected exit code ${expected_code} but found ${o.code}'))
+		panic(command_failure_message(cmd, o,
+			'expected exit code ${expected_code} but found ${o.code}'))
 	}
 }
 
@@ -275,7 +276,8 @@ fn (mut cmd TestCommand) assert_exit_code(expected_code int) {
 fn (mut cmd TestCommand) assert_non_empty_stderr() {
 	o := cmd.raw_output()
 	if o.code == 0 || o.stderr.len == 0 {
-		panic(command_failure_message(cmd, o, 'command succeeded or stderr was empty but expected failure!'))
+		panic(command_failure_message(cmd, o,
+			'command succeeded or stderr was empty but expected failure!'))
 	}
 }
 
@@ -341,9 +343,8 @@ fn rg_binary() string {
 		return bin
 	}
 	out := os.join_path(os.temp_dir(), 'ripgrep_v_integration_rg')
-	source := os.join_path(@VMODROOT, 'rg', 'main.v')
-	if os.getenv_opt('RGV_REBUILD') == none && os.exists(out)
-		&& os.file_last_mod_unix(out) >= os.file_last_mod_unix(source) {
+	source := @VMODROOT
+	if should_use_cached_rg_binary(out) {
 		return out
 	}
 	vbin := if custom := os.getenv_opt('RGV_VBIN') {
@@ -355,14 +356,36 @@ fn rg_binary() string {
 	}
 	command := '${sh_quote(vbin)} -ownership -o ${sh_quote(out)} ${sh_quote(source)}'
 	result := os.execute(command)
-	if result.exit_code != 0 {
+	if result.exit_code != 0 || !os.exists(out) || os.file_size(out) == 0 {
 		panic('failed to build integration rg binary with `${command}`:\n${result.output}')
 	}
 	return out
 }
 
+fn should_use_cached_rg_binary(out string) bool {
+	if os.getenv_opt('RGV_REBUILD') != none || !os.exists(out) || os.file_size(out) == 0 {
+		return false
+	}
+	return os.file_last_mod_unix(out) >= newest_v_source_mtime(@VMODROOT)
+}
+
+fn newest_v_source_mtime(root string) i64 {
+	mut newest := i64(0)
+	os.walk(root, fn [mut newest] (entry string) {
+		if !entry.ends_with('.v') {
+			return
+		}
+		modified := os.file_last_mod_unix(entry)
+		if modified > newest {
+			newest = modified
+		}
+	})
+	return newest
+}
+
 fn temp_path(label string) string {
-	return os.join_path(os.temp_dir(), 'ripgrep_v_${label}_${os.getpid()}_${time.now().unix_nano()}')
+	return os.join_path(os.temp_dir(),
+		'ripgrep_v_${label}_${os.getpid()}_${time.now().unix_nano()}')
 }
 
 fn sh_quote(s string) string {

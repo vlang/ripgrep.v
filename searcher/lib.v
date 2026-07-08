@@ -292,8 +292,9 @@ fn mmap_file_size(mut file os.File, path string, has_path bool) ?usize {
 ///
 /// An `Encoding` will always be cheap to clone.
 pub struct Encoding implements IClone {
-	label string
-	kind  EncodingKind
+	label      string
+	kind       EncodingKind
+	iconv_name string
 }
 
 enum EncodingKind {
@@ -305,6 +306,7 @@ enum EncodingKind {
 	windows1252
 	shiftjis
 	eucjp
+	iconv
 }
 
 /// Create a new encoding for the specified label.
@@ -316,45 +318,143 @@ enum EncodingKind {
 /// returns an error.
 pub fn Encoding.new(label string) !Encoding {
 	normalized := label.to_lower()
-	kind, canonical := encoding_for_label(normalized) or {
+	kind, canonical, iconv_name := encoding_for_label(normalized) or {
 		return ConfigError.unknown_encoding(label.bytes())
 	}
 	return Encoding{
-		label: canonical.to_owned()
-		kind:  kind
+		label:      canonical.to_owned()
+		kind:       kind
+		iconv_name: iconv_name.to_owned()
 	}
 }
 
-fn encoding_for_label(label string) ?(EncodingKind, string) {
+fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 	match label {
 		'unicode-1-1-utf-8', 'unicode11utf8', 'unicode20utf8', 'utf-8', 'utf8', 'x-unicode20utf8' {
-			return EncodingKind.utf8, 'utf-8'
+			return EncodingKind.utf8, 'utf-8', ''
 		}
 		'utf-16', 'utf-16le', 'utf16le' {
-			return EncodingKind.utf16le, 'utf-16le'
+			return EncodingKind.utf16le, 'utf-16le', ''
 		}
 		'utf-16be', 'utf16be' {
-			return EncodingKind.utf16be, 'utf-16be'
+			return EncodingKind.utf16be, 'utf-16be', ''
 		}
 		'utf-32', 'utf-32le', 'utf32le' {
-			return EncodingKind.utf32le, 'utf-32le'
+			return EncodingKind.utf32le, 'utf-32le', ''
 		}
 		'utf-32be', 'utf32be' {
-			return EncodingKind.utf32be, 'utf-32be'
+			return EncodingKind.utf32be, 'utf-32be', ''
 		}
 		'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100', 'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252', 'x-cp1252' {
-			return EncodingKind.windows1252, 'windows-1252'
+			return EncodingKind.windows1252, 'windows-1252', ''
 		}
 		'csshiftjis', 'ms932', 'ms_kanji', 'shift-jis', 'shift_jis', 'sjis', 'windows-31j', 'x-sjis' {
-			return EncodingKind.shiftjis, 'Shift_JIS'
+			return EncodingKind.shiftjis, 'Shift_JIS', ''
 		}
 		'cseucpkdfmtjapanese', 'euc-jp', 'eucjp', 'x-euc-jp' {
-			return EncodingKind.eucjp, 'EUC-JP'
+			return EncodingKind.eucjp, 'EUC-JP', ''
 		}
 		else {
-			return none
+			return iconv_encoding_for_label(label)
 		}
 	}
+}
+
+fn iconv_encoding_for_label(label string) ?(EncodingKind, string, string) {
+	if label in ['866', 'cp866', 'csibm866', 'ibm866'] {
+		return EncodingKind.iconv, 'IBM866', 'IBM866'
+	}
+	if label in ['cp1250', 'windows-1250', 'x-cp1250'] {
+		return EncodingKind.iconv, 'windows-1250', 'WINDOWS-1250'
+	}
+	if label in ['cp1251', 'windows-1251', 'x-cp1251'] {
+		return EncodingKind.iconv, 'windows-1251', 'WINDOWS-1251'
+	}
+	if label in ['cp1253', 'windows-1253', 'x-cp1253'] {
+		return EncodingKind.iconv, 'windows-1253', 'WINDOWS-1253'
+	}
+	if label in ['cp1254', 'windows-1254', 'x-cp1254'] {
+		return EncodingKind.iconv, 'windows-1254', 'WINDOWS-1254'
+	}
+	if label in ['cp1255', 'windows-1255', 'x-cp1255'] {
+		return EncodingKind.iconv, 'windows-1255', 'WINDOWS-1255'
+	}
+	if label in ['cp1256', 'windows-1256', 'x-cp1256'] {
+		return EncodingKind.iconv, 'windows-1256', 'WINDOWS-1256'
+	}
+	if label in ['cp1257', 'windows-1257', 'x-cp1257'] {
+		return EncodingKind.iconv, 'windows-1257', 'WINDOWS-1257'
+	}
+	if label in ['cp1258', 'windows-1258', 'x-cp1258'] {
+		return EncodingKind.iconv, 'windows-1258', 'WINDOWS-1258'
+	}
+	if label in ['csisolatin2', 'iso-8859-2', 'iso-ir-101', 'iso8859-2', 'iso88592', 'iso_8859-2', 'iso_8859-2:1987', 'l2', 'latin2'] {
+		return EncodingKind.iconv, 'ISO-8859-2', 'ISO-8859-2'
+	}
+	if label in ['csisolatin3', 'iso-8859-3', 'iso-ir-109', 'iso8859-3', 'iso88593', 'iso_8859-3', 'iso_8859-3:1988', 'l3', 'latin3'] {
+		return EncodingKind.iconv, 'ISO-8859-3', 'ISO-8859-3'
+	}
+	if label in ['csisolatin4', 'iso-8859-4', 'iso-ir-110', 'iso8859-4', 'iso88594', 'iso_8859-4', 'iso_8859-4:1988', 'l4', 'latin4'] {
+		return EncodingKind.iconv, 'ISO-8859-4', 'ISO-8859-4'
+	}
+	if label in ['csisolatincyrillic', 'cyrillic', 'iso-8859-5', 'iso-ir-144', 'iso8859-5', 'iso88595', 'iso_8859-5', 'iso_8859-5:1988'] {
+		return EncodingKind.iconv, 'ISO-8859-5', 'ISO-8859-5'
+	}
+	if label in ['arabic', 'asmo-708', 'csiso88596e', 'csiso88596i', 'csisolatinarabic', 'ecma-114', 'iso-8859-6', 'iso-8859-6-e', 'iso-8859-6-i', 'iso-ir-127', 'iso8859-6', 'iso88596', 'iso_8859-6', 'iso_8859-6:1987'] {
+		return EncodingKind.iconv, 'ISO-8859-6', 'ISO-8859-6'
+	}
+	if label in ['csisolatingreek', 'ecma-118', 'elot_928', 'greek', 'greek8', 'iso-8859-7', 'iso-ir-126', 'iso8859-7', 'iso88597', 'iso_8859-7', 'iso_8859-7:1987', 'sun_eu_greek'] {
+		return EncodingKind.iconv, 'ISO-8859-7', 'ISO-8859-7'
+	}
+	if label in ['csiso88598e', 'csisolatinhebrew', 'hebrew', 'iso-8859-8', 'iso-8859-8-e', 'iso-ir-138', 'iso8859-8', 'iso88598', 'iso_8859-8', 'iso_8859-8:1988', 'visual'] {
+		return EncodingKind.iconv, 'ISO-8859-8', 'ISO-8859-8'
+	}
+	if label in ['csiso88598i', 'iso-8859-8-i', 'logical'] {
+		return EncodingKind.iconv, 'ISO-8859-8-I', 'ISO-8859-8'
+	}
+	if label in ['csisolatin5', 'iso-8859-9', 'iso-ir-148', 'iso8859-9', 'iso88599', 'iso_8859-9', 'iso_8859-9:1989', 'l5', 'latin5'] {
+		return EncodingKind.iconv, 'ISO-8859-9', 'ISO-8859-9'
+	}
+	if label in ['iso-8859-10', 'iso8859-10', 'iso885910', 'l6', 'latin6'] {
+		return EncodingKind.iconv, 'ISO-8859-10', 'ISO-8859-10'
+	}
+	if label in ['iso-8859-13', 'iso8859-13', 'iso885913'] {
+		return EncodingKind.iconv, 'ISO-8859-13', 'ISO-8859-13'
+	}
+	if label in ['iso-8859-14', 'iso8859-14', 'iso885914'] {
+		return EncodingKind.iconv, 'ISO-8859-14', 'ISO-8859-14'
+	}
+	if label in ['csisolatin9', 'iso-8859-15', 'iso8859-15', 'iso885915', 'iso_8859-15', 'l9'] {
+		return EncodingKind.iconv, 'ISO-8859-15', 'ISO-8859-15'
+	}
+	if label in ['iso-8859-16'] {
+		return EncodingKind.iconv, 'ISO-8859-16', 'ISO-8859-16'
+	}
+	if label in ['cskoi8r', 'koi', 'koi8', 'koi8-r', 'koi8_r'] {
+		return EncodingKind.iconv, 'KOI8-R', 'KOI8-R'
+	}
+	if label in ['koi8-ru', 'koi8-u'] {
+		return EncodingKind.iconv, 'KOI8-U', 'KOI8-U'
+	}
+	if label in ['big5', 'big5-hkscs', 'cn-big5', 'csbig5', 'x-x-big5'] {
+		return EncodingKind.iconv, 'Big5', 'BIG5'
+	}
+	if label in ['chinese', 'csgb2312', 'csiso58gb231280', 'gb2312', 'gb_2312', 'gb_2312-80', 'gbk', 'iso-ir-58', 'x-gbk'] {
+		return EncodingKind.iconv, 'GBK', 'GBK'
+	}
+	if label in ['gb18030'] {
+		return EncodingKind.iconv, 'gb18030', 'GB18030'
+	}
+	if label in ['cseuckr', 'csksc56011987', 'euc-kr', 'iso-ir-149', 'korean', 'ks_c_5601-1987', 'ks_c_5601-1989', 'ksc5601', 'ksc_5601'] {
+		return EncodingKind.iconv, 'EUC-KR', 'EUC-KR'
+	}
+	if label in ['csiso2022jp', 'iso-2022-jp'] {
+		return EncodingKind.iconv, 'ISO-2022-JP', 'ISO-2022-JP'
+	}
+	if label in ['csiso2022kr', 'iso-2022-kr'] {
+		return EncodingKind.iconv, 'ISO-2022-KR', 'ISO-2022-KR'
+	}
+	return none
 }
 
 /// The internal configuration of a searcher. This is shared among several
@@ -1026,6 +1126,9 @@ fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
 			}
 			.eucjp {
 				return decode_iconv(slice, 'EUC-JP')
+			}
+			.iconv {
+				return decode_iconv(slice, encoding.iconv_name)
 			}
 		}
 	}

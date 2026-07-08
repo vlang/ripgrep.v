@@ -332,5 +332,5 @@ pub fn (w NoColor[W]) into_inner() W {
 }
 
 pub fn (mut w NoColor[W]) get_mut() &W {
-	return unsafe { &w.wtr }
+	return &w.wtr
 }

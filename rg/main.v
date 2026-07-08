@@ -4,11 +4,12 @@ import cli
 import core
 import core.flags
 import ignore
-import os
 import printer
 import time
 
-const parallel_job_queue_capacity = 256
+$if !windows {
+	#include "@VMODROOT/rg/sigpipe.h"
+}
 
 /*!
 The main entry point into ripgrep.
@@ -38,11 +39,25 @@ The main entry point into ripgrep.
 
 /// Then, as it was, then again it will be.
 pub fn main() {
+	ignore_sigpipe()
 	code := run(flags.parse()) or {
+		if cli.is_broken_pipe_error(err) {
+			exit(0)
+		}
 		core.eprintln_locked(err.msg())
 		exit(2)
 	}
 	exit(code)
+}
+
+fn ignore_sigpipe() {
+	$if !windows {
+		C.rg_ignore_sigpipe()
+	}
+}
+
+$if !windows {
+	fn C.rg_ignore_sigpipe()
 }
 
 /// The main entry point for ripgrep.
@@ -106,6 +121,76 @@ fn run(result flags.ParseResult[flags.HiArgs]) !int {
 /// This recursively steps through the file list (current directory by default)
 /// and searches each file sequentially.
 fn search(args &flags.HiArgs, mode flags.SearchMode) !bool {
+	if args.sort_requires_buffering() {
+		return search_sorted(args, mode)
+	}
+	return search_stream(args, mode)
+}
+
+fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
+	started_at := time.now()
+	mut stats := args.stats()
+	matcher_ := args.matcher()!
+	searcher_ := args.searcher()!
+	printer_ := args.printer_standard_stream(mode, args.stdout())
+	mut searcher := args.search_worker_standard_stream(matcher_, searcher_, printer_)!
+	mut visitor := SearchStreamVisitor{
+		args:             args
+		haystack_builder: args.haystack_builder()
+		searcher:         searcher
+		stats:            stats
+	}
+	args.walk_builder()!.build_parallel().run(mut visitor)
+	if err := visitor.err {
+		return err
+	}
+	stats = visitor.stats
+	if args.has_implicit_path() && !visitor.searched {
+		eprint_nothing_searched()
+	}
+	if stats_value := stats {
+		mut wtr := visitor.searcher.printer().get_mut()
+		print_stats(mode, stats_value, started_at, mut wtr)!
+	}
+	visitor.searcher.printer().flush()!
+	return visitor.matched
+}
+
+struct SearchStreamVisitor {
+	args             &flags.HiArgs
+	haystack_builder core.HaystackBuilder
+mut:
+	searcher core.SearchWorker[cli.StandardStream]
+	stats    ?printer.Stats
+	matched  bool
+	searched bool
+	err      ?IError
+}
+
+fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.WalkState {
+	haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
+	visitor.searched = true
+	search_result := visitor.searcher.search(&haystack) or {
+		if cli.is_broken_pipe_error(err) {
+			visitor.err = err
+			return .quit
+		}
+		core.err_message('${*haystack.path()}: ${err.msg()}')
+		return .continue_
+	}
+	visitor.matched = visitor.matched || search_result.has_match()
+	if stats_value := visitor.stats {
+		if result_stats := search_result.stats() {
+			visitor.stats = stats_value + *result_stats
+		}
+	}
+	if visitor.matched && visitor.args.quit_after_match() {
+		return .quit
+	}
+	return .continue_
+}
+
+fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
 	haystacks := collect_haystacks(args)!
 
@@ -119,6 +204,9 @@ fn search(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	for haystack in haystacks {
 		searched = true
 		search_result := searcher.search(&haystack) or {
+			if cli.is_broken_pipe_error(err) {
+				return err
+			}
 			core.err_message('${*haystack.path()}: ${err.msg()}')
 			continue
 		}
@@ -137,194 +225,23 @@ fn search(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	if stats_value := stats {
 		mut wtr := searcher.printer().get_mut()
-		print_stats(mode, stats_value, started_at, mut wtr) or {}
+		print_stats(mode, stats_value, started_at, mut wtr)!
 	}
-	searcher.printer().flush() or {}
+	searcher.printer().flush()!
 	return matched
 }
 
-/// The top-level entry point for multi-threaded search.
+/// The top-level entry point for search when multiple threads were requested.
 ///
-/// The parallelism is itself achieved by the recursive directory traversal.
-/// All we need to do is feed it a worker for performing a search on each file.
-///
-/// Requesting a sorted output from ripgrep (such as with `--sort path`) will
-/// automatically disable parallelism and hence sorting is not handled here.
+/// V-specific: real parallel traversal is not translated yet, so this falls
+/// back to the sequential search path.
 fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
-	started_at := time.now()
-	mut bufwtr := args.buffer_writer()
-	if args.quit_after_match() {
-		return search(args, mode)
-	}
-
-	thread_count := parallel_worker_count(args.threads())
-	mut separator := []u8{}
-	mut has_separator := false
-	if sep := args.file_separator_bytes() {
-		separator = sep
-		has_separator = true
-	}
-	walk := args.walk_builder()!.build_parallel()
-	mut workers := []core.SearchWorker[cli.Buffer]{cap: thread_count}
-	for _ in 0 .. thread_count {
-		matcher_ := args.matcher()!
-		searcher_ := args.searcher()!
-		printer_ := args.printer_buffer(mode, bufwtr.buffer())
-		workers << args.search_worker_buffer(matcher_, searcher_, printer_)!
-	}
-	jobs := chan SearchParallelJob{cap: parallel_job_queue_capacity}
-	results := chan SearchParallelChunkResult{cap: thread_count}
-	mut threads := []thread bool{}
-	for worker_index in 0 .. thread_count {
-		worker := workers[worker_index]
-		threads << spawn search_parallel_worker(worker, jobs, results, args.stats() != none,
-			separator.clone(), has_separator, worker_index)
-	}
-	producer := spawn search_parallel_producer(walk, args.haystack_builder(), jobs, thread_count)
-
-	mut matched := false
-	mut stats := args.stats()
-	for _ in 0 .. thread_count {
-		result := <-results
-		matched = matched || result.matched
-		for message in result.errors {
-			core.err_message(message)
-		}
-		bufwtr.print(&result.buffer) or { core.err_message(err.msg()) }
-		if stats_value := stats {
-			if result_stats := result.stats {
-				stats = stats_value + result_stats
-			}
-		}
-	}
-	producer_result := producer.wait()
-	for thread in threads {
-		thread.wait()
-	}
-	if args.has_implicit_path() && producer_result.haystack_count == 0 {
-		eprint_nothing_searched()
-	}
-	if stats_value := stats {
-		mut wtr := bufwtr.buffer()
-		print_stats(mode, stats_value, started_at, mut wtr) or {}
-		bufwtr.print(&wtr) or {}
-	}
-	return matched
-}
-
-struct SearchParallelJob {
-	stop     bool
-	haystack core.Haystack
-}
-
-struct SearchParallelProducerResult {
-	haystack_count int
-}
-
-struct SearchParallelQueueVisitor {
-	haystack_builder core.HaystackBuilder
-	jobs             chan SearchParallelJob
-mut:
-	haystack_count int
-}
-
-fn (mut visitor SearchParallelQueueVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	if haystack := visitor.haystack_builder.build_from_result(result) {
-		visitor.jobs <- SearchParallelJob{
-			haystack: haystack
-		}
-		visitor.haystack_count++
-	}
-	return .continue_
-}
-
-struct SearchParallelChunkResult {
-	index    int
-	matched  bool
-	searched bool
-	stats    ?printer.Stats
-	buffer   cli.Buffer
-	errors   []string
-}
-
-fn search_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, jobs chan SearchParallelJob, stop_count int) SearchParallelProducerResult {
-	mut visitor := SearchParallelQueueVisitor{
-		haystack_builder: haystack_builder
-		jobs:             jobs
-	}
-	walk.run(mut visitor)
-	for _ in 0 .. stop_count {
-		jobs <- SearchParallelJob{
-			stop: true
-		}
-	}
-	return SearchParallelProducerResult{
-		haystack_count: visitor.haystack_count
-	}
-}
-
-fn search_parallel_worker(searcher_in core.SearchWorker[cli.Buffer], jobs chan SearchParallelJob, results chan SearchParallelChunkResult, stats_enabled bool, separator []u8, has_separator bool, index int) bool {
-	mut searcher := searcher_in
-	mut chunk_buffer := searcher.printer().get_mut().take()
-	mut printed := false
-	mut result := SearchParallelChunkResult{
-		index:    index
-		matched:  false
-		searched: false
-		stats:    if stats_enabled {
-			?printer.Stats(printer.Stats.new())
-		} else {
-			?printer.Stats(none)
-		}
-		buffer:   chunk_buffer
-		errors:   []string{}
-	}
-	for {
-		job := <-jobs
-		if job.stop {
-			break
-		}
-		haystack := job.haystack
-		result.searched = true
-		searcher.printer().get_mut().clear()
-		search_result := searcher.search(&haystack) or {
-			result.errors << '${*haystack.path()}: ${err.msg()}'
-			continue
-		}
-		if search_result.has_match() {
-			result.matched = true
-		}
-		if stats_value := result.stats {
-			if result_stats := search_result.stats() {
-				result.stats = stats_value + *result_stats
-			}
-		}
-		file_buffer := searcher.printer().get_mut().take()
-		if !file_buffer.is_empty() {
-			if printed && has_separator {
-				result.buffer.write(separator) or {}
-			}
-			result.buffer.append_buffer(&file_buffer)
-			printed = true
-		}
-	}
-	searcher.printer().flush() or {}
-	results <- result
-	return true
-}
-
-fn parallel_worker_count(thread_setting usize) int {
-	mut count := int(thread_setting)
-	if count < 1 {
-		count = 1
-	}
-	return count
-}
-
-fn parallel_chunk_bounds(total int, chunks int, index int) (int, int) {
-	start := (total * index) / chunks
-	end := (total * (index + 1)) / chunks
-	return start, end
+	// V-specific: the translated `ignore.WalkParallel` is not Rust's
+	// worker-splitting traversal yet. Use the streaming search path instead
+	// of the old producer/worker/chunk buffering model so observable search
+	// semantics match the single-threaded Rust path until real parallel
+	// traversal is available.
+	return search(args, mode)
 }
 
 /// The top-level entry point for file listing without searching.
@@ -332,7 +249,7 @@ fn parallel_chunk_bounds(total int, chunks int, index int) (int, int) {
 /// This recursively steps through the file list (current directory by default)
 /// and prints each path sequentially using a single thread.
 fn files(args &flags.HiArgs) !bool {
-	if !args.has_sort() {
+	if !args.sort_requires_buffering() {
 		return files_stream(args)
 	}
 	haystacks := collect_haystacks(args)!
@@ -350,16 +267,14 @@ fn files(args &flags.HiArgs) !bool {
 	return matched
 }
 
-/// The top-level entry point for multi-threaded file listing without
-/// searching.
+/// The top-level entry point for file listing when multiple threads were
+/// requested.
 ///
-/// This recursively steps through the file list (current directory by default)
-/// and prints each path sequentially using multiple threads.
-///
-/// Requesting a sorted output from ripgrep (such as with `--sort path`) will
-/// automatically disable parallelism and hence sorting is not handled here.
+/// V-specific: real parallel traversal is not translated yet, so this falls
+/// back to the sequential file listing path.
 fn files_parallel(args &flags.HiArgs) !bool {
-	return files_stream(args)
+	// V-specific: see `search_parallel`.
+	return files(args)
 }
 
 fn files_stream(args &flags.HiArgs) !bool {
@@ -370,7 +285,7 @@ fn files_stream(args &flags.HiArgs) !bool {
 	}
 	args.walk_builder()!.build_parallel().run(mut visitor)
 	if err := visitor.err {
-		return error(err)
+		return err
 	}
 	visitor.path_printer.flush()!
 	return visitor.matched
@@ -382,7 +297,7 @@ struct FilesParallelVisitor {
 mut:
 	path_printer printer.PathPrinter[cli.StandardStream]
 	matched      bool
-	err          ?string
+	err          ?IError
 }
 
 fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
@@ -402,7 +317,7 @@ fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.Wal
 		return .quit
 	}
 	visitor.write_path(&dent) or {
-		visitor.err = err.msg()
+		visitor.err = err
 		return .quit
 	}
 	return .continue_
@@ -555,16 +470,24 @@ ${elapsed.seconds():0.6f} seconds total
 }
 
 fn collect_haystacks(args &flags.HiArgs) ![]core.Haystack {
-	haystack_builder := args.haystack_builder()
-	mut walk := args.walk_builder()!.build()
-	mut unsorted := []core.Haystack{}
-	for {
-		result := walk.next() or { break }
-		if haystack := haystack_builder.build_from_result(result) {
-			unsorted << haystack
-		}
+	mut visitor := CollectHaystacksVisitor{
+		haystack_builder: args.haystack_builder()
 	}
-	return args.sort(unsorted)
+	args.walk_builder()!.build_parallel().run(mut visitor)
+	return args.sort(visitor.haystacks)
+}
+
+struct CollectHaystacksVisitor {
+	haystack_builder core.HaystackBuilder
+mut:
+	haystacks []core.Haystack
+}
+
+fn (mut visitor CollectHaystacksVisitor) visit(result ignore.WalkResult) ignore.WalkState {
+	if haystack := visitor.haystack_builder.build_from_result(result) {
+		visitor.haystacks << haystack
+	}
+	return .continue_
 }
 
 fn write_stdout_line(line string) ! {

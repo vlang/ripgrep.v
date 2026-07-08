@@ -19,6 +19,10 @@ $if !windows {
 ///
 /// The syntax supported is documented as part of the regex crate:
 /// <https://docs.rs/regex/#syntax>.
+///
+/// V-specific: matching is currently implemented with V's `regex.pcre`
+/// backend plus translated HIR/literal analysis. This is not a full semantic
+/// replacement for Rust ripgrep's `regex-automata::meta::Regex` backend.
 pub struct RegexMatcherBuilder implements IClone {
 mut:
 	config Config

@@ -90,6 +90,7 @@ fn test_searcher_encoding_normalizes_labels() {
 	assert (Encoding.new('latin1')!).label == 'windows-1252'
 	assert (Encoding.new('us-ascii')!).label == 'windows-1252'
 	assert (Encoding.new('utf32be')!).label == 'utf-32be'
+	assert (Encoding.new('cp1251')!).label == 'windows-1251'
 }
 
 fn test_searcher_encoding_rejects_unknown_label() {

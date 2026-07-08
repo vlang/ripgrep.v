@@ -26,3 +26,10 @@ fn test_decompression_command_prefers_last_matching_glob() {
 		assert cmd.args == ['second']
 	}
 }
+
+fn test_decompression_reader_builder_has_default_matcher() {
+	$if !windows {
+		builder := DecompressionReaderBuilder.new()
+		assert builder.get_matcher().has_command('sample.gz')
+	}
+}

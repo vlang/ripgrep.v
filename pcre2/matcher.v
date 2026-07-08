@@ -55,6 +55,12 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 	} else {
 		pats.join('|')
 	}
+	if builder.jit && !is_jit_available() {
+		return Error.regex_message('PCRE2 JIT is not available')
+	}
+	if builder.extended {
+		singlepat = apply_extended_mode(singlepat)
+	}
 	singlepat = normalize_backend_pattern(singlepat, builder.crlf)
 	mut flags := ''
 	if builder.caseless || (builder.case_smart && !has_uppercase_literal(&singlepat)) {
@@ -70,13 +76,11 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 		singlepat = '(?${flags})${singlepat}'
 	}
 	// V-specific: the local backend does not expose PCRE2 option knobs for
-	// extended/UTF/UCP/JIT. These settings are retained on the matcher so the
-	// translated builder API remains observable, while matching itself uses
-	// the closest available `regex.pcre` semantics.
-	_ = builder.extended
+	// UTF/UCP/JIT stack configuration. These settings are retained on the
+	// matcher so the translated builder API remains observable, while matching
+	// itself uses the closest available `regex.pcre` semantics.
 	_ = builder.ucp
 	_ = builder.utf
-	_ = builder.jit
 	_ = builder.jit_if_available
 	_ = builder.max_jit_stack_size
 	regex := pcre.compile(singlepat) or { return Error.regex(err) }
@@ -469,6 +473,56 @@ fn normalize_backend_pattern(pattern string, crlf bool) string {
 		i++
 	}
 	return out.bytestr()
+}
+
+fn apply_extended_mode(pattern string) string {
+	mut out := []u8{cap: pattern.len}
+	mut escaped := false
+	mut in_class := false
+	mut in_comment := false
+	for b in pattern.bytes() {
+		if in_comment {
+			if b == `\n` || b == `\r` {
+				in_comment = false
+			}
+			continue
+		}
+		if escaped {
+			out << b
+			escaped = false
+			continue
+		}
+		if b == `\\` {
+			out << b
+			escaped = true
+			continue
+		}
+		if in_class {
+			out << b
+			if b == `]` {
+				in_class = false
+			}
+			continue
+		}
+		if b == `[` {
+			out << b
+			in_class = true
+			continue
+		}
+		if b == `#` {
+			in_comment = true
+			continue
+		}
+		if is_extended_whitespace(b) {
+			continue
+		}
+		out << b
+	}
+	return out.bytestr()
+}
+
+fn is_extended_whitespace(b u8) bool {
+	return b == ` ` || b == `\t` || b == `\n` || b == `\r` || b == `\f`
 }
 
 fn pcre_escape(pattern string) string {

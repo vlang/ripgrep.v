@@ -289,10 +289,7 @@ pub fn Summary.new_no_color[W](wtr W) Summary[NoColor[W]] {
 /// `PathWithMatch` or `PathWithoutMatch`), then any searches executed
 /// using this sink will immediately quit with an error.
 pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s, ^s, W] {
-	mut stats := ?Stats(none)
-	if summary.config.stats || summary.config.kind.requires_stats() {
-		stats = Stats.new()
-	}
+	has_stats := summary.config.stats || summary.config.kind.requires_stats()
 	return SummarySink[^s, ^s, W]{
 		matcher:      matcher_
 		summary:      &summary
@@ -300,7 +297,8 @@ pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s
 		path:         ?PrinterPath(none)
 		start_time:   time.now()
 		match_count:  0
-		stats:        stats
+		stats:        Stats.new()
+		has_stats:    has_stats
 	}
 }
 
@@ -309,10 +307,7 @@ pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s
 /// When the printer is associated with a path, then it may, depending on
 /// its configuration, print the path.
 pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, path &^p string) SummarySink[^p, ^s, W] {
-	mut stats := ?Stats(none)
-	if summary.config.stats || summary.config.kind.requires_stats() {
-		stats = Stats.new()
-	}
+	has_stats := summary.config.stats || summary.config.kind.requires_stats()
 	if !summary.config.path && !summary.config.kind.requires_path() {
 		return SummarySink[^p, ^s, W]{
 			matcher:      matcher_
@@ -321,7 +316,8 @@ pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, 
 			path:         ?PrinterPath(none)
 			start_time:   time.now()
 			match_count:  0
-			stats:        stats
+			stats:        Stats.new()
+			has_stats:    has_stats
 		}
 	}
 	ppath := PrinterPath.new(path).with_separator(summary.config.separator_path)
@@ -332,7 +328,8 @@ pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, 
 		path:         ppath
 		start_time:   time.now()
 		match_count:  0
-		stats:        stats
+		stats:        Stats.new()
+		has_stats:    has_stats
 	}
 }
 
@@ -344,7 +341,7 @@ pub fn (summary Summary[W]) has_written() bool {
 
 /// Return a mutable reference to the underlying writer.
 pub fn (mut summary Summary[W]) get_mut() &W {
-	return unsafe { &summary.wtr.wtr }
+	return summary.wtr.get_mut()
 }
 
 /// Flush the underlying writer.
@@ -370,7 +367,8 @@ mut:
 	start_time         time.Time
 	match_count        u64
 	binary_byte_offset ?u64
-	stats              ?Stats
+	stats              Stats
+	has_stats          bool
 }
 
 /// Returns true if and only if this printer received a match in the
@@ -400,8 +398,8 @@ pub fn (sink SummarySink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
 /// This only returns stats if they were requested via the
 /// [`SummaryBuilder`] configuration.
 pub fn (sink &^a SummarySink[^p, ^s, W]) stats[^a, ^p, ^s]() ?&^a Stats {
-	if sink.stats != none {
-		return unsafe { &sink.stats? }
+	if sink.has_stats {
+		return &sink.stats
 	}
 	return none
 }
@@ -498,7 +496,7 @@ fn (mut sink SummarySink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
 
 pub fn (mut sink SummarySink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
 	is_multi_line := sink.multi_line(searcher_)
-	sink_match_count := if sink.stats == none && !is_multi_line {
+	sink_match_count := if !sink.has_stats && !is_multi_line {
 		u64(1)
 	} else {
 		// This gives us as many bytes as the searcher can offer. This
@@ -527,11 +525,9 @@ pub fn (mut sink SummarySink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sear
 	} else {
 		sink.match_count += 1
 	}
-	if sink.stats != none {
-		mut stats := sink.stats or { panic('stats missing unexpectedly') }
-		stats.add_matches(sink_match_count)
-		stats.add_matched_lines(mat.lines().count())
-		sink.stats = stats
+	if sink.has_stats {
+		sink.stats.add_matches(sink_match_count)
+		sink.stats.add_matched_lines(mat.lines().count())
 	} else if sink.summary.config.kind.quit_early() {
 		return false
 	}
@@ -573,16 +569,14 @@ pub fn (mut sink SummarySink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Search
 
 pub fn (mut sink SummarySink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Searcher, finish searcher.SinkFinish) ! {
 	sink.binary_byte_offset = finish.binary_byte_offset()
-	if sink.stats != none {
-		mut stats := sink.stats or { panic('stats missing unexpectedly') }
-		stats.add_elapsed(time.since(sink.start_time))
-		stats.add_searches(1)
+	if sink.has_stats {
+		sink.stats.add_elapsed(time.since(sink.start_time))
+		sink.stats.add_searches(1)
 		if sink.match_count > 0 {
-			stats.add_searches_with_match(1)
+			sink.stats.add_searches_with_match(1)
 		}
-		stats.add_bytes_searched(finish.byte_count())
-		stats.add_bytes_printed(sink.summary.wtr.count())
-		sink.stats = stats
+		sink.stats.add_bytes_searched(finish.byte_count())
+		sink.stats.add_bytes_printed(sink.summary.wtr.count())
 	}
 	// If our binary detection method says to quit after seeing binary
 	// data, then we shouldn't print any results at all, even if we've
@@ -623,8 +617,10 @@ pub fn (mut sink SummarySink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Searc
 		.count_matches {
 			if show_count {
 				sink.write_path_field()!
-				stats := sink.stats or { panic('CountMatches should enable stats tracking') }
-				sink.write_all(DecimalFormatter.new(stats.matches()).as_bytes())!
+				if !sink.has_stats {
+					panic('CountMatches should enable stats tracking')
+				}
+				sink.write_all(DecimalFormatter.new(sink.stats.matches()).as_bytes())!
 				sink.write_line_term(searcher_)!
 			}
 		}

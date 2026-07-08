@@ -275,10 +275,6 @@ pub fn Standard.new_no_color[W](wtr W) Standard[NoColor[W]] {
 
 /// Return an implementation of `Sink` for the standard printer.
 pub fn (mut standard Standard[W]) sink[^s](matcher_ PrinterMatcher) StandardSink[^s, ^s, W] {
-	mut stats := ?Stats(none)
-	if standard.config.stats {
-		stats = Stats.new()
-	}
 	return StandardSink[^s, ^s, W]{
 		matcher:                 matcher_
 		standard:                &standard
@@ -288,7 +284,8 @@ pub fn (mut standard Standard[W]) sink[^s](matcher_ PrinterMatcher) StandardSink
 		start_time:              time.now()
 		match_count:             0
 		binary_byte_offset:      none
-		stats:                   stats
+		stats:                   Stats.new()
+		has_stats:               standard.config.stats
 		needs_match_granularity: standard.needs_match_granularity()
 	}
 }
@@ -297,10 +294,6 @@ pub fn (mut standard Standard[W]) sink[^s](matcher_ PrinterMatcher) StandardSink
 pub fn (mut standard Standard[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, path &^p string) StandardSink[^p, ^s, W] {
 	if !standard.config.path {
 		return standard.sink(matcher_)
-	}
-	mut stats := ?Stats(none)
-	if standard.config.stats {
-		stats = Stats.new()
 	}
 	ppath := PrinterPath.new(path).with_separator(standard.config.separator_path)
 	return StandardSink[^p, ^s, W]{
@@ -312,7 +305,8 @@ pub fn (mut standard Standard[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher
 		start_time:              time.now()
 		match_count:             0
 		binary_byte_offset:      none
-		stats:                   stats
+		stats:                   Stats.new()
+		has_stats:               standard.config.stats
 		needs_match_granularity: standard.needs_match_granularity()
 	}
 }
@@ -364,7 +358,8 @@ mut:
 	start_time              time.Time
 	match_count             u64
 	binary_byte_offset      ?u64
-	stats                   ?Stats
+	stats                   Stats
+	has_stats               bool
 	needs_match_granularity bool
 }
 
@@ -388,8 +383,8 @@ pub fn (sink StandardSink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
 /// Return a reference to the stats produced by the printer for all
 /// searches executed on this sink.
 pub fn (sink &^a StandardSink[^p, ^s, W]) stats[^a, ^p, ^s]() ?&^a Stats {
-	if sink.stats != none {
-		return unsafe { &sink.stats? }
+	if sink.has_stats {
+		return &sink.stats
 	}
 	return none
 }
@@ -433,11 +428,9 @@ pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sea
 		sink.standard.matches.clear()
 		sink.replacer.clear()
 	}
-	if sink.stats != none {
-		mut stats := sink.stats or { panic('stats missing unexpectedly') }
-		stats.add_matches(u64(sink.standard.matches.len))
-		stats.add_matched_lines(mat.lines().count())
-		sink.stats = stats
+	if sink.has_stats {
+		sink.stats.add_matches(u64(sink.standard.matches.len))
+		sink.stats.add_matched_lines(mat.lines().count())
 	}
 	if searcher_.binary_detection().convert_byte() != none {
 		if sink.binary_byte_offset != none {
@@ -548,16 +541,14 @@ pub fn (mut sink StandardSink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Sear
 		mut imp := StandardImpl.new(searcher_, &sink)
 		imp.write_binary_message(offset)!
 	}
-	if sink.stats != none {
-		mut stats := sink.stats or { panic('stats missing unexpectedly') }
-		stats.add_elapsed(time.since(sink.start_time))
-		stats.add_searches(1)
+	if sink.has_stats {
+		sink.stats.add_elapsed(time.since(sink.start_time))
+		sink.stats.add_searches(1)
 		if sink.match_count > 0 {
-			stats.add_searches_with_match(1)
+			sink.stats.add_searches_with_match(1)
 		}
-		stats.add_bytes_searched(finish.byte_count())
-		stats.add_bytes_printed(sink.standard.wtr.count())
-		sink.stats = stats
+		sink.stats.add_bytes_searched(finish.byte_count())
+		sink.stats.add_bytes_printed(sink.standard.wtr.count())
 	}
 }
 

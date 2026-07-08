@@ -195,6 +195,14 @@ fn test_binary_after_match1_stdin() {
 	eqnice(expected, cmd.pipe(binary_hay()))
 }
 
+fn test_binary_stdin_match_before_detected_binary_byte() {
+	_, mut cmd := setup('binary_stdin_match_before_detected_binary_byte')
+	cmd.args(['--no-mmap', '--byte-offset', '-n', 'scientific'])
+
+	expected := '217:8939:"Holmes is a little too scientific for my tastes--it approaches to\n450:18553:"Holmes is a little too scientific for my tastes--it approaches to\n683:28167:"Holmes is a little too scientific for my tastes--it approaches to\n916:37781:"Holmes is a little too scientific for my tastes--it approaches to\n1149:47395:"Holmes is a little too scientific for my tastes--it approaches to\n1382:57009:"Holmes is a little too scientific for my tastes--it approaches to\n1615:66623:"Holmes is a little too scientific for my tastes--it approaches to\nbinary file matches (found "\\0" byte around offset 77041)\n'
+	eqnice(expected, cmd.pipe(binary_hay()))
+}
+
 // Like after_match1_implicit, but provides the --binary flag, which
 // disables binary filtering. Thus, this matches the behavior of ripgrep as
 // if the file were given explicitly.
@@ -294,8 +302,7 @@ fn test_binary_after_match1_explicit_count() {
 fn test_binary_after_match2_implicit() {
 	dir, mut cmd := setup('binary_after_match2_implicit')
 	dir.create_bytes('hay', binary_hay())
-	cmd.args(['--no-mmap', '-n', 'Project Gutenberg EBook|a medical student', '-g',
-		'hay'])
+	cmd.args(['--no-mmap', '-n', 'Project Gutenberg EBook|a medical student', '-g', 'hay'])
 
 	expected := 'hay:1:The Project Gutenberg EBook of A Study In Scarlet, by Arthur Conan Doyle\nhay: WARNING: stopped searching binary file after match (found "\\0" byte around offset 77041)\n'
 	eqnice(expected, cmd.stdout())
@@ -306,8 +313,7 @@ fn test_binary_after_match2_implicit() {
 fn test_binary_after_match2_implicit_text() {
 	dir, mut cmd := setup('binary_after_match2_implicit_text')
 	dir.create_bytes('hay', binary_hay())
-	cmd.args(['--no-mmap', '-n', '--text', 'Project Gutenberg EBook|a medical student',
-		'-g', 'hay'])
+	cmd.args(['--no-mmap', '-n', '--text', 'Project Gutenberg EBook|a medical student', '-g', 'hay'])
 
 	expected := 'hay:1:The Project Gutenberg EBook of A Study In Scarlet, by Arthur Conan Doyle\nhay:1867:"And yet you say he is not a medical student?"\n'
 	eqnice(expected, cmd.stdout())

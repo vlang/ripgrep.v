@@ -177,8 +177,9 @@ fn printer_matcher_multi_line(searcher_ searcher.Searcher, matcher_ PrinterMatch
 pub struct PrinterPath[^a] implements IClone {
 	path &^a string
 mut:
-	bytes     []u8
-	hyperlink ?HyperlinkPath
+	bytes         []u8
+	hyperlink     HyperlinkPath
+	has_hyperlink bool
 }
 
 /// Create a new path suitable for printing.
@@ -228,11 +229,12 @@ fn (pp PrinterPath[^a]) as_bytes_view[^a]() []u8 {
 ///
 /// This port uses an optional cached hyperlink value instead of a `OnceCell`.
 pub fn (mut pp PrinterPath[^a]) as_hyperlink[^a]() ?&^a HyperlinkPath {
-	if pp.hyperlink == none {
+	if !pp.has_hyperlink {
 		hyperlink := HyperlinkPath.from_path(*pp.path) or { return none }
 		pp.hyperlink = hyperlink
+		pp.has_hyperlink = true
 	}
-	return unsafe { &pp.hyperlink? }
+	return &pp.hyperlink
 }
 
 /// Return this path as an actual path string.

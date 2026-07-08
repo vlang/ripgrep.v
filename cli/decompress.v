@@ -141,13 +141,16 @@ pub fn (matcher DecompressionMatcher) has_command(path string) bool {
 /// Configures and builds a streaming reader for decompressing data.
 pub struct DecompressionReaderBuilder implements IClone {
 mut:
-	matcher         DecompressionMatcher = DecompressionMatcher.new()
+	matcher         DecompressionMatcher
 	command_builder CommandReaderBuilder
 }
 
 /// Create a new builder with the default configuration.
 pub fn DecompressionReaderBuilder.new() DecompressionReaderBuilder {
-	return DecompressionReaderBuilder{}
+	return DecompressionReaderBuilder{
+		matcher:         DecompressionMatcher.new()
+		command_builder: CommandReaderBuilder.new()
+	}
 }
 
 pub fn new_decompression_reader_builder() DecompressionReaderBuilder {
@@ -220,8 +223,8 @@ pub struct DecompressionReader implements IClone {
 mut:
 	kind       DecompressionReaderKind
 	cmd_reader CommandReader
-	bytes      []u8
-	pos        int
+	file       os.File
+	has_file   bool
 	closed     bool
 }
 
@@ -234,10 +237,11 @@ pub fn DecompressionReader.new(path string) !DecompressionReader {
 /// corresponding to the given path without doing decompression and without
 /// executing another process.
 fn DecompressionReader.new_passthru(path string) !DecompressionReader {
-	bytes := os.read_bytes(path) or { return CommandError.io(err) }
+	file := os.open(path) or { return CommandError.io(err) }
 	return DecompressionReader{
-		kind:  .passthru
-		bytes: bytes
+		kind:     .passthru
+		file:     file
+		has_file: true
 	}
 }
 
@@ -251,6 +255,11 @@ pub fn (mut reader DecompressionReader) close() ! {
 	reader.closed = true
 	if reader.kind == .command {
 		reader.cmd_reader.close()!
+		return
+	}
+	if reader.has_file {
+		reader.file.close()
+		reader.has_file = false
 	}
 }
 
@@ -258,12 +267,15 @@ pub fn (mut reader DecompressionReader) read(mut buf []u8) !int {
 	if reader.kind == .command {
 		return reader.cmd_reader.read(mut buf)
 	}
-	if reader.pos >= reader.bytes.len {
+	if !reader.has_file {
 		reader.close()!
 		return io.Eof{}
 	}
-	nread := copy(mut buf, reader.bytes[reader.pos..])
-	reader.pos += nread
+	nread := reader.file.read(mut buf)!
+	if nread == 0 {
+		reader.close()!
+		return io.Eof{}
+	}
 	return nread
 }
 

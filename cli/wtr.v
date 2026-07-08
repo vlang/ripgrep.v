@@ -3,11 +3,24 @@ module cli
 import os
 import printer
 
+$if windows {
+	#include <io.h>
+}
+
 $if !windows {
 	#include <unistd.h>
 }
 
+#include <errno.h>
+
 const standard_stream_block_capacity = 32 * 1024
+const errno_ebadf = 9
+const errno_eintr = 4
+const errno_epipe = 32
+
+$if windows {
+	fn C._write(fd int, buf voidptr, count int) int
+}
 
 $if !windows {
 	fn C.write(fd int, buf voidptr, count int) int
@@ -139,10 +152,10 @@ pub fn (mut wtr BufferWriter) print(buffer &Buffer) ! {
 	}
 	if wtr.printed {
 		if sep := wtr.separator {
-			write_all_fd(wtr.fd, sep)
+			write_all_fd(wtr.fd, sep)!
 		}
 	}
-	write_all_fd(wtr.fd, buffer.bytes)
+	write_all_fd(wtr.fd, buffer.bytes)!
 	wtr.printed = true
 	flush_stdout()
 }
@@ -248,26 +261,75 @@ fn (mut stream StandardStream) emit(buf []u8) ! {
 }
 
 fn (mut stream StandardStream) write_direct(buf []u8) ! {
-	write_all_fd(stream.fd, buf)
+	write_all_fd(stream.fd, buf)!
 }
 
-fn write_all_fd(fd int, buf []u8) {
-	if fd == -1 || buf.len == 0 {
+fn write_all_fd(fd int, buf []u8) ! {
+	if buf.len == 0 {
 		return
 	}
-	$if windows {
-		os.fd_write(fd, buf.bytestr())
-	} $else {
-		mut written_total := 0
-		for written_total < buf.len {
-			ptr := unsafe { &u8(buf.data) + written_total }
-			written := int(C.write(fd, ptr, buf.len - written_total))
-			if written <= 0 {
-				return
-			}
-			written_total += written
-		}
+	if fd == -1 {
+		return error_with_code(os.posix_get_error_msg(errno_ebadf), errno_ebadf)
 	}
+	mut written_total := 0
+	for written_total < buf.len {
+		ptr := unsafe { voidptr(usize(buf.data) + usize(written_total)) }
+		C.errno = 0
+		written := $if windows {
+			int(C._write(fd, ptr, buf.len - written_total))
+		} $else {
+			int(C.write(fd, ptr, buf.len - written_total))
+		}
+		if written < 0 {
+			mut code := int(C.errno)
+			$if !windows {
+				if code == 0 {
+					// V-specific: with SIGPIPE ignored, some C backend/libc
+					// combinations expose a failed pipe write as `write < 0`
+					// without preserving `errno`. Normalize that raw write
+					// failure to EPIPE so the caller can handle it like Rust.
+					code = errno_epipe
+				}
+			}
+			if code == errno_eintr {
+				continue
+			}
+			return error_with_code(os.posix_get_error_msg(code), code)
+		}
+		if written == 0 {
+			return error('failed writing to file descriptor ${fd}: wrote zero bytes')
+		}
+		written_total += written
+	}
+}
+
+/// Returns true when the given error represents a broken pipe.
+pub fn is_broken_pipe_error(err IError) bool {
+	if err.code() == errno_epipe {
+		return true
+	}
+	if err.code() == 0 && err.msg() == '' {
+		// V-specific: when a write error passes through generic printer/sink
+		// interfaces, the current ownership frontend can erase the original
+		// errno-backed error into an empty `IError`. The CLI only constructs
+		// empty errors through those write paths today, so keep treating it as
+		// a broken pipe at the same boundary Rust walks its error chain.
+		return true
+	}
+	msg := err.msg().to_lower()
+	return msg.contains('broken pipe') || msg.contains('the pipe is being closed')
+}
+
+/// Return a canonical broken pipe error.
+pub fn broken_pipe_error() IError {
+	return error_with_code(os.posix_get_error_msg(errno_epipe), errno_epipe)
+}
+
+/// Write a single line to stderr.
+pub fn write_stderr_line(msg string) ! {
+	flush_stdout()
+	write_all_fd(2, msg.bytes())!
+	write_all_fd(2, '\n'.bytes())!
 }
 
 fn bytes_contain_newline(buf []u8) bool {

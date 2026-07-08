@@ -100,6 +100,27 @@ fn walk_collect_entries(builder WalkBuilder) []DirEntry {
 	return dents
 }
 
+fn test_walk_build_is_lazy() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mut walk := WalkBuilder.new(td.path()).build()
+	wfile(os.join_path(td.path(), 'late.txt'), '')
+	mut got := []string{}
+	for {
+		result := walk.next() or { break }
+		if result.is_error {
+			continue
+		}
+		path := strip_prefix(result.entry.path(), td.path())
+		if path != '' {
+			got << normal_path(path)
+		}
+	}
+	assert 'late.txt' in got
+}
+
 fn test_no_ignores() {
 	td := tmpdir()
 	defer {
@@ -110,7 +131,8 @@ fn test_no_ignores() {
 	wfile(os.join_path(td.path(), 'a/b/foo'), '')
 	wfile(os.join_path(td.path(), 'x/y/foo'), '')
 
-	assert_paths(td.path(), WalkBuilder.new(td.path()), ['x', 'x/y', 'x/y/foo', 'a', 'a/b', 'a/b/foo', 'a/b/c'])
+	assert_paths(td.path(), WalkBuilder.new(td.path()), ['x', 'x/y', 'x/y/foo', 'a', 'a/b', 'a/b/foo',
+		'a/b/c'])
 }
 
 fn test_custom_ignore() {
@@ -234,18 +256,19 @@ fn test_max_depth() {
 	wfile(os.join_path(td.path(), 'a/b/foo'), '')
 	wfile(os.join_path(td.path(), 'a/b/c/foo'), '')
 
-	assert_paths(td.path(), WalkBuilder.new(td.path()), ['a', 'a/b', 'a/b/c', 'foo', 'a/foo', 'a/b/foo', 'a/b/c/foo'])
+	assert_paths(td.path(), WalkBuilder.new(td.path()), ['a', 'a/b', 'a/b/c', 'foo', 'a/foo',
+		'a/b/foo', 'a/b/c/foo'])
 
 	mut builder0 := WalkBuilder.new(td.path())
-	builder0.max_depth(0)
+	builder0.max_depth(usize(0))
 	assert_paths(td.path(), builder0, []string{})
 
 	mut builder1 := WalkBuilder.new(td.path())
-	builder1.max_depth(1)
+	builder1.max_depth(usize(1))
 	assert_paths(td.path(), builder1, ['a', 'foo'])
 
 	mut builder2 := WalkBuilder.new(td.path())
-	builder2.max_depth(2)
+	builder2.max_depth(usize(2))
 	assert_paths(td.path(), builder2, ['a', 'a/b', 'foo', 'a/foo'])
 }
 
@@ -260,31 +283,32 @@ fn test_min_depth() {
 	wfile(os.join_path(td.path(), 'a/b/foo'), '')
 	wfile(os.join_path(td.path(), 'a/b/c/foo'), '')
 
-	assert_paths(td.path(), WalkBuilder.new(td.path()), ['a', 'a/b', 'a/b/c', 'foo', 'a/foo', 'a/b/foo', 'a/b/c/foo'])
+	assert_paths(td.path(), WalkBuilder.new(td.path()), ['a', 'a/b', 'a/b/c', 'foo', 'a/foo',
+		'a/b/foo', 'a/b/c/foo'])
 
 	mut builder0 := WalkBuilder.new(td.path())
-	builder0.min_depth(0)
+	builder0.min_depth(usize(0))
 	assert_paths(td.path(), builder0, ['a', 'a/b', 'a/b/c', 'foo', 'a/foo', 'a/b/foo', 'a/b/c/foo'])
 
 	mut builder1 := WalkBuilder.new(td.path())
-	builder1.min_depth(1)
+	builder1.min_depth(usize(1))
 	assert_paths(td.path(), builder1, ['a', 'a/b', 'a/b/c', 'foo', 'a/foo', 'a/b/foo', 'a/b/c/foo'])
 
 	mut builder2 := WalkBuilder.new(td.path())
-	builder2.min_depth(2)
+	builder2.min_depth(usize(2))
 	assert_paths(td.path(), builder2, ['a/b', 'a/b/c', 'a/b/c/foo', 'a/b/foo', 'a/foo'])
 
 	mut builder3 := WalkBuilder.new(td.path())
-	builder3.min_depth(3)
+	builder3.min_depth(usize(3))
 	assert_paths(td.path(), builder3, ['a/b/c', 'a/b/c/foo', 'a/b/foo'])
 
 	mut builder10 := WalkBuilder.new(td.path())
-	builder10.min_depth(10)
+	builder10.min_depth(usize(10))
 	assert_paths(td.path(), builder10, []string{})
 
 	mut builder21 := WalkBuilder.new(td.path())
-	builder21.min_depth(2)
-	builder21.max_depth(1)
+	builder21.min_depth(usize(2))
+	builder21.max_depth(usize(1))
 	assert_paths(td.path(), builder21, ['a/b', 'a/foo'])
 }
 
@@ -301,19 +325,21 @@ fn test_max_filesize() {
 	wfile_size(os.join_path(td.path(), 'a/bar'), 500)
 	wfile_size(os.join_path(td.path(), 'a/baz'), 200)
 
-	assert_paths(td.path(), WalkBuilder.new(td.path()), ['a', 'a/b', 'foo', 'bar', 'baz', 'a/foo', 'a/bar', 'a/baz'])
+	assert_paths(td.path(), WalkBuilder.new(td.path()), ['a', 'a/b', 'foo', 'bar', 'baz', 'a/foo',
+		'a/bar', 'a/baz'])
 
 	mut builder0 := WalkBuilder.new(td.path())
-	builder0.max_filesize(0)
+	builder0.max_filesize(u64(0))
 	assert_paths(td.path(), builder0, ['a', 'a/b', 'foo'])
 
 	mut builder500 := WalkBuilder.new(td.path())
-	builder500.max_filesize(500)
+	builder500.max_filesize(u64(500))
 	assert_paths(td.path(), builder500, ['a', 'a/b', 'foo', 'bar', 'a/bar', 'a/baz'])
 
 	mut builder50000 := WalkBuilder.new(td.path())
-	builder50000.max_filesize(50000)
-	assert_paths(td.path(), builder50000, ['a', 'a/b', 'foo', 'bar', 'baz', 'a/foo', 'a/bar', 'a/baz'])
+	builder50000.max_filesize(u64(50000))
+	assert_paths(td.path(), builder50000,
+		['a', 'a/b', 'foo', 'bar', 'baz', 'a/foo', 'a/bar', 'a/baz'])
 }
 
 // because symlinks on windows are weird
@@ -446,7 +472,8 @@ fn test_filter() {
 	wfile(os.join_path(td.path(), 'a/b/foo'), '')
 	wfile(os.join_path(td.path(), 'x/y/foo'), '')
 
-	assert_paths(td.path(), WalkBuilder.new(td.path()), ['x', 'x/y', 'x/y/foo', 'a', 'a/b', 'a/b/foo', 'a/b/c'])
+	assert_paths(td.path(), WalkBuilder.new(td.path()), ['x', 'x/y', 'x/y/foo', 'a', 'a/b', 'a/b/foo',
+		'a/b/c'])
 
 	mut builder := WalkBuilder.new(td.path())
 	builder.filter_entry(filter_not_a)

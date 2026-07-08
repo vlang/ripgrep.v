@@ -580,6 +580,12 @@ pub fn (sort SortMode) supported() ! {
 		return
 	}
 	exe := os.executable()
+	if sort.kind == .created {
+		_ = creation_time_for_path(exe) or {
+			return error("sorting by creation time isn't supported")
+		}
+		return
+	}
 	_ = os.stat(exe) or {
 		return match sort.kind {
 			.path { error('unreachable path sort support check') }

@@ -9,6 +9,8 @@ import printer
 import regex
 import searcher
 
+const stdin_read_capacity = 8 * (1 << 10)
+
 /*
 Defines a very high level "search worker" abstraction.
 
@@ -53,6 +55,26 @@ fn (config SearchConfig) clone() SearchConfig {
 		binary_implicit:    config.binary_implicit.clone()
 		binary_explicit:    config.binary_explicit.clone()
 	}
+}
+
+// V-specific: Rust's `stdin.lock()` path is buffered. Limit individual stdin
+// reads so line-buffer binary detection observes the same stream boundaries.
+struct StdinReader {
+mut:
+	file os.File
+}
+
+fn StdinReader.new(file os.File) StdinReader {
+	return StdinReader{
+		file: file
+	}
+}
+
+fn (mut rdr StdinReader) read(mut buf []u8) !int {
+	if buf.len <= stdin_read_capacity {
+		return rdr.file.read(mut buf)!
+	}
+	return rdr.file.read(mut buf[..stdin_read_capacity])!
 }
 
 /// A builder for configuring and constructing a search worker.
@@ -209,8 +231,20 @@ pub fn (mut builder SearchWorkerBuilder) binary_detection_explicit(detection sea
 /// every search also has some aggregate statistics or meta data that may be
 /// useful to higher level routines.
 pub struct SearchResult implements IClone {
-	has_match bool
-	stats     ?printer.Stats
+	has_match   bool
+	stats_value printer.Stats
+	has_stats   bool
+}
+
+fn SearchResult.new(has_match bool, stats ?printer.Stats) SearchResult {
+	mut result := SearchResult{
+		has_match: has_match
+	}
+	if stats_value := stats {
+		result.stats_value = stats_value
+		result.has_stats = true
+	}
+	return result
 }
 
 /// Whether the search found a match or not.
@@ -223,8 +257,8 @@ pub fn (result SearchResult) has_match() bool {
 /// It can be expensive to compute statistics, so these are only present
 /// if explicitly enabled in the printer provided by the caller.
 pub fn (result &^a SearchResult) stats[^a]() ?&^a printer.Stats {
-	if result.stats != none {
-		return unsafe { &result.stats? }
+	if result.has_stats {
+		return &result.stats_value
 	}
 	return none
 }
@@ -352,13 +386,13 @@ pub fn (mut worker SearchWorker[W]) search(haystack &Haystack) !SearchResult {
 	path := (*haystack.path()).to_owned()
 	worker.searcher.set_binary_detection(bin)
 	if haystack.is_stdin() {
-		mut stdin := os.stdin()
+		mut stdin := StdinReader.new(os.stdin())
 		return worker.search_reader(path.clone(), mut stdin)
 	}
 	if worker.should_preprocess(path.clone()) {
 		return worker.search_preprocessor(path.clone())
 	}
-	if worker.should_decompress(path.clone()) {
+	if worker.config.search_zip && worker.should_decompress(path.clone()) {
 		return worker.search_decompress(path.clone())
 	}
 	return worker.search_path(path)
@@ -367,15 +401,6 @@ pub fn (mut worker SearchWorker[W]) search(haystack &Haystack) !SearchResult {
 /// Return a mutable reference to the underlying printer.
 pub fn (mut worker SearchWorker[W]) printer() &Printer[W] {
 	return &worker.printer
-}
-
-/// Returns true if and only if the given file path should be
-/// decompressed before searching.
-fn (worker SearchWorker[W]) should_decompress(path string) bool {
-	if decomp_builder := worker.decomp_builder {
-		return decomp_builder.get_matcher().has_command(path)
-	}
-	return false
 }
 
 /// Returns true if and only if the given file path should be run through
@@ -390,19 +415,35 @@ fn (worker SearchWorker[W]) should_preprocess(path string) bool {
 	return !worker.config.preprocessor_globs.matched(path, false).is_ignore()
 }
 
+fn (worker SearchWorker[W]) should_decompress(path string) bool {
+	decomp_builder := worker.decomp_builder or { return false }
+	return decomp_builder.get_matcher().has_command(path)
+}
+
 /// Search the given file path by first asking the preprocessor for the
 /// data to search instead of opening the path directly.
 fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
 	bin := worker.config.preprocessor or { return worker.search_path(path) }
 	mut cmd := cli.Command.new(bin)
 	cmd.arg(path.clone())
+	cmd.stdin_path(path.clone())
 	mut rdr := worker.command_builder.build(cmd) or {
 		return error("preprocessor command could not start: '${bin} ${path}': ${err.msg()}")
 	}
 	result := worker.search_reader(path.clone(), mut rdr) or {
+		search_err := err
+		rdr.close() or {}
+		if cli.is_broken_pipe_error(search_err) {
+			return search_err
+		}
+		return error("preprocessor command failed: '${bin} ${path}': ${search_err.msg()}")
+	}
+	rdr.close() or {
+		if cli.is_broken_pipe_error(err) {
+			return err
+		}
 		return error("preprocessor command failed: '${bin} ${path}': ${err.msg()}")
 	}
-	rdr.close()!
 	return result
 }
 
@@ -412,7 +453,11 @@ fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
 fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
 	decomp_builder := worker.decomp_builder or { return worker.search_path(path) }
 	mut rdr := decomp_builder.build(path.clone())!
-	result := worker.search_reader(path.clone(), mut rdr)!
+	result := worker.search_reader(path.clone(), mut rdr) or {
+		search_err := err
+		rdr.close() or {}
+		return search_err
+	}
 	rdr.close()!
 	return result
 }
@@ -458,28 +503,25 @@ fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
 	fn (mut worker SearchWorker[W]) search_path_with_regex_matcher(matcher_ regex.RegexMatcher, printer_matcher printer.PrinterMatcher, path string) !SearchResult {
 		return match worker.printer.kind {
 			.standard {
-				mut sink := worker.printer.standard.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_path(matcher_, path.clone(), &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone(sink.stats())
+				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_path(matcher_, path.clone(), &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone(sink.stats()))
 			}
 			.summary {
-				mut sink := worker.printer.summary.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_path(matcher_, path.clone(), &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone((&sink).stats())
+				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_path(matcher_, path.clone(), &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone((&sink).stats()))
 			}
 			.json {
-				mut sink := worker.printer.json.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_path(matcher_, path.clone(), &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     (&sink).stats().clone()
+				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_path(matcher_, path.clone(), &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), (&sink).stats().clone())
 			}
 		}
 	}
@@ -487,28 +529,25 @@ fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
 	fn (mut worker SearchWorker[W]) search_path_with_pcre2_matcher(matcher_ pcre2.RegexMatcher, printer_matcher printer.PrinterMatcher, path string) !SearchResult {
 		return match worker.printer.kind {
 			.standard {
-				mut sink := worker.printer.standard.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_path(matcher_, path.clone(), &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone(sink.stats())
+				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_path(matcher_, path.clone(), &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone(sink.stats()))
 			}
 			.summary {
-				mut sink := worker.printer.summary.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_path(matcher_, path.clone(), &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone((&sink).stats())
+				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_path(matcher_, path.clone(), &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone((&sink).stats()))
 			}
 			.json {
-				mut sink := worker.printer.json.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_path(matcher_, path.clone(), &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     (&sink).stats().clone()
+				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_path(matcher_, path.clone(), &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), (&sink).stats().clone())
 			}
 		}
 	}
@@ -518,28 +557,25 @@ fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
 	fn (mut worker SearchWorker[W]) search_reader_with_regex_matcher(matcher_ regex.RegexMatcher, printer_matcher printer.PrinterMatcher, path string, mut rdr io.Reader) !SearchResult {
 		return match worker.printer.kind {
 			.standard {
-				mut sink := worker.printer.standard.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_reader(matcher_, mut rdr, &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone(sink.stats())
+				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_reader(matcher_, mut rdr, &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone(sink.stats()))
 			}
 			.summary {
-				mut sink := worker.printer.summary.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_reader(matcher_, mut rdr, &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone((&sink).stats())
+				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_reader(matcher_, mut rdr, &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone((&sink).stats()))
 			}
 			.json {
-				mut sink := worker.printer.json.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_reader(matcher_, mut rdr, &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     (&sink).stats().clone()
+				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_reader(matcher_, mut rdr, &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), (&sink).stats().clone())
 			}
 		}
 	}
@@ -547,28 +583,25 @@ fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
 	fn (mut worker SearchWorker[W]) search_reader_with_pcre2_matcher(matcher_ pcre2.RegexMatcher, printer_matcher printer.PrinterMatcher, path string, mut rdr io.Reader) !SearchResult {
 		return match worker.printer.kind {
 			.standard {
-				mut sink := worker.printer.standard.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_reader(matcher_, mut rdr, &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone(sink.stats())
+				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_reader(matcher_, mut rdr, &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone(sink.stats()))
 			}
 			.summary {
-				mut sink := worker.printer.summary.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_reader(matcher_, mut rdr, &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     stats_clone((&sink).stats())
+				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_reader(matcher_, mut rdr, &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), stats_clone((&sink).stats()))
 			}
 			.json {
-				mut sink := worker.printer.json.sink_with_path(printer_matcher.clone(), &path)
-				worker.searcher.search_reader(matcher_, mut rdr, &sink)!
-				SearchResult{
-					has_match: sink.has_match()
-					stats:     (&sink).stats().clone()
+				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
+				worker.searcher.search_reader(matcher_, mut rdr, &sink) or {
+					return normalize_searcher_error(err)
 				}
+				SearchResult.new(sink.has_match(), (&sink).stats().clone())
 			}
 		}
 	}
@@ -577,4 +610,11 @@ fn stats_clone(stats ?&printer.Stats) ?printer.Stats {
 		return value.clone()
 	}
 	return none
+}
+
+fn normalize_searcher_error(err IError) IError {
+	if err.code() == 0 && err.msg() == '' {
+		return cli.broken_pipe_error()
+	}
+	return err
 }
