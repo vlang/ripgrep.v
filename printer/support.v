@@ -218,6 +218,12 @@ pub fn (pp PrinterPath[^a]) as_bytes[^a]() []u8 {
 	return pp.bytes.clone()
 }
 
+// V-specific: exposes the cached path bytes inside the printer module so the
+// standard printer can avoid cloning them for every matching line.
+fn (pp PrinterPath[^a]) as_bytes_view[^a]() []u8 {
+	return pp.bytes
+}
+
 /// Return this path as a hyperlink.
 ///
 /// This port uses an optional cached hyperlink value instead of a `OnceCell`.

@@ -444,9 +444,61 @@ pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sea
 			return false
 		}
 	}
+	if sink.can_fast_plain_match(searcher_) {
+		sink.write_fast_plain_match(searcher_, mat)!
+		return true
+	}
 	mut imp := StandardImpl.from_match(searcher_, &sink, mat)
 	imp.sink()!
 	return true
+}
+
+fn (sink StandardSink[^p, ^s, W]) can_fast_plain_match[^p, ^s](searcher_ searcher.Searcher) bool {
+	if sink.path == none || sink.needs_match_granularity || sink.standard.wtr.supports_color()
+		|| sink.standard.wtr.supports_hyperlinks() {
+		return false
+	}
+	config := sink.standard.config
+	if config.stats || config.heading || !config.path || config.only_matching || config.per_match
+		|| config.replacement != none || config.max_columns != none || config.max_columns_preview
+		|| config.column || config.byte_offset || config.trim_ascii || config.separator_search != none
+		|| config.separator_path != none || config.path_terminator != none
+		|| !config.hyperlink.format().is_empty() {
+		return false
+	}
+	if config.separator_field_match.len != 1 || config.separator_field_match[0] != `:` {
+		return false
+	}
+	if searcher_.line_number() || searcher_.invert_match() || searcher_.before_context() != 0
+		|| searcher_.after_context() != 0 || searcher_.passthru()
+		|| searcher_.binary_detection().convert_byte() != none
+		|| printer_matcher_multi_line(searcher_, sink.matcher) {
+		return false
+	}
+	return true
+}
+
+fn (mut sink StandardSink[^p, ^s, W]) write_fast_plain_match[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) ! {
+	if path := sink.path {
+		sink.write_all(path.as_bytes_view())!
+		sink.write_all(sink.standard.config.separator_field_match)!
+	}
+	line := mat.bytes_view()
+	sink.write_all(line)!
+	if !searcher_.line_terminator().is_suffix(line) {
+		sink.write_all(searcher_.line_terminator().as_bytes())!
+	}
+}
+
+fn (mut sink StandardSink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
+	mut written := usize(0)
+	for written < buf.len {
+		n := sink.standard.wtr.write(buf[written..])!
+		if n <= 0 {
+			return error('failed to write all bytes')
+		}
+		written += usize(n)
+	}
 }
 
 pub fn (mut sink StandardSink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Searcher, ctx searcher.SinkContext) !bool {
@@ -1003,11 +1055,11 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_spec[^p, ^s](spec ColorSpec, buf []u8
 fn (mut imp StandardImpl[^p, ^s, W]) write_path[^p, ^s](mut path PrinterPath[^p]) ! {
 	spec := imp.config().colors.path()
 	if spec.is_none() || !imp.sink.standard.wtr.supports_color() {
-		imp.write(path.as_bytes())!
+		imp.write(path.as_bytes_view())!
 		return
 	}
 	imp.sink.standard.wtr.set_color(spec)!
-	imp.write(path.as_bytes())!
+	imp.write(path.as_bytes_view())!
 	imp.sink.standard.wtr.reset()!
 }
 
