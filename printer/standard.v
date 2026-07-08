@@ -287,6 +287,7 @@ pub fn (mut standard Standard[W]) sink[^s](matcher_ PrinterMatcher) StandardSink
 		stats:                   Stats.new()
 		has_stats:               standard.config.stats
 		needs_match_granularity: standard.needs_match_granularity()
+		fast_plain_match:        false
 	}
 }
 
@@ -308,6 +309,7 @@ pub fn (mut standard Standard[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher
 		stats:                   Stats.new()
 		has_stats:               standard.config.stats
 		needs_match_granularity: standard.needs_match_granularity()
+		fast_plain_match:        false
 	}
 }
 
@@ -361,6 +363,7 @@ mut:
 	stats                   Stats
 	has_stats               bool
 	needs_match_granularity bool
+	fast_plain_match        bool
 }
 
 /// Returns true if and only if this printer received a match in the
@@ -437,7 +440,7 @@ pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sea
 			return false
 		}
 	}
-	if sink.can_fast_plain_match(searcher_) {
+	if sink.fast_plain_match {
 		sink.write_fast_plain_match(searcher_, mat)!
 		return true
 	}
@@ -446,7 +449,7 @@ pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sea
 	return true
 }
 
-fn (sink StandardSink[^p, ^s, W]) can_fast_plain_match[^p, ^s](searcher_ searcher.Searcher) bool {
+fn (sink StandardSink[^p, ^s, W]) compute_fast_plain_match[^p, ^s](searcher_ searcher.Searcher) bool {
 	if sink.path == none || sink.needs_match_granularity || sink.standard.wtr.supports_color()
 		|| sink.standard.wtr.supports_hyperlinks() {
 		return false
@@ -473,37 +476,20 @@ fn (sink StandardSink[^p, ^s, W]) can_fast_plain_match[^p, ^s](searcher_ searche
 fn (mut sink StandardSink[^p, ^s, W]) write_fast_plain_match[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) ! {
 	line := mat.bytes_view()
 	line_term := searcher_.line_terminator()
-	mut extra := usize(1)
-	if !line_term.is_suffix(line) {
-		extra += usize(line_term.as_bytes().len)
-	}
 	if path := sink.path {
 		path_bytes := path.as_bytes_view()
-		mut line_number_bytes := []u8{}
+		sink.write_all(path_bytes)!
+		sink.write_all(sink.standard.config.separator_field_match)!
 		if line_number := mat.line_number() {
-			line_number_bytes = DecimalFormatter.new(line_number).as_bytes()
-			extra += usize(line_number_bytes.len + 1)
+			line_number_bytes := DecimalFormatter.new(line_number).as_bytes()
+			sink.write_all(line_number_bytes)!
+			sink.write_all(sink.standard.config.separator_field_match)!
 		}
-		mut out := []u8{cap: path_bytes.len + line.len + int(extra)}
-		out << path_bytes
-		out << sink.standard.config.separator_field_match
-		if line_number_bytes.len > 0 {
-			out << line_number_bytes
-			out << sink.standard.config.separator_field_match
-		}
-		out << line
-		if !line_term.is_suffix(line) {
-			out << line_term.as_bytes()
-		}
-		sink.write_all(out)!
-		return
 	}
-	mut out := []u8{cap: line.len + int(extra)}
-	out << line
+	sink.write_all(line)!
 	if !line_term.is_suffix(line) {
-		out << line_term.as_bytes()
+		sink.write_all(line_term.as_bytes())!
 	}
-	sink.write_all(out)!
 }
 
 fn (mut sink StandardSink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
@@ -556,6 +542,7 @@ pub fn (mut sink StandardSink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Searc
 	sink.start_time = time.now()
 	sink.match_count = 0
 	sink.binary_byte_offset = none
+	sink.fast_plain_match = sink.compute_fast_plain_match(_searcher)
 	return true
 }
 

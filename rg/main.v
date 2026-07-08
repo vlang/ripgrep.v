@@ -7,6 +7,8 @@ import ignore
 import printer
 import time
 
+const parallel_job_queue_capacity = 256
+
 $if !windows {
 	#include "@VMODROOT/rg/sigpipe.h"
 }
@@ -233,15 +235,181 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 
 /// The top-level entry point for search when multiple threads were requested.
 ///
-/// V-specific: real parallel traversal is not translated yet, so this falls
-/// back to the sequential search path.
+/// The parallelism is itself achieved by feeding haystacks from traversal to
+/// search workers. This preserves the existing streaming path for modes that
+/// need early global termination.
 fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
-	// V-specific: the translated `ignore.WalkParallel` is not Rust's
-	// worker-splitting traversal yet. Use the streaming search path instead
-	// of the old producer/worker/chunk buffering model so observable search
-	// semantics match the single-threaded Rust path until real parallel
-	// traversal is available.
-	return search(args, mode)
+	started_at := time.now()
+	mut bufwtr := args.buffer_writer()
+	if args.quit_after_match() {
+		return search(args, mode)
+	}
+
+	thread_count := parallel_worker_count(args.threads())
+	mut separator := []u8{}
+	mut has_separator := false
+	if sep := args.file_separator_bytes() {
+		separator = sep
+		has_separator = true
+	}
+	walk := args.walk_builder()!.build_parallel()
+	mut workers := []core.SearchWorker[cli.Buffer]{cap: thread_count}
+	for _ in 0 .. thread_count {
+		matcher_ := args.matcher()!
+		searcher_ := args.searcher()!
+		printer_ := args.printer_buffer(mode, bufwtr.buffer())
+		workers << args.search_worker_buffer(matcher_, searcher_, printer_)!
+	}
+	jobs := chan SearchParallelJob{cap: parallel_job_queue_capacity}
+	results := chan SearchParallelChunkResult{cap: thread_count}
+	mut threads := []thread bool{}
+	for worker_index in 0 .. thread_count {
+		worker := workers[worker_index]
+		threads << spawn search_parallel_worker(worker, jobs, results, args.stats() != none,
+			separator.clone(), has_separator, worker_index)
+	}
+	producer := spawn search_parallel_producer(walk, args.haystack_builder(), jobs, thread_count)
+
+	mut matched := false
+	mut stats := args.stats()
+	for _ in 0 .. thread_count {
+		result := <-results
+		matched = matched || result.matched
+		for message in result.errors {
+			core.err_message(message)
+		}
+		bufwtr.print(&result.buffer)!
+		if stats_value := stats {
+			if result_stats := result.stats {
+				stats = stats_value + result_stats
+			}
+		}
+	}
+	producer_result := producer.wait()
+	for thread in threads {
+		thread.wait()
+	}
+	if args.has_implicit_path() && producer_result.haystack_count == 0 {
+		eprint_nothing_searched()
+	}
+	if stats_value := stats {
+		mut wtr := bufwtr.buffer()
+		print_stats(mode, stats_value, started_at, mut wtr)!
+		bufwtr.print(&wtr)!
+	}
+	return matched
+}
+
+struct SearchParallelJob {
+	stop     bool
+	haystack core.Haystack
+}
+
+struct SearchParallelProducerResult {
+	haystack_count int
+}
+
+struct SearchParallelQueueVisitor {
+	haystack_builder core.HaystackBuilder
+	jobs             chan SearchParallelJob
+mut:
+	haystack_count int
+}
+
+fn (mut visitor SearchParallelQueueVisitor) visit(result ignore.WalkResult) ignore.WalkState {
+	if haystack := visitor.haystack_builder.build_from_result(result) {
+		visitor.jobs <- SearchParallelJob{
+			haystack: haystack
+		}
+		visitor.haystack_count++
+	}
+	return .continue_
+}
+
+struct SearchParallelChunkResult {
+	index    int
+	matched  bool
+	searched bool
+	stats    ?printer.Stats
+	buffer   cli.Buffer
+	errors   []string
+}
+
+fn search_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, jobs chan SearchParallelJob, stop_count int) SearchParallelProducerResult {
+	mut visitor := SearchParallelQueueVisitor{
+		haystack_builder: haystack_builder
+		jobs:             jobs
+	}
+	walk.run(mut visitor)
+	for _ in 0 .. stop_count {
+		jobs <- SearchParallelJob{
+			stop: true
+		}
+	}
+	return SearchParallelProducerResult{
+		haystack_count: visitor.haystack_count
+	}
+}
+
+fn search_parallel_worker(searcher_in core.SearchWorker[cli.Buffer], jobs chan SearchParallelJob, results chan SearchParallelChunkResult, stats_enabled bool, separator []u8, has_separator bool, index int) bool {
+	mut searcher := searcher_in
+	mut chunk_buffer := searcher.printer().get_mut().take()
+	mut printed := false
+	mut result := SearchParallelChunkResult{
+		index:    index
+		matched:  false
+		searched: false
+		stats:    if stats_enabled {
+			?printer.Stats(printer.Stats.new())
+		} else {
+			?printer.Stats(none)
+		}
+		buffer:   chunk_buffer
+		errors:   []string{}
+	}
+	for {
+		job := <-jobs
+		if job.stop {
+			break
+		}
+		haystack := job.haystack
+		result.searched = true
+		searcher.printer().get_mut().clear()
+		search_result := searcher.search(&haystack) or {
+			result.errors << '${*haystack.path()}: ${err.msg()}'
+			continue
+		}
+		if search_result.has_match() {
+			result.matched = true
+		}
+		if stats_value := result.stats {
+			if result_stats := search_result.stats() {
+				result.stats = stats_value + *result_stats
+			}
+		}
+		file_buffer := searcher.printer().get_mut().take()
+		if !file_buffer.is_empty() {
+			if printed && has_separator {
+				result.buffer.write(separator) or {}
+			}
+			result.buffer.append_buffer(&file_buffer)
+			printed = true
+		}
+	}
+	searcher.printer().flush() or {}
+	results <- result
+	return true
+}
+
+fn parallel_worker_count(thread_setting usize) int {
+	mut count := int(thread_setting)
+	if count < 1 {
+		count = 1
+	}
+	if count > 4 {
+		count = 4
+	}
+	return count
 }
 
 /// The top-level entry point for file listing without searching.

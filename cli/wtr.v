@@ -13,7 +13,7 @@ $if !windows {
 
 #include <errno.h>
 
-const standard_stream_block_capacity = 32 * 1024
+const standard_stream_block_capacity = 128 * 1024
 const errno_ebadf = 9
 const errno_eintr = 4
 const errno_epipe = 32
@@ -93,11 +93,16 @@ enum StandardStreamKind {
 }
 
 fn StandardStream.new(kind StandardStreamKind, color_choice ColorChoice) StandardStream {
+	buffer := if kind == .block_buffered {
+		[]u8{cap: standard_stream_block_capacity}
+	} else {
+		[]u8{}
+	}
 	return StandardStream{
 		color_choice: color_choice
 		kind:         kind
 		fd:           1
-		buffer:       []u8{}
+		buffer:       buffer
 	}
 }
 
@@ -349,7 +354,11 @@ pub fn (mut stream StandardStream) write(buf []u8) !int {
 pub fn (mut stream StandardStream) flush() ! {
 	if stream.buffer.len > 0 {
 		buffer := stream.buffer
-		stream.buffer = []u8{}
+		stream.buffer = if stream.kind == .block_buffered {
+			[]u8{cap: standard_stream_block_capacity}
+		} else {
+			[]u8{}
+		}
 		stream.write_direct(buffer)!
 	}
 	flush_stdout()

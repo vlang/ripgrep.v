@@ -715,7 +715,7 @@ fn find_byte_literal_index(haystack []u8, literal []u8, at usize) ?usize {
 		return find_byte_literal_bmh(haystack, literal, at)
 	}
 	$if !windows {
-		return find_byte_literal_memmem(haystack, literal, at)
+		return find_byte_literal_memchr(haystack, literal, at)
 	} $else {
 		mut i := int(at)
 		for i + literal.len <= haystack.len {
