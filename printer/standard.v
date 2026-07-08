@@ -462,9 +462,8 @@ fn (sink StandardSink[^p, ^s, W]) can_fast_plain_match[^p, ^s](searcher_ searche
 	if config.separator_field_match.len != 1 || config.separator_field_match[0] != `:` {
 		return false
 	}
-	if searcher_.line_number() || searcher_.invert_match() || searcher_.before_context() != 0
-		|| searcher_.after_context() != 0 || searcher_.passthru()
-		|| searcher_.binary_detection().convert_byte() != none
+	if searcher_.invert_match() || searcher_.before_context() != 0 || searcher_.after_context() != 0
+		|| searcher_.passthru() || searcher_.binary_detection().convert_byte() != none
 		|| printer_matcher_multi_line(searcher_, sink.matcher) {
 		return false
 	}
@@ -472,15 +471,39 @@ fn (sink StandardSink[^p, ^s, W]) can_fast_plain_match[^p, ^s](searcher_ searche
 }
 
 fn (mut sink StandardSink[^p, ^s, W]) write_fast_plain_match[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) ! {
-	if path := sink.path {
-		sink.write_all(path.as_bytes_view())!
-		sink.write_all(sink.standard.config.separator_field_match)!
-	}
 	line := mat.bytes_view()
-	sink.write_all(line)!
-	if !searcher_.line_terminator().is_suffix(line) {
-		sink.write_all(searcher_.line_terminator().as_bytes())!
+	line_term := searcher_.line_terminator()
+	mut extra := usize(1)
+	if !line_term.is_suffix(line) {
+		extra += usize(line_term.as_bytes().len)
 	}
+	if path := sink.path {
+		path_bytes := path.as_bytes_view()
+		mut line_number_bytes := []u8{}
+		if line_number := mat.line_number() {
+			line_number_bytes = DecimalFormatter.new(line_number).as_bytes()
+			extra += usize(line_number_bytes.len + 1)
+		}
+		mut out := []u8{cap: path_bytes.len + line.len + int(extra)}
+		out << path_bytes
+		out << sink.standard.config.separator_field_match
+		if line_number_bytes.len > 0 {
+			out << line_number_bytes
+			out << sink.standard.config.separator_field_match
+		}
+		out << line
+		if !line_term.is_suffix(line) {
+			out << line_term.as_bytes()
+		}
+		sink.write_all(out)!
+		return
+	}
+	mut out := []u8{cap: line.len + int(extra)}
+	out << line
+	if !line_term.is_suffix(line) {
+		out << line_term.as_bytes()
+	}
+	sink.write_all(out)!
 }
 
 fn (mut sink StandardSink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
