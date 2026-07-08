@@ -54,17 +54,57 @@ enum BinaryDetectionKind {
 	convert
 }
 
+/// Binary detection is the process of heuristically identifying whether a
+/// particular portion of data is binary or not.
+///
+/// Binary detection generally works by indicating that a particular byte in
+/// a search should be treated as a binary byte.
+///
+/// When binary detection is enabled and binary data is found, then the
+/// search will either halt (as if it reached EOF) or convert the binary
+/// byte to a line terminator.
+///
+/// Binary detection is performed in one of two ways:
+///
+/// 1. When performing a search using a fixed size buffer, binary detection is
+///    applied to the buffer's contents as it is filled. Binary detection must
+///    be applied to the buffer directly because binary files may not contain
+///    line terminators, which could result in exorbitant memory usage.
+/// 2. When performing a search using memory maps or by reading data off the
+///    heap, then binary detection is only guaranteed to be applied to the
+///    parts corresponding to a match. When `Quit` is enabled, then the first
+///    few KB of the data are searched for binary data.
 pub struct BinaryDetection implements IClone {
 	kind BinaryDetectionKind
 	byte u8
 }
 
+/// No binary detection is performed. Data reported by the searcher may
+/// contain arbitrary bytes.
+///
+/// This is the default.
+///
+/// V-specific: Rust calls this constructor `none`, but `none` is the V
+/// optional sentinel.
 pub fn BinaryDetection.disabled() BinaryDetection {
 	return BinaryDetection{
 		kind: .none
 	}
 }
 
+/// Binary detection is performed by looking for the given byte.
+///
+/// When searching is performed using a fixed size buffer, then the
+/// contents of that buffer are always searched for the presence of this
+/// byte. If it is found, then the underlying data is considered binary
+/// and the search stops as if it reached EOF.
+///
+/// When searching is performed with the entire contents mapped into
+/// memory, then binary detection is more conservative. Namely, only a
+/// fixed sized region at the beginning of the contents are detected for
+/// binary data. As a compromise, any subsequent matching (or context)
+/// lines are also searched for binary data. If binary data is detected at
+/// any point, then the search stops as if it reached EOF.
 pub fn BinaryDetection.quit(byte u8) BinaryDetection {
 	return BinaryDetection{
 		kind: .quit
@@ -72,6 +112,18 @@ pub fn BinaryDetection.quit(byte u8) BinaryDetection {
 	}
 }
 
+/// Binary detection is performed by looking for the given byte, and
+/// replacing it with the line terminator configured on the searcher.
+/// (If the searcher is configured to use `CRLF` as the line terminator,
+/// then this byte is replaced by just `LF`.)
+///
+/// When searching is performed using a fixed size buffer, then the
+/// contents of that buffer are always searched for the presence of this
+/// byte and replaced with the line terminator. In effect, the caller is
+/// guaranteed to never observe this byte while searching.
+///
+/// When searching is performed with the entire contents mapped into
+/// memory, then this setting has no effect and is ignored.
 pub fn BinaryDetection.convert(byte u8) BinaryDetection {
 	return BinaryDetection{
 		kind: .convert
@@ -79,6 +131,9 @@ pub fn BinaryDetection.convert(byte u8) BinaryDetection {
 	}
 }
 
+/// If this binary detection uses the "quit" strategy, then this returns
+/// the byte that will cause a search to quit. In any other case, this
+/// returns `None`.
 pub fn (d BinaryDetection) quit_byte() ?u8 {
 	if d.kind == .quit {
 		return d.byte
@@ -86,6 +141,9 @@ pub fn (d BinaryDetection) quit_byte() ?u8 {
 	return none
 }
 
+/// If this binary detection uses the "convert" strategy, then this returns
+/// the byte that will be replaced by the line terminator. In any other
+/// case, this returns `None`.
 pub fn (d BinaryDetection) convert_byte() ?u8 {
 	if d.kind == .convert {
 		return d.byte
@@ -680,10 +738,30 @@ pub fn (mut builder SearcherBuilder) max_matches(limit ?u64) &SearcherBuilder {
 	return builder
 }
 
+/// A searcher executes searches over a haystack and writes results to a caller
+/// provided sink.
+///
+/// Matches are detected via implementations of the `Matcher` trait, which must
+/// be provided by the caller when executing a search.
+///
+/// When possible, a searcher should be reused.
 pub struct Searcher implements IClone {
 mut:
+	/// The configuration for this searcher.
+	///
+	/// We make most of these settings available to users of `Searcher` via
+	/// public API methods, which can be queried in implementations of `Sink`
+	/// if necessary.
 	config            Config
+	// V-specific: Rust stores `decode_builder` and `decode_buffer` fields here.
+	// This port performs transcoding through `TranscodingReader` and
+	// `decode_slice` helpers instead.
+	/// A line buffer for use in line oriented searching.
 	line_buffer       LineBuffer
+	/// A buffer in which to store the contents of a reader when performing a
+	/// multi line search. In particular, multi line searches cannot be
+	/// performed incrementally, and need the entire haystack in memory at
+	/// once.
 	multi_line_buffer []u8
 }
 
@@ -1312,6 +1390,14 @@ pub fn (mut s Searcher) set_invert_match(yes bool) {
 	s.config.invert_match = yes
 }
 
+/// Summary data reported at the end of a search.
+///
+/// This reports data such as the total number of bytes searched and the
+/// absolute offset of the first occurrence of binary data, if any were found.
+///
+/// A searcher that stops early because of an error does not call `finish`.
+/// A searcher that stops early because the `Sink` implementor instructed it
+/// to will still call `finish`.
 pub struct SinkFinish implements IClone {
 	byte_count_         u64
 	binary_byte_offset_ ?u64
@@ -1323,10 +1409,17 @@ pub fn SinkFinish.new(byte_count u64) SinkFinish {
 	}
 }
 
+/// Return the total number of bytes searched.
 pub fn (finish SinkFinish) byte_count() u64 {
 	return finish.byte_count_
 }
 
+/// If binary detection is enabled and if binary data was found, then this
+/// returns the absolute byte offset of the first detected byte of binary
+/// data.
+///
+/// Note that since this is an absolute byte offset, it cannot be relied
+/// upon to index into any addressable memory.
 pub fn (finish SinkFinish) binary_byte_offset() ?u64 {
 	return finish.binary_byte_offset_
 }
@@ -1338,101 +1431,147 @@ pub fn (finish SinkFinish) with_binary_byte_offset(binary_byte_offset ?u64) Sink
 	}
 }
 
+/// An iterator over lines in a particular slice of bytes.
+///
+/// Line terminators are considered part of the line they terminate. All lines
+/// yielded by the iterator are guaranteed to be non-empty.
+///
+/// `'b` refers to the lifetime of the underlying bytes.
 pub struct LineIter implements IClone {
-	bytes_     []u8
-	line_term_ u8
+	// V-specific: Rust stores this as a borrowed `&'b [u8]`; this port stores
+	// an owned slice because `LineIter` values are passed around directly.
+	bytes_   []u8
+	stepper_ LineStep
 }
 
-pub fn LineIter.new(bytes []u8, line_term u8) LineIter {
+/// Create a new line iterator that yields lines in the given bytes that
+/// are terminated by `line_term`.
+pub fn LineIter.new(line_term u8, bytes []u8) LineIter {
 	return LineIter{
-		bytes_:     bytes.clone()
-		line_term_: line_term
+		bytes_:   bytes.clone()
+		stepper_: LineStep.new(line_term, 0, bytes.len)
 	}
 }
 
 pub fn (iter LineIter) count() u64 {
-	if iter.bytes_.len == 0 {
-		return 0
-	}
+	mut stepper := iter.stepper_
 	mut count := u64(0)
-	for byte in iter.bytes_ {
-		if byte == iter.line_term_ {
-			count++
-		}
-	}
-	if iter.bytes_[iter.bytes_.len - 1] != iter.line_term_ {
+	for {
+		m := stepper.next_match(iter.bytes_) or { break }
+		_ = m
 		count++
 	}
 	return count
 }
 
+pub fn (mut iter LineIter) next() ?[]u8 {
+	m := iter.stepper_.next_match(iter.bytes_) or { return none }
+	return iter.bytes_[m.start()..m.end()].clone()
+}
+
+/// A type that describes a match reported by a searcher.
 pub struct SinkMatch implements IClone {
-	buffer_                []u8
-	bytes_range_in_buffer_ matcher.Match
+	line_term_             u8 = `\n`
+	// V-specific: Rust stores `bytes` and `buffer` as borrowed `&'b [u8]`.
+	// This port keeps slice views into the active search buffer and clones
+	// only from public accessors that need owned bytes.
+	bytes_                 []u8
 	absolute_byte_offset_  u64
 	line_number_           ?u64
-	line_term_             u8 = `\n`
+	buffer_                []u8
+	bytes_range_in_buffer_ matcher.Match
 }
 
 pub fn SinkMatch.new(buffer []u8, bytes_range_in_buffer matcher.Match) SinkMatch {
 	return SinkMatch{
-		buffer_:                buffer.clone()
+		bytes_:                 buffer[bytes_range_in_buffer.start()..bytes_range_in_buffer.end()]
+		buffer_:                buffer
 		bytes_range_in_buffer_: bytes_range_in_buffer
 	}
 }
 
 pub fn (mat SinkMatch) with_absolute_byte_offset(absolute_byte_offset u64) SinkMatch {
 	return SinkMatch{
-		buffer_:                mat.buffer_.clone()
-		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
+		line_term_:             mat.line_term_
+		bytes_:                 mat.bytes_
 		absolute_byte_offset_:  absolute_byte_offset
 		line_number_:           mat.line_number_
-		line_term_:             mat.line_term_
+		buffer_:                mat.buffer_
+		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
 	}
 }
 
 pub fn (mat SinkMatch) with_line_number(line_number ?u64) SinkMatch {
 	return SinkMatch{
-		buffer_:                mat.buffer_.clone()
-		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
+		line_term_:             mat.line_term_
+		bytes_:                 mat.bytes_
 		absolute_byte_offset_:  mat.absolute_byte_offset_
 		line_number_:           line_number
-		line_term_:             mat.line_term_
+		buffer_:                mat.buffer_
+		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
 	}
 }
 
 pub fn (mat SinkMatch) with_line_term(line_term u8) SinkMatch {
 	return SinkMatch{
-		buffer_:                mat.buffer_.clone()
-		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
+		line_term_:             line_term
+		bytes_:                 mat.bytes_
 		absolute_byte_offset_:  mat.absolute_byte_offset_
 		line_number_:           mat.line_number_
-		line_term_:             line_term
+		buffer_:                mat.buffer_
+		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
 	}
 }
 
+/// Exposes as much of the underlying buffer that was search as possible.
 pub fn (mat SinkMatch) buffer() []u8 {
 	return mat.buffer_.clone()
 }
 
+/// Returns a range that corresponds to where [`SinkMatch::bytes`] appears
+/// in [`SinkMatch::buffer`].
 pub fn (mat SinkMatch) bytes_range_in_buffer() matcher.Match {
 	return mat.bytes_range_in_buffer_
 }
 
+/// Returns the bytes for all matching lines, including the line
+/// terminators, if they exist.
 pub fn (mat SinkMatch) bytes() []u8 {
-	return mat.buffer_[mat.bytes_range_in_buffer_.start()..mat.bytes_range_in_buffer_.end()].clone()
+	return mat.bytes_.clone()
 }
 
+// V-specific: exposes the active search-buffer slice for printer internals
+// that consume it before the search buffer is reused.
+pub fn (mat SinkMatch) bytes_view() []u8 {
+	return mat.bytes_
+}
+
+/// Returns the absolute byte offset of the start of this match. This
+/// offset is absolute in that it is relative to the very beginning of the
+/// input in a search, and can never be relied upon to be a valid index
+/// into an in-memory slice.
 pub fn (mat SinkMatch) absolute_byte_offset() u64 {
 	return mat.absolute_byte_offset_
 }
 
+/// Returns the line number of the first line in this match, if available.
+///
+/// Line numbers are only available when the search builder is instructed
+/// to compute them.
 pub fn (mat SinkMatch) line_number() ?u64 {
 	return mat.line_number_
 }
 
+/// Return an iterator over the lines in this match.
+///
+/// If multi line search is enabled, then this may yield more than one
+/// line (but always at least one line). If multi line search is disabled,
+/// then this always reports exactly one line (but may consist of just
+/// the line terminator).
+///
+/// Lines yielded by this iterator include their terminators.
 pub fn (mat SinkMatch) lines() LineIter {
-	return LineIter.new(mat.bytes(), mat.line_term_)
+	return LineIter.new(mat.line_term_, mat.bytes())
 }
 
 /// An explicit iterator over lines in a particular slice of bytes.
@@ -1615,87 +1754,63 @@ fn preceding_by_position(bytes []u8, pos usize, line_term u8, count usize) usize
 }
 
 pub enum SinkContextKind {
+	// The line reported occurred before a match.
 	before
+	// The line reported occurred after a match.
 	after
+	// Any other type of context reported, e.g., as a result of a searcher's
+	// "passthru" mode.
 	other
 }
 
+/// A type that describes a contextual line reported by a searcher.
 pub struct SinkContext implements IClone {
+	// V-specific: Rust only stores this under `#[cfg(test)]` for
+	// `SinkContext::lines`, but translated V tests compile as normal module
+	// files and still need it.
+	line_term_             u8 = `\n`
+	// V-specific: Rust stores this as a borrowed `&'b [u8]`; the current V
+	// sink interface passes context values, so this stores an owned slice.
+	bytes_                 []u8
 	kind_                  SinkContextKind
-	buffer_                []u8
-	bytes_range_in_buffer_ matcher.Match
 	absolute_byte_offset_  u64
 	line_number_           ?u64
-	line_term_             u8 = `\n`
 }
 
-pub fn SinkContext.new(kind SinkContextKind, buffer []u8, bytes_range_in_buffer matcher.Match) SinkContext {
-	return SinkContext{
-		kind_:                  kind
-		buffer_:                buffer.clone()
-		bytes_range_in_buffer_: bytes_range_in_buffer
-	}
+/// Returns the context bytes, including line terminators.
+pub fn (ctx SinkContext) bytes() []u8 {
+	return ctx.bytes_.clone()
 }
 
-pub fn (ctx SinkContext) with_absolute_byte_offset(absolute_byte_offset u64) SinkContext {
-	return SinkContext{
-		kind_:                  ctx.kind_
-		buffer_:                ctx.buffer_.clone()
-		bytes_range_in_buffer_: ctx.bytes_range_in_buffer_
-		absolute_byte_offset_:  absolute_byte_offset
-		line_number_:           ctx.line_number_
-		line_term_:             ctx.line_term_
-	}
-}
-
-pub fn (ctx SinkContext) with_line_number(line_number ?u64) SinkContext {
-	return SinkContext{
-		kind_:                  ctx.kind_
-		buffer_:                ctx.buffer_.clone()
-		bytes_range_in_buffer_: ctx.bytes_range_in_buffer_
-		absolute_byte_offset_:  ctx.absolute_byte_offset_
-		line_number_:           line_number
-		line_term_:             ctx.line_term_
-	}
-}
-
-pub fn (ctx SinkContext) with_line_term(line_term u8) SinkContext {
-	return SinkContext{
-		kind_:                  ctx.kind_
-		buffer_:                ctx.buffer_.clone()
-		bytes_range_in_buffer_: ctx.bytes_range_in_buffer_
-		absolute_byte_offset_:  ctx.absolute_byte_offset_
-		line_number_:           ctx.line_number_
-		line_term_:             line_term
-	}
-}
-
+/// Returns the type of context.
 pub fn (ctx SinkContext) kind() SinkContextKind {
 	return ctx.kind_
 }
 
-pub fn (ctx SinkContext) buffer() []u8 {
-	return ctx.buffer_.clone()
+/// Return an iterator over the lines in this match.
+///
+/// This always yields exactly one line (and that one line may contain just
+/// the line terminator).
+///
+/// Lines yielded by this iterator include their terminators.
+fn (ctx SinkContext) lines() LineIter {
+	return LineIter.new(ctx.line_term_, ctx.bytes())
 }
 
-pub fn (ctx SinkContext) bytes_range_in_buffer() matcher.Match {
-	return ctx.bytes_range_in_buffer_
-}
-
-pub fn (ctx SinkContext) bytes() []u8 {
-	return ctx.buffer_[ctx.bytes_range_in_buffer_.start()..ctx.bytes_range_in_buffer_.end()].clone()
-}
-
+/// Returns the absolute byte offset of the start of this context. This
+/// offset is absolute in that it is relative to the very beginning of the
+/// input in a search, and can never be relied upon to be a valid index
+/// into an in-memory slice.
 pub fn (ctx SinkContext) absolute_byte_offset() u64 {
 	return ctx.absolute_byte_offset_
 }
 
+/// Returns the line number of the first line in this context, if available.
+///
+/// Line numbers are only available when the search builder is instructed to
+/// compute them.
 pub fn (ctx SinkContext) line_number() ?u64 {
 	return ctx.line_number_
-}
-
-pub fn (ctx SinkContext) lines() LineIter {
-	return LineIter.new(ctx.bytes(), ctx.line_term_)
 }
 
 pub interface Sink {
@@ -2434,7 +2549,14 @@ fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.matched(*core.searcher, SinkMatch.new(buf, range).with_absolute_byte_offset(offset).with_line_number(core.line_number).with_line_term(core.config.line_term.as_byte()))!
+	keepgoing := core.sink.matched(*core.searcher, SinkMatch{
+		line_term_:             core.config.line_term.as_byte()
+		bytes_:                 buf[range.start()..range.end()]
+		absolute_byte_offset_:  offset
+		line_number_:           core.line_number
+		buffer_:                buf
+		bytes_range_in_buffer_: range
+	})!
 	if !keepgoing {
 		return false
 	}
@@ -2450,7 +2572,13 @@ fn (mut core Core[^s]) sink_before_context[^s](buf []u8, range matcher.Match) !b
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.context(*core.searcher, SinkContext.new(.before, buf, range).with_absolute_byte_offset(offset).with_line_number(core.line_number).with_line_term(core.config.line_term.as_byte()))!
+	keepgoing := core.sink.context(*core.searcher, SinkContext{
+		line_term_:            core.config.line_term.as_byte()
+		bytes_:                buf[range.start()..range.end()].clone()
+		kind_:                 .before
+		absolute_byte_offset_: offset
+		line_number_:          core.line_number
+	})!
 	if !keepgoing {
 		return false
 	}
@@ -2467,7 +2595,13 @@ fn (mut core Core[^s]) sink_after_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.context(*core.searcher, SinkContext.new(.after, buf, range).with_absolute_byte_offset(offset).with_line_number(core.line_number).with_line_term(core.config.line_term.as_byte()))!
+	keepgoing := core.sink.context(*core.searcher, SinkContext{
+		line_term_:            core.config.line_term.as_byte()
+		bytes_:                buf[range.start()..range.end()].clone()
+		kind_:                 .after
+		absolute_byte_offset_: offset
+		line_number_:          core.line_number
+	})!
 	if !keepgoing {
 		return false
 	}
@@ -2483,7 +2617,13 @@ fn (mut core Core[^s]) sink_other_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.context(*core.searcher, SinkContext.new(.other, buf, range).with_absolute_byte_offset(offset).with_line_number(core.line_number).with_line_term(core.config.line_term.as_byte()))!
+	keepgoing := core.sink.context(*core.searcher, SinkContext{
+		line_term_:            core.config.line_term.as_byte()
+		bytes_:                buf[range.start()..range.end()].clone()
+		kind_:                 .other
+		absolute_byte_offset_: offset
+		line_number_:          core.line_number
+	})!
 	if !keepgoing {
 		return false
 	}

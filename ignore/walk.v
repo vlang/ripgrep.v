@@ -2,7 +2,19 @@ module ignore
 
 import os
 
+$if !windows {
+	#include <dirent.h>
+	fn C.opendir(name &char) voidptr
+	fn C.readdir(dirp voidptr) &C.dirent
+	fn C.closedir(dirp voidptr) int
+}
+
 const stdin_entry_name = '<stdin>'
+
+const dirent_dt_unknown = 0
+const dirent_dt_dir = 4
+const dirent_dt_reg = 8
+const dirent_dt_lnk = 10
 
 pub enum EntryFileType {
 	unknown
@@ -45,6 +57,12 @@ struct DirEntryRaw implements IClone {
 	source_is_symlink bool
 	metadata          Metadata
 	ino_value         u64
+}
+
+struct DirChild {
+	name     string
+	ty       EntryFileType
+	has_type bool
 }
 
 // File metadata attached to a directory entry.
@@ -232,6 +250,23 @@ fn DirEntryRaw.from_child(depth int, parent_path string, name string) !DirEntryR
 	return DirEntryRaw.from_path(depth, os.join_path(parent_path, name), false)
 }
 
+fn DirEntryRaw.from_child_known(depth int, parent_path string, name string, ty EntryFileType) DirEntryRaw {
+	path := os.join_path(parent_path, name)
+	return DirEntryRaw{
+		path:              path.to_owned()
+		file_name_value:   name.to_owned()
+		ty:                ty
+		follow_link:       false
+		depth:             depth
+		source_is_symlink: ty == .symbolic_link
+		metadata:          Metadata{
+			size:      u64(0)
+			file_type: ty
+		}
+		ino_value:         u64(0)
+	}
+}
+
 // Result item produced by the V walk APIs.
 //
 // The original Rust iterator yields `Result<DirEntry, Error>`. This port keeps
@@ -349,25 +384,26 @@ fn stdout_handle() (bool, Handle) {
 // path sorting, size filtering, and other traversal options.
 pub struct WalkBuilder implements IClone {
 mut:
-	paths           []string
-	ig_builder      IgnoreBuilder
-	max_depth       int = -1
-	min_depth       int = -1
-	max_filesize    u64
-	has_max_filesize bool
-	follow_links    bool
+	paths            []string
+	ig_builder       IgnoreBuilder
+	max_depth        ?usize
+	min_depth        ?usize
+	max_filesize     ?u64
+	follow_links     bool
 	same_file_system bool
-	threads         int
-	skip            Handle
-	has_skip        bool
-	filter          FilterFn = unsafe { nil }
-	has_filter      bool
-	sort_by_name    NameComparator = unsafe { nil }
+	threads          int
+	skip             ?Handle
+	// V-specific: Rust stores callback slots as `Option<Fn>`. The port keeps
+	// function pointers with explicit presence bits because optional function
+	// fields are not reliable in the current ownership frontend.
+	filter           FilterFn = unsafe { nil }
+	has_filter       bool
+	sort_by_name     NameComparator = unsafe { nil }
 	has_sort_by_name bool
-	sort_by_path    PathComparator = unsafe { nil }
+	sort_by_path     PathComparator = unsafe { nil }
 	has_sort_by_path bool
-	cwd_initialized bool
-	cwd_value       string
+	cwd_initialized  bool
+	cwd_value        string
 }
 
 // Creates a new builder for recursive traversal rooted at `path`.
@@ -391,14 +427,11 @@ pub fn (builder WalkBuilder) build() Walk {
 		ig_root:          ig_root
 		ig:               ig_root
 		max_filesize:     builder.max_filesize
-		has_max_filesize: builder.has_max_filesize
 		skip:             builder.skip
-		has_skip:         builder.has_skip
 		filter:           builder.filter
 		has_filter:       builder.has_filter
 		min_depth:        builder.min_depth
 		max_depth:        builder.max_depth
-		has_max_depth:    builder.max_depth >= 0
 		follow_links:     builder.follow_links
 		same_file_system: builder.same_file_system
 		has_sort_by_name: builder.has_sort_by_name
@@ -423,14 +456,12 @@ pub fn (builder WalkBuilder) build_parallel() WalkParallel {
 		paths:            builder.paths.clone()
 		ig_root:          ig_root
 		max_filesize:     builder.max_filesize
-		has_max_filesize: builder.has_max_filesize
 		max_depth:        builder.max_depth
 		min_depth:        builder.min_depth
 		follow_links:     builder.follow_links
 		same_file_system: builder.same_file_system
 		threads:          builder.threads
 		skip:             builder.skip
-		has_skip:         builder.has_skip
 		filter:           builder.filter
 		has_filter:       builder.has_filter
 	}
@@ -442,24 +473,32 @@ pub fn (mut builder WalkBuilder) add(path string) &WalkBuilder {
 	return builder
 }
 
-// Sets the maximum recursion depth.
+// The maximum depth to recurse.
 //
-// Use a negative value to disable the limit.
-pub fn (mut builder WalkBuilder) max_depth(depth int) &WalkBuilder {
+// The default, `none`, imposes no depth restriction.
+pub fn (mut builder WalkBuilder) max_depth(depth ?usize) &WalkBuilder {
 	builder.max_depth = depth
-	if builder.min_depth >= 0 && builder.max_depth >= 0 && builder.max_depth < builder.min_depth {
-		builder.max_depth = builder.min_depth
+	if min_depth := builder.min_depth {
+		if max_depth := builder.max_depth {
+			if max_depth < min_depth {
+				builder.max_depth = min_depth
+			}
+		}
 	}
 	return builder
 }
 
-// Sets the minimum recursion depth.
+// The minimum depth to recurse.
 //
-// Use a negative value to disable the limit.
-pub fn (mut builder WalkBuilder) min_depth(depth int) &WalkBuilder {
+// The default, `none`, imposes no minimum depth restriction.
+pub fn (mut builder WalkBuilder) min_depth(depth ?usize) &WalkBuilder {
 	builder.min_depth = depth
-	if builder.max_depth >= 0 && builder.min_depth >= 0 && builder.min_depth > builder.max_depth {
-		builder.min_depth = builder.max_depth
+	if max_depth := builder.max_depth {
+		if min_depth := builder.min_depth {
+			if min_depth > max_depth {
+				builder.min_depth = max_depth
+			}
+		}
 	}
 	return builder
 }
@@ -470,17 +509,9 @@ pub fn (mut builder WalkBuilder) follow_links(yes bool) &WalkBuilder {
 	return builder
 }
 
-// Skips files larger than `filesize`.
-pub fn (mut builder WalkBuilder) max_filesize(filesize u64) &WalkBuilder {
+// Whether to ignore files above the specified limit.
+pub fn (mut builder WalkBuilder) max_filesize(filesize ?u64) &WalkBuilder {
 	builder.max_filesize = filesize
-	builder.has_max_filesize = true
-	return builder
-}
-
-// Clears any configured maximum file size limit.
-pub fn (mut builder WalkBuilder) clear_max_filesize() &WalkBuilder {
-	builder.max_filesize = 0
-	builder.has_max_filesize = false
 	return builder
 }
 
@@ -618,10 +649,9 @@ pub fn (mut builder WalkBuilder) same_file_system(yes bool) &WalkBuilder {
 pub fn (mut builder WalkBuilder) skip_stdout(yes bool) &WalkBuilder {
 	if yes {
 		has_handle, handle := stdout_handle()
-		builder.has_skip = has_handle
-		builder.skip = handle
+		builder.skip = if has_handle { handle } else { none }
 	} else {
-		builder.has_skip = false
+		builder.skip = none
 	}
 	return builder
 }
@@ -658,15 +688,13 @@ mut:
 	index            int
 	ig_root          Ignore
 	ig               Ignore
-	max_filesize     u64
-	has_max_filesize bool
-	skip             Handle
-	has_skip         bool
+	max_filesize     ?u64
+	skip             ?Handle
+	// V-specific: see `WalkBuilder.filter`.
 	filter           FilterFn = unsafe { nil }
 	has_filter       bool
-	min_depth        int
-	max_depth        int
-	has_max_depth    bool
+	min_depth        ?usize
+	max_depth        ?usize
 	follow_links     bool
 	same_file_system bool
 	sort_by_name     NameComparator = unsafe { nil }
@@ -701,7 +729,11 @@ fn (mut walk Walk) push_result(result WalkResult) {
 
 fn (mut walk Walk) add_root_path(path string) {
 	if path == '-' {
-		if walk.min_depth <= 0 || walk.min_depth < 0 {
+		if min_depth := walk.min_depth {
+			if min_depth == 0 {
+				walk.push_result(walk_result_from_entry(DirEntry.new_stdin()))
+			}
+		} else {
 			walk.push_result(walk_result_from_entry(DirEntry.new_stdin()))
 		}
 		return
@@ -726,7 +758,11 @@ fn (mut walk Walk) add_root_path(path string) {
 }
 
 fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, root_device u64, has_root_device bool) {
-	should_visit := walk.min_depth < 0 || dent.depth() >= walk.min_depth
+	should_visit := if min_depth := walk.min_depth {
+		usize(dent.depth()) >= min_depth
+	} else {
+		true
+	}
 	if !dent.is_dir() {
 		if !is_root {
 			if walk.skip_entry(ig, dent) {
@@ -763,22 +799,30 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	if should_visit {
 		walk.push_result(walk_result_from_entry(dent))
 	}
-	if walk.has_max_depth && dent.depth() >= walk.max_depth {
-		return
+	if max_depth := walk.max_depth {
+		if usize(dent.depth()) >= max_depth {
+			return
+		}
 	}
-	names := walk.read_dir_names(dent.path()) or {
+	children := walk.read_dir_children(dent.path()) or {
 		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 		return
 	}
-	for name in names {
+	for child_entry in children {
 		child_depth := dent.depth() + 1
-		mut child_raw := DirEntryRaw.from_child(child_depth, dent.path(), name) or {
-			walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(), name)).with_depth(child_depth)))
-			continue
+		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
+			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty)
+		} else {
+			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
+				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+					child_entry.name)).with_depth(child_depth)))
+				continue
+			}
 		}
 		if walk.follow_links && child_raw.path_is_symlink() {
 			child_raw = DirEntryRaw.from_path(child_depth, child_raw.path, true) or {
-				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(), name)).with_depth(child_depth)))
+				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+					child_entry.name)).with_depth(child_depth)))
 				continue
 			}
 			if child_raw.ty.is_dir() {
@@ -793,10 +837,72 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	}
 }
 
-fn (walk Walk) read_dir_names(path string) ![]string {
-	mut names := os.ls(path)!
-	sort_names(mut names, path, walk.has_sort_by_name, walk.sort_by_name, walk.has_sort_by_path, walk.sort_by_path)
-	return names
+fn (walk Walk) can_trust_dirent_type() bool {
+	return !walk.follow_links && walk.max_filesize == none && walk.skip == none && !walk.same_file_system
+}
+
+fn (walk Walk) read_dir_children(path string) ![]DirChild {
+	mut children := read_dir_children(path)!
+	sort_children(mut children, path, walk.has_sort_by_name, walk.sort_by_name, walk.has_sort_by_path,
+		walk.sort_by_path)
+	return children
+}
+
+fn read_dir_children(path string) ![]DirChild {
+	$if windows {
+		names := os.ls(path)!
+		mut children := []DirChild{cap: names.len}
+		for name in names {
+			children << DirChild{
+				name: name
+			}
+		}
+		return children
+	} $else {
+		return read_dir_children_nix(path)
+	}
+}
+
+fn read_dir_children_nix(path string) ![]DirChild {
+	if path == '' {
+		return error('ls() expects a folder, not an empty string')
+	}
+	mut children := []DirChild{cap: 50}
+	dir_ptr := unsafe { C.opendir(&char(path.str)) }
+	if isnil(dir_ptr) {
+		return error('ls() couldnt open dir "${path}"')
+	}
+	mut ent := &C.dirent(unsafe { nil })
+	for {
+		ent = C.readdir(dir_ptr)
+		if isnil(ent) {
+			break
+		}
+		unsafe {
+			bptr := &u8(&ent.d_name[0])
+			if bptr[0] == 0 || (bptr[0] == `.` && bptr[1] == 0)
+				|| (bptr[0] == `.` && bptr[1] == `.` && bptr[2] == 0) {
+				continue
+			}
+			ty, has_type := entry_file_type_from_dirent(int(ent.d_type))
+			children << DirChild{
+				name:     tos_clone(bptr)
+				ty:       ty
+				has_type: has_type
+			}
+		}
+	}
+	C.closedir(dir_ptr)
+	return children
+}
+
+fn entry_file_type_from_dirent(d_type int) (EntryFileType, bool) {
+	return match d_type {
+		dirent_dt_reg { EntryFileType.file, true }
+		dirent_dt_dir { EntryFileType.directory, true }
+		dirent_dt_lnk { EntryFileType.symbolic_link, true }
+		else { EntryFileType.unknown, false }
+	}
 }
 
 fn (walk Walk) skip_entry(ig Ignore, ent DirEntry) bool {
@@ -806,14 +912,14 @@ fn (walk Walk) skip_entry(ig Ignore, ent DirEntry) bool {
 	if should_skip_entry(ig, ent) {
 		return true
 	}
-	if walk.has_skip {
-		is_stdout := path_equals(ent, walk.skip) or { false }
+	if skip := walk.skip {
+		is_stdout := path_equals(ent, skip) or { false }
 		if is_stdout {
 			return true
 		}
 	}
-	if walk.has_max_filesize && !ent.is_dir() {
-		if skip_filesize(walk.max_filesize, ent.path(), ent.metadata() or { return false }) {
+	if max_filesize := walk.max_filesize {
+		if !ent.is_dir() && skip_filesize(max_filesize, ent.path(), ent.metadata() or { return false }) {
 			return true
 		}
 	}
@@ -830,15 +936,14 @@ fn (walk Walk) skip_entry(ig Ignore, ent DirEntry) bool {
 pub struct WalkParallel {
 	paths            []string
 	ig_root          Ignore
-	max_filesize     u64
-	has_max_filesize bool
-	max_depth        int
-	min_depth        int
+	max_filesize     ?u64
+	max_depth        ?usize
+	min_depth        ?usize
 	follow_links     bool
 	same_file_system bool
 	threads          int
-	skip             Handle
-	has_skip         bool
+	skip             ?Handle
+	// V-specific: see `WalkBuilder.filter`.
 	filter           FilterFn = unsafe { nil }
 	has_filter       bool
 }
@@ -854,14 +959,11 @@ pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
 		ig_root:          wp.ig_root
 		ig:               wp.ig_root
 		max_filesize:     wp.max_filesize
-		has_max_filesize: wp.has_max_filesize
 		skip:             wp.skip
-		has_skip:         wp.has_skip
 		filter:           wp.filter
 		has_filter:       wp.has_filter
 		min_depth:        wp.min_depth
 		max_depth:        wp.max_depth
-		has_max_depth:    wp.max_depth >= 0
 		follow_links:     wp.follow_links
 		same_file_system: wp.same_file_system
 	}
@@ -896,17 +998,18 @@ fn target_is_dir(path string) bool {
 	return os.is_dir(path)
 }
 
-fn sort_names(mut names []string, parent_path string, has_name_cmp bool, name_cmp NameComparator, has_path_cmp bool, path_cmp PathComparator) {
-	for i := 0; i < names.len; i++ {
-		for j := i + 1; j < names.len; j++ {
+fn sort_children(mut children []DirChild, parent_path string, has_name_cmp bool, name_cmp NameComparator, has_path_cmp bool, path_cmp PathComparator) {
+	for i := 0; i < children.len; i++ {
+		for j := i + 1; j < children.len; j++ {
 			mut cmp := 0
 			if has_name_cmp {
-				cmp = name_cmp(names[i], names[j])
+				cmp = name_cmp(children[i].name, children[j].name)
 			} else if has_path_cmp {
-				cmp = path_cmp(os.join_path(parent_path, names[i]), os.join_path(parent_path, names[j]))
+				cmp = path_cmp(os.join_path(parent_path, children[i].name), os.join_path(parent_path,
+					children[j].name))
 			}
 			if cmp > 0 {
-				names[i], names[j] = names[j], names[i]
+				children[i], children[j] = children[j], children[i]
 			}
 		}
 	}

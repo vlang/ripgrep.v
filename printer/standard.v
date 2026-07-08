@@ -424,8 +424,15 @@ fn (mut sink StandardSink[^p, ^s, W]) replace[^p, ^s](searcher_ searcher.Searche
 
 pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
 	sink.match_count++
-	sink.record_matches(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
-	sink.replace(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
+	if sink.needs_match_granularity {
+		buf := mat.buffer()
+		range := mat.bytes_range_in_buffer()
+		sink.record_matches(searcher_, buf, range)!
+		sink.replace(searcher_, buf, range)!
+	} else {
+		sink.standard.matches.clear()
+		sink.replacer.clear()
+	}
 	if sink.stats != none {
 		mut stats := sink.stats or { panic('stats missing unexpectedly') }
 		stats.add_matches(u64(sink.standard.matches.len))
@@ -780,7 +787,14 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_prelude_separator[^p, ^s](mut next_se
 }
 
 fn (mut imp StandardImpl[^p, ^s, W]) write_line[^p, ^s](line []u8) ! {
-	mut line2 := line.clone()
+	if !imp.config().trim_ascii && !imp.exceeds_max_columns(line) {
+		imp.write(line)!
+		if !imp.has_line_terminator(line) {
+			imp.write_line_term()!
+		}
+		return
+	}
+	mut line2 := line
 	if imp.config().trim_ascii {
 		lineterm := imp.searcher.line_terminator()
 		full_range := matcher.Match.new(0, line2.len)
@@ -977,13 +991,22 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_line_term[^p, ^s]() ! {
 }
 
 fn (mut imp StandardImpl[^p, ^s, W]) write_spec[^p, ^s](spec ColorSpec, buf []u8) ! {
+	if spec.is_none() || !imp.sink.standard.wtr.supports_color() {
+		imp.write(buf)!
+		return
+	}
 	imp.sink.standard.wtr.set_color(spec)!
 	imp.write(buf)!
 	imp.sink.standard.wtr.reset()!
 }
 
 fn (mut imp StandardImpl[^p, ^s, W]) write_path[^p, ^s](mut path PrinterPath[^p]) ! {
-	imp.sink.standard.wtr.set_color(imp.config().colors.path())!
+	spec := imp.config().colors.path()
+	if spec.is_none() || !imp.sink.standard.wtr.supports_color() {
+		imp.write(path.as_bytes())!
+		return
+	}
+	imp.sink.standard.wtr.set_color(spec)!
 	imp.write(path.as_bytes())!
 	imp.sink.standard.wtr.reset()!
 }

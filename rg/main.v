@@ -151,71 +151,143 @@ fn search(args &flags.HiArgs, mode flags.SearchMode) !bool {
 /// automatically disable parallelism and hence sorting is not handled here.
 fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
-	haystack_builder := args.haystack_builder()
+	haystacks := collect_haystacks(args)!
 	mut bufwtr := args.buffer_writer()
-	matcher_ := args.matcher()!
-	searcher_ := args.searcher()!
-	printer_ := args.printer_buffer(mode, bufwtr.buffer())
-	searcher_worker := args.search_worker_buffer(matcher_, searcher_, printer_)!
-	mut visitor := SearchParallelVisitor{
-		args:             args
-		mode:             mode
-		started_at:       started_at
-		haystack_builder: haystack_builder
-		bufwtr:           bufwtr
-		stats:            args.stats()
-		searcher:         searcher_worker
+	if haystacks.len == 0 {
+		if args.has_implicit_path() {
+			eprint_nothing_searched()
+		}
+		return false
 	}
-	args.walk_builder()!.build_parallel().run(mut visitor)
-	if args.has_implicit_path() && !visitor.searched {
-		eprint_nothing_searched()
+	if args.quit_after_match() {
+		return search(args, mode)
 	}
-	if stats_value := visitor.stats {
-		mut wtr := visitor.searcher.printer().get_mut()
-		wtr.clear()
-		print_stats(mode, stats_value, started_at, mut wtr) or {}
-		visitor.bufwtr.print(wtr) or {}
-	}
-	return visitor.matched
-}
 
-struct SearchParallelVisitor {
-	args             &flags.HiArgs
-	mode             flags.SearchMode
-	started_at       time.Time
-	haystack_builder core.HaystackBuilder
-mut:
-	bufwtr   cli.BufferWriter
-	stats    ?printer.Stats
-	matched  bool
-	searched bool
-	searcher core.SearchWorker[cli.Buffer]
-}
+	thread_count := parallel_chunk_count(args.threads(), haystacks.len)
+	mut separator := []u8{}
+	mut has_separator := false
+	if sep := args.file_separator_bytes() {
+		separator = sep
+		has_separator = true
+	}
+	mut threads := []thread SearchParallelChunkResult{}
+	for chunk_index in 0 .. thread_count {
+		start, end := parallel_chunk_bounds(haystacks.len, thread_count, chunk_index)
+		chunk := haystacks[start..end].clone()
+		matcher_ := args.matcher()!
+		searcher_ := args.searcher()!
+		printer_ := args.printer_buffer(mode, bufwtr.buffer())
+		worker := args.search_worker_buffer(matcher_, searcher_, printer_)!
+		threads << spawn search_parallel_chunk(worker, chunk, args.stats() != none,
+			args.quit_after_match(), separator.clone(), has_separator, chunk_index)
+	}
 
-fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
-	visitor.searched = true
-	visitor.searcher.printer().get_mut().clear()
-	search_result := visitor.searcher.search(&haystack) or {
-		core.err_message('${*haystack.path()}: ${err.msg()}')
-		return .continue_
-	}
-	if search_result.has_match() {
-		visitor.matched = true
-	}
-	if stats_value := visitor.stats {
-		if result_stats := search_result.stats() {
-			visitor.stats = stats_value + *result_stats
+	mut matched := false
+	mut searched := false
+	mut stats := args.stats()
+	for thread in threads {
+		result := thread.wait()
+		matched = matched || result.matched
+		searched = searched || result.searched
+		for message in result.errors {
+			core.err_message(message)
+		}
+		bufwtr.print(&result.buffer) or {
+			core.err_message(err.msg())
+		}
+		if stats_value := stats {
+			if result_stats := result.stats {
+				stats = stats_value + result_stats
+			}
 		}
 	}
-	visitor.bufwtr.print(visitor.searcher.printer().get_mut()) or {
-		core.err_message('${*haystack.path()}: ${err.msg()}')
-		return .continue_
+	if args.has_implicit_path() && !searched {
+		eprint_nothing_searched()
 	}
-	if visitor.matched && visitor.args.quit_after_match() {
-		return .quit
+	if stats_value := stats {
+		mut wtr := bufwtr.buffer()
+		print_stats(mode, stats_value, started_at, mut wtr) or {}
+		bufwtr.print(&wtr) or {}
 	}
-	return .continue_
+	return matched
+}
+
+struct SearchParallelChunkResult {
+	index    int
+	matched  bool
+	searched bool
+	stats    ?printer.Stats
+	buffer   cli.Buffer
+	errors   []string
+}
+
+fn search_parallel_chunk(searcher_in core.SearchWorker[cli.Buffer], haystacks []core.Haystack, stats_enabled bool, quit_after_match bool, separator []u8, has_separator bool, index int) SearchParallelChunkResult {
+	mut searcher := searcher_in
+	mut chunk_buffer := searcher.printer().get_mut().take()
+	mut printed := false
+	mut result := SearchParallelChunkResult{
+		index:    index
+		matched:  false
+		searched: false
+		stats:    if stats_enabled { ?printer.Stats(printer.Stats.new()) } else { ?printer.Stats(none) }
+		buffer:   chunk_buffer
+		errors:   []string{}
+	}
+	for haystack in haystacks {
+		result.searched = true
+		searcher.printer().get_mut().clear()
+		search_result := searcher.search(&haystack) or {
+			result.errors << '${*haystack.path()}: ${err.msg()}'
+			continue
+		}
+		if search_result.has_match() {
+			result.matched = true
+		}
+		if stats_value := result.stats {
+			if result_stats := search_result.stats() {
+				result.stats = stats_value + *result_stats
+			}
+		}
+		file_buffer := searcher.printer().get_mut().take()
+		if !file_buffer.is_empty() {
+			if printed && has_separator {
+				result.buffer.write(separator) or {}
+			}
+			result.buffer.append_buffer(&file_buffer)
+			printed = true
+		}
+		if result.matched && quit_after_match {
+			break
+		}
+	}
+	searcher.printer().flush() or {}
+	return result
+}
+
+fn parallel_chunk_count(thread_setting usize, haystack_count int) int {
+	if haystack_count <= 1 {
+		return 1
+	}
+	mut count := int(thread_setting)
+	if count < 1 {
+		count = 1
+	}
+	if count > haystack_count {
+		count = haystack_count
+	}
+	// V-specific: this chunked search strategy does all directory collection
+	// before spawning workers. On medium file lists, more than four workers
+	// increases per-file system overhead more than it helps scanning.
+	if haystack_count < 10_000 && count > 4 {
+		count = 4
+	}
+	return count
+}
+
+fn parallel_chunk_bounds(total int, chunks int, index int) (int, int) {
+	start := (total * index) / chunks
+	end := (total * (index + 1)) / chunks
+	return start, end
 }
 
 /// The top-level entry point for file listing without searching.

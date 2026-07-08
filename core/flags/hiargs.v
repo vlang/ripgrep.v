@@ -426,6 +426,11 @@ pub fn (args HiArgs) buffer_writer() cli.BufferWriter {
 	return wtr
 }
 
+/// Returns the configured separator printed between search result blocks.
+pub fn (args HiArgs) file_separator_bytes() ?[]u8 {
+	return optional_bytes_clone(args.file_separator)
+}
+
 /// Returns true when ripgrep had to guess to search the current working
 /// directory. That is, it's true when ripgrep is called without any file
 /// paths or directories to search.
@@ -894,15 +899,15 @@ pub fn (args HiArgs) walk_builder() !ignore.WalkBuilder {
 		}
 	}
 	if depth := args.max_depth {
-		builder.max_depth(int(depth))
+		builder.max_depth(usize(depth))
 	} else {
-		builder.max_depth(-1)
+		builder.max_depth(none)
 	}
 	builder.follow_links(args.follow)
 	if filesize := args.max_filesize {
 		builder.max_filesize(filesize)
 	} else {
-		builder.clear_max_filesize()
+		builder.max_filesize(none)
 	}
 	builder.threads(int(args.threads))
 	builder.same_file_system(args.one_file_system)

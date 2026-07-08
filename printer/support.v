@@ -256,33 +256,33 @@ fn (d NiceDuration) fractional_seconds() f64 {
 /// This avoids going through the formatting machinery which seems to
 /// substantially slow things down.
 pub struct DecimalFormatter {
-	buf   []u8
-	start usize
+	buf []u8
 }
 
 /// Create a new decimal formatter for the given 64-bit unsigned integer.
 pub fn DecimalFormatter.new(n u64) DecimalFormatter {
 	mut value := n
-	mut buf := []u8{len: 20, init: u8(0)}
-	mut i := buf.len
+	mut reversed := []u8{cap: 20}
 	for {
-		i--
 		digit := u8(value % 10)
 		value /= 10
-		buf[i] = `0` + digit
+		reversed << `0` + digit
 		if value == 0 {
 			break
 		}
 	}
+	mut buf := []u8{cap: reversed.len}
+	for i := reversed.len; i > 0; i-- {
+		buf << reversed[i - 1]
+	}
 	return DecimalFormatter{
-		buf:   buf
-		start: usize(i)
+		buf: buf
 	}
 }
 
 /// Return the decimal formatted as an ASCII byte string.
 pub fn (fmt DecimalFormatter) as_bytes() []u8 {
-	return fmt.buf[fmt.start..].clone()
+	return fmt.buf.clone()
 }
 
 /// Trim prefix ASCII spaces from the given slice and return the corresponding
@@ -519,6 +519,7 @@ pub fn (mut replacer Replacer) clear() {
 	replacer.active = false
 }
 
+// V-specific owned replacement payload for Rust's `Option<(&[u8], &[Match])`.
 pub struct Replacement implements IClone {
 	bytes   []u8
 	matches []matcher.Match
@@ -537,6 +538,9 @@ pub struct Replacement implements IClone {
 /// results of the replacement instead of the bytes reported directly by the
 /// searcher.
 pub struct Sunk implements IClone {
+	// V-specific: Rust's `Sunk<'a>` borrows all slices and context kind values.
+	// The current V sink path owns these values because `SinkMatch`,
+	// `SinkContext` and replacements are passed as value structs.
 	bytes_                []u8
 	absolute_byte_offset_ u64
 	line_number_          ?u64
@@ -560,7 +564,7 @@ pub fn Sunk.from_sink_match(sunk searcher.SinkMatch, original_matches []matcher.
 		}
 	}
 	return Sunk{
-		bytes_:                sunk.bytes()
+		bytes_:                sunk.bytes_view()
 		absolute_byte_offset_: sunk.absolute_byte_offset()
 		line_number_:          sunk.line_number()
 		matches_:              original_matches.clone()
@@ -594,19 +598,19 @@ pub fn (sunk Sunk) context_kind() ?searcher.SinkContextKind {
 }
 
 pub fn (sunk Sunk) bytes() []u8 {
-	return sunk.bytes_.clone()
+	return sunk.bytes_
 }
 
 pub fn (sunk Sunk) matches() []matcher.Match {
-	return sunk.matches_.clone()
+	return sunk.matches_
 }
 
 pub fn (sunk Sunk) original_matches() []matcher.Match {
-	return sunk.original_matches_.clone()
+	return sunk.original_matches_
 }
 
 pub fn (sunk Sunk) lines(line_term u8) searcher.LineIter {
-	return searcher.LineIter.new(sunk.bytes(), line_term)
+	return searcher.LineIter.new(line_term, sunk.bytes())
 }
 
 pub fn (sunk Sunk) absolute_byte_offset() u64 {

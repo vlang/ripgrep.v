@@ -142,8 +142,7 @@ pub fn (mut wtr BufferWriter) print(buffer &Buffer) ! {
 			write_all_fd(wtr.fd, sep)
 		}
 	}
-	chunk := buffer.as_slice()
-	write_all_fd(wtr.fd, chunk)
+	write_all_fd(wtr.fd, buffer.bytes)
 	wtr.printed = true
 	flush_stdout()
 }
@@ -161,6 +160,21 @@ pub fn (buffer Buffer) is_empty() bool {
 /// Clears the contents of this buffer.
 pub fn (mut buffer Buffer) clear() {
 	buffer.bytes = []u8{}
+}
+
+/// Moves the current contents into a new buffer and leaves this buffer empty.
+pub fn (mut buffer Buffer) take() Buffer {
+	taken := Buffer{
+		color_choice: buffer.color_choice
+		bytes:        buffer.bytes
+	}
+	buffer.bytes = []u8{}
+	return taken
+}
+
+/// Appends the contents of another buffer to this buffer.
+pub fn (mut buffer Buffer) append_buffer(other &Buffer) {
+	buffer.bytes << other.bytes
 }
 
 pub fn (mut buffer Buffer) write(buf []u8) !int {
