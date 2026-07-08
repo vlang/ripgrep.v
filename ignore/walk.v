@@ -757,6 +757,38 @@ fn (mut walk Walk) add_root_path(path string) {
 	walk.traverse_entry(mut dent, ig, true, root_device, has_root_device)
 }
 
+fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) WalkState {
+	if path == '-' {
+		if min_depth := walk.min_depth {
+			if min_depth == 0 {
+				return visitor.visit(walk_result_from_entry(DirEntry.new_stdin()))
+			}
+		} else {
+			return visitor.visit(walk_result_from_entry(DirEntry.new_stdin()))
+		}
+		return .continue_
+	}
+	root, err := prepare_root_entry(path, walk.follow_links)
+	if err.kind != .other || err.message != '' {
+		return visitor.visit(walk_result_from_error(err))
+	}
+	mut dent := root
+	mut ig := walk.ig_root
+	if dent.is_dir() {
+		ig2, has_err, add_err := walk.ig_root.add_parents(dent.path())
+		ig = ig2
+		if has_err {
+			state := visitor.visit(walk_result_from_error(add_err))
+			if state.is_quit() {
+				return .quit
+			}
+		}
+	}
+	root_device := if walk.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	has_root_device := walk.same_file_system
+	return walk.visit_traverse_entry(mut visitor, mut dent, ig, true, root_device, has_root_device)
+}
+
 fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, root_device u64, has_root_device bool) {
 	should_visit := if min_depth := walk.min_depth {
 		usize(dent.depth()) >= min_depth
@@ -820,13 +852,14 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 			}
 		}
 		if walk.follow_links && child_raw.path_is_symlink() {
-			child_raw = DirEntryRaw.from_path(child_depth, child_raw.path, true) or {
+			child_path := child_raw.path.clone()
+			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
 				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
 					child_entry.name)).with_depth(child_depth)))
 				continue
 			}
 			if child_raw.ty.is_dir() {
-				if err := check_symlink_loop(child_ignore, child_raw.path, child_depth) {
+				if err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
 					walk.push_result(walk_result_from_error(err))
 					continue
 				}
@@ -835,6 +868,116 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
 		walk.traverse_entry(mut child, child_ignore, false, root_device, has_root_device)
 	}
+}
+
+fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent DirEntry, ig Ignore, is_root bool, root_device u64, has_root_device bool) WalkState {
+	should_visit := if min_depth := walk.min_depth {
+		usize(dent.depth()) >= min_depth
+	} else {
+		true
+	}
+	if !dent.is_dir() {
+		if !is_root {
+			if walk.skip_entry(ig, dent) {
+				return .continue_
+			}
+		}
+		if should_visit {
+			state := visitor.visit(walk_result_from_entry(dent))
+			if state.is_quit() {
+				return .quit
+			}
+		}
+		return .continue_
+	}
+
+	if has_root_device {
+		same_fs := is_same_file_system(root_device, dent.path()) or {
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+			if state.is_quit() {
+				return .quit
+			}
+			return .continue_
+		}
+		if !same_fs {
+			return .continue_
+		}
+	}
+
+	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	if has_child_err {
+		dent.err = child_err
+	} else {
+		dent.err = none_ignore_error()
+	}
+	if !is_root {
+		if walk.skip_entry(ig, dent) {
+			return .continue_
+		}
+	}
+	if should_visit {
+		state := visitor.visit(walk_result_from_entry(dent))
+		if state.is_quit() {
+			return .quit
+		}
+		if state == .skip {
+			return .continue_
+		}
+	}
+	if max_depth := walk.max_depth {
+		if usize(dent.depth()) >= max_depth {
+			return .continue_
+		}
+	}
+	children := walk.read_dir_children(dent.path()) or {
+		state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+		if state.is_quit() {
+			return .quit
+		}
+		return .continue_
+	}
+	for child_entry in children {
+		child_depth := dent.depth() + 1
+		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
+			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty)
+		} else {
+			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+					child_entry.name)).with_depth(child_depth)))
+				if state.is_quit() {
+					return .quit
+				}
+				continue
+			}
+		}
+		if walk.follow_links && child_raw.path_is_symlink() {
+			child_path := child_raw.path.clone()
+			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+					child_entry.name)).with_depth(child_depth)))
+				if state.is_quit() {
+					return .quit
+				}
+				continue
+			}
+			if child_raw.ty.is_dir() {
+				if err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
+					state := visitor.visit(walk_result_from_error(err))
+					if state.is_quit() {
+						return .quit
+					}
+					continue
+				}
+			}
+		}
+		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
+		state := walk.visit_traverse_entry(mut visitor, mut child, child_ignore, false,
+			root_device, has_root_device)
+		if state.is_quit() {
+			return .quit
+		}
+	}
+	return .continue_
 }
 
 fn (walk Walk) can_trust_dirent_type() bool {
@@ -968,11 +1111,7 @@ pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
 		same_file_system: wp.same_file_system
 	}
 	for path in wp.paths {
-		walk.add_root_path(path)
-	}
-	for {
-		item := walk.next() or { break }
-		state := visitor.visit(item)
+		state := walk.visit_root_path(mut visitor, path)
 		if state.is_quit() {
 			break
 		}
