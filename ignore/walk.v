@@ -1,6 +1,8 @@
 module ignore
 
 import os
+import runtime
+import sync.stdatomic
 
 $if !windows {
 	#include <dirent.h>
@@ -1252,8 +1254,8 @@ fn (mut walk Walk) skip_entry(ig &Ignore, ent &DirEntry) bool {
 
 // Visitor-based recursive directory traversal over one or more roots.
 //
-// This port currently executes through the same traversal core as `Walk`
-// while preserving the visitor-based API.
+// This port uses worker threads across root paths and funnels results back to
+// the caller thread so the existing visitor API is invoked serially.
 pub struct WalkParallel {
 	paths            []string
 	ig_root          Ignore
@@ -1280,6 +1282,508 @@ pub fn (wp WalkParallel) run(mut visitor ParallelVisitor) {
 
 // Executes the traversal using a custom visitor implementation.
 pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
+	worker_count := wp.worker_count()
+	if worker_count <= 1 {
+		wp.visit_serial(mut visitor)
+		return
+	}
+	if wp.paths.len == 1 && !wp.has_sort_by_name && !wp.has_sort_by_path {
+		wp.visit_single_root_parallel(mut visitor, wp.paths[0], worker_count)
+		return
+	}
+	stop := stdatomic.new_atomic(false)
+	jobs := chan WalkParallelJob{cap: wp.paths.len + worker_count}
+	results := chan WalkParallelMessage{cap: 256}
+	mut threads := []thread bool{}
+	for worker_index in 0 .. worker_count {
+		threads << spawn walk_parallel_worker(wp, jobs, results, stop, worker_index)
+	}
+	for path in wp.paths {
+		jobs <- WalkParallelJob{
+			path: path
+		}
+	}
+	for _ in 0 .. worker_count {
+		jobs <- WalkParallelJob{
+			stop: true
+		}
+	}
+	mut done_count := 0
+	for done_count < worker_count {
+		message := <-results
+		if message.done {
+			done_count++
+			continue
+		}
+		state := if stop.load() { WalkState.quit } else { visitor.visit(message.result) }
+		if state.is_quit() {
+			stop.store(true)
+		}
+		message.reply <- state
+	}
+	for thread in threads {
+		thread.wait()
+	}
+}
+
+// A result emitted by unordered parallel traversal.
+pub struct WalkParallelStreamResult {
+pub:
+	done   bool
+	result WalkResult
+}
+
+// Streams walk results from worker threads without waiting for a central
+// visitor decision for each entry.
+//
+// This is intended for callers that always continue traversal unless a shared
+// stop flag is set. It does not support `WalkState.skip`; callers needing
+// per-directory skip decisions should use `run`/`visit`.
+pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) {
+	worker_count := wp.worker_count()
+	if worker_count <= 1 {
+		wp.stream_serial(results, stop)
+		return
+	}
+	if wp.paths.len == 1 && !wp.has_sort_by_name && !wp.has_sort_by_path {
+		wp.stream_single_root_parallel(results, stop, wp.paths[0], worker_count)
+		return
+	}
+	jobs := chan WalkParallelJob{cap: wp.paths.len + worker_count}
+	mut threads := []thread bool{}
+	for worker_index in 0 .. worker_count {
+		threads << spawn walk_parallel_stream_worker(wp, jobs, results, stop, worker_index)
+	}
+	for path in wp.paths {
+		if stop.load() {
+			break
+		}
+		jobs <- WalkParallelJob{
+			path: path
+		}
+	}
+	for _ in 0 .. worker_count {
+		jobs <- WalkParallelJob{
+			stop: true
+		}
+	}
+	for thread in threads {
+		thread.wait()
+	}
+	results <- WalkParallelStreamResult{
+		done: true
+	}
+}
+
+fn (wp WalkParallel) visit_single_root_parallel(mut visitor ParallelVisitor, path string, worker_count int) {
+	if path == '-' {
+		wp.visit_serial(mut visitor)
+		return
+	}
+	mut walk := wp.new_walk()
+	root, err := prepare_root_entry(path, wp.follow_links)
+	if err.kind != .other || err.message != '' {
+		visitor.visit(walk_result_from_error(err))
+		return
+	}
+	mut dent := root
+	if !dent.is_dir() {
+		walk.visit_traverse_entry(mut visitor, mut dent, wp.ig_root, true, u64(0), false)
+		return
+	}
+	mut ig := wp.ig_root
+	ig2, has_parent_err, parent_err := wp.ig_root.add_parents(dent.path())
+	ig = ig2
+	if has_parent_err {
+		state := visitor.visit(walk_result_from_error(parent_err))
+		if state.is_quit() {
+			return
+		}
+	}
+	root_device := if wp.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	has_root_device := wp.same_file_system
+	if has_root_device {
+		same_fs := is_same_file_system(root_device, dent.path()) or {
+			visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+			return
+		}
+		if !same_fs {
+			return
+		}
+	}
+	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	if has_child_err {
+		dent.err_value = child_err
+		dent.has_err = true
+	} else {
+		dent.err_value = IgnoreError{}
+		dent.has_err = false
+	}
+	should_visit := if min_depth := wp.min_depth {
+		usize(dent.depth()) >= min_depth
+	} else {
+		true
+	}
+	if should_visit {
+		state := visitor.visit(walk_result_from_entry(dent.clone()))
+		if state.is_quit() || state == .skip {
+			return
+		}
+	}
+	if max_depth := wp.max_depth {
+		if usize(dent.depth()) >= max_depth {
+			return
+		}
+	}
+	children := walk.read_dir_children(dent.path()) or {
+		visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+		return
+	}
+	stop := stdatomic.new_atomic(false)
+	jobs := chan WalkParallelJob{cap: children.len + worker_count}
+	results := chan WalkParallelMessage{cap: 256}
+	mut threads := []thread bool{}
+	for worker_index in 0 .. worker_count {
+		threads << spawn walk_parallel_worker(wp, jobs, results, stop, worker_index)
+	}
+	for child_entry in children {
+		child_depth := dent.depth() + 1
+		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
+			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty)
+		} else {
+			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+					child_entry.name)).with_depth(child_depth)))
+				if state.is_quit() {
+					stop.store(true)
+					break
+				}
+				continue
+			}
+		}
+		if wp.follow_links && child_raw.path_is_symlink() {
+			child_path := child_raw.path.clone()
+			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+					child_entry.name)).with_depth(child_depth)))
+				if state.is_quit() {
+					stop.store(true)
+					break
+				}
+				continue
+			}
+			if child_raw.ty.is_dir() {
+				if err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
+					state := visitor.visit(walk_result_from_error(err))
+					if state.is_quit() {
+						stop.store(true)
+						break
+					}
+					continue
+				}
+			}
+		}
+		jobs <- WalkParallelJob{
+			has_entry:       true
+			entry:           DirEntry.new_raw(child_raw, none_ignore_error())
+			ig:              child_ignore.clone()
+			root_device:     root_device
+			has_root_device: has_root_device
+		}
+	}
+	for _ in 0 .. worker_count {
+		jobs <- WalkParallelJob{
+			stop: true
+		}
+	}
+	wp.drain_parallel_results(mut visitor, results, stop, worker_count)
+	for thread in threads {
+		thread.wait()
+	}
+}
+
+fn (wp WalkParallel) stream_single_root_parallel(results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool], path string, worker_count int) {
+	if path == '-' {
+		wp.stream_serial(results, stop)
+		return
+	}
+	mut walk := wp.new_walk()
+	root, err := prepare_root_entry(path, wp.follow_links)
+	if err.kind != .other || err.message != '' {
+		results <- WalkParallelStreamResult{
+			result: walk_result_from_error(err)
+		}
+		results <- WalkParallelStreamResult{
+			done: true
+		}
+		return
+	}
+	mut dent := root
+	if !dent.is_dir() {
+		mut visitor := WalkParallelStreamVisitor{
+			results: results
+			stop:    stop
+		}
+		walk.visit_traverse_entry(mut visitor, mut dent, wp.ig_root, true, u64(0), false)
+		results <- WalkParallelStreamResult{
+			done: true
+		}
+		return
+	}
+	mut ig := wp.ig_root
+	ig2, has_parent_err, parent_err := wp.ig_root.add_parents(dent.path())
+	ig = ig2
+	if has_parent_err {
+		results <- WalkParallelStreamResult{
+			result: walk_result_from_error(parent_err)
+		}
+		if stop.load() {
+			results <- WalkParallelStreamResult{
+				done: true
+			}
+			return
+		}
+	}
+	root_device := if wp.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	has_root_device := wp.same_file_system
+	if has_root_device {
+		same_fs := is_same_file_system(root_device, dent.path()) or {
+			results <- WalkParallelStreamResult{
+				result: walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth()))
+			}
+			results <- WalkParallelStreamResult{
+				done: true
+			}
+			return
+		}
+		if !same_fs {
+			results <- WalkParallelStreamResult{
+				done: true
+			}
+			return
+		}
+	}
+	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	if has_child_err {
+		dent.err_value = child_err
+		dent.has_err = true
+	} else {
+		dent.err_value = IgnoreError{}
+		dent.has_err = false
+	}
+	should_visit := if min_depth := wp.min_depth {
+		usize(dent.depth()) >= min_depth
+	} else {
+		true
+	}
+	if should_visit {
+		results <- WalkParallelStreamResult{
+			result: walk_result_from_entry(dent.clone())
+		}
+		if stop.load() {
+			results <- WalkParallelStreamResult{
+				done: true
+			}
+			return
+		}
+	}
+	if max_depth := wp.max_depth {
+		if usize(dent.depth()) >= max_depth {
+			results <- WalkParallelStreamResult{
+				done: true
+			}
+			return
+		}
+	}
+	children := walk.read_dir_children(dent.path()) or {
+		results <- WalkParallelStreamResult{
+			result: walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth()))
+		}
+		results <- WalkParallelStreamResult{
+			done: true
+		}
+		return
+	}
+	jobs := chan WalkParallelJob{cap: children.len + worker_count}
+	mut threads := []thread bool{}
+	for worker_index in 0 .. worker_count {
+		threads << spawn walk_parallel_stream_worker(wp, jobs, results, stop, worker_index)
+	}
+	for child_entry in children {
+		if stop.load() {
+			break
+		}
+		child_depth := dent.depth() + 1
+		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
+			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty)
+		} else {
+			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
+				results <- WalkParallelStreamResult{
+					result: walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+						child_entry.name)).with_depth(child_depth))
+				}
+				if stop.load() {
+					break
+				}
+				continue
+			}
+		}
+		if wp.follow_links && child_raw.path_is_symlink() {
+			child_path := child_raw.path.clone()
+			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
+				results <- WalkParallelStreamResult{
+					result: walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+						child_entry.name)).with_depth(child_depth))
+				}
+				if stop.load() {
+					break
+				}
+				continue
+			}
+			if child_raw.ty.is_dir() {
+				if err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
+					results <- WalkParallelStreamResult{
+						result: walk_result_from_error(err)
+					}
+					if stop.load() {
+						break
+					}
+					continue
+				}
+			}
+		}
+		jobs <- WalkParallelJob{
+			has_entry:       true
+			entry:           DirEntry.new_raw(child_raw, none_ignore_error())
+			ig:              child_ignore.clone()
+			root_device:     root_device
+			has_root_device: has_root_device
+		}
+	}
+	for _ in 0 .. worker_count {
+		jobs <- WalkParallelJob{
+			stop: true
+		}
+	}
+	for thread in threads {
+		thread.wait()
+	}
+	results <- WalkParallelStreamResult{
+		done: true
+	}
+}
+
+fn (wp WalkParallel) drain_parallel_results(mut visitor ParallelVisitor, results chan WalkParallelMessage, stop &stdatomic.AtomicVal[bool], worker_count int) {
+	_ = wp
+	mut done_count := 0
+	for done_count < worker_count {
+		message := <-results
+		if message.done {
+			done_count++
+			continue
+		}
+		state := if stop.load() { WalkState.quit } else { visitor.visit(message.result) }
+		if state.is_quit() {
+			stop.store(true)
+		}
+		message.reply <- state
+	}
+}
+
+fn (wp WalkParallel) stream_serial(results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) {
+	mut walk := wp.new_walk()
+	mut visitor := WalkParallelStreamVisitor{
+		results: results
+		stop:    stop
+	}
+	for path in wp.paths {
+		if stop.load() {
+			break
+		}
+		state := walk.visit_root_path(mut visitor, path)
+		if state.is_quit() {
+			break
+		}
+	}
+	results <- WalkParallelStreamResult{
+		done: true
+	}
+}
+
+fn (wp WalkParallel) visit_serial(mut visitor ParallelVisitor) {
+	mut walk := wp.new_walk()
+	for path in wp.paths {
+		state := walk.visit_root_path(mut visitor, path)
+		if state.is_quit() {
+			break
+		}
+	}
+}
+
+fn (wp WalkParallel) new_walk() Walk {
+	return Walk{
+		ig_root:          wp.ig_root
+		ig:               wp.ig_root
+		max_filesize:     wp.max_filesize
+		skip:             wp.skip
+		filter:           wp.filter
+		has_filter:       wp.has_filter
+		min_depth:        wp.min_depth
+		max_depth:        wp.max_depth
+		follow_links:     wp.follow_links
+		same_file_system: wp.same_file_system
+		sort_by_name:     wp.sort_by_name
+		has_sort_by_name: wp.has_sort_by_name
+		sort_by_path:     wp.sort_by_path
+		has_sort_by_path: wp.has_sort_by_path
+	}
+}
+
+fn (wp WalkParallel) worker_count() int {
+	mut count := wp.threads
+	if count <= 0 {
+		count = runtime.nr_cpus()
+		if count <= 0 {
+			count = 1
+		}
+		if count > 12 {
+			count = 12
+		}
+	}
+	if count < 1 {
+		return 1
+	}
+	return count
+}
+
+struct WalkParallelJob {
+	stop            bool
+	path            string
+	has_entry       bool
+	entry           DirEntry
+	ig              Ignore
+	root_device     u64
+	has_root_device bool
+}
+
+struct WalkParallelMessage {
+	done   bool
+	result WalkResult
+	reply  chan WalkState
+}
+
+struct WalkParallelSenderVisitor {
+	results chan WalkParallelMessage
+	stop    &stdatomic.AtomicVal[bool]
+}
+
+struct WalkParallelStreamVisitor {
+	results chan WalkParallelStreamResult
+	stop    &stdatomic.AtomicVal[bool]
+}
+
+fn walk_parallel_worker(wp WalkParallel, jobs chan WalkParallelJob, results chan WalkParallelMessage, stop &stdatomic.AtomicVal[bool], worker_index int) bool {
+	_ = worker_index
 	mut walk := Walk{
 		ig_root:          wp.ig_root
 		ig:               wp.ig_root
@@ -1296,12 +1800,95 @@ pub fn (wp WalkParallel) visit(mut visitor ParallelVisitor) {
 		sort_by_path:     wp.sort_by_path
 		has_sort_by_path: wp.has_sort_by_path
 	}
-	for path in wp.paths {
-		state := walk.visit_root_path(mut visitor, path)
-		if state.is_quit() {
+	mut sender := WalkParallelSenderVisitor{
+		results: results
+		stop:    stop
+	}
+	for {
+		job := <-jobs
+		if job.stop {
 			break
 		}
+		if stop.load() {
+			continue
+		}
+		state := if job.has_entry {
+			mut entry := job.entry
+			walk.visit_traverse_entry(mut sender, mut entry, job.ig, false, job.root_device,
+				job.has_root_device)
+		} else {
+			walk.visit_root_path(mut sender, job.path)
+		}
+		if state.is_quit() {
+			stop.store(true)
+		}
 	}
+	results <- WalkParallelMessage{
+		done: true
+	}
+	return true
+}
+
+fn walk_parallel_stream_worker(wp WalkParallel, jobs chan WalkParallelJob, results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool], worker_index int) bool {
+	_ = worker_index
+	mut walk := wp.new_walk()
+	mut sender := WalkParallelStreamVisitor{
+		results: results
+		stop:    stop
+	}
+	for {
+		job := <-jobs
+		if job.stop {
+			break
+		}
+		if stop.load() {
+			continue
+		}
+		state := if job.has_entry {
+			mut entry := job.entry
+			walk.visit_traverse_entry(mut sender, mut entry, job.ig, false, job.root_device,
+				job.has_root_device)
+		} else {
+			walk.visit_root_path(mut sender, job.path)
+		}
+		if state.is_quit() {
+			stop.store(true)
+		}
+	}
+	return true
+}
+
+fn (mut visitor WalkParallelSenderVisitor) visit(result WalkResult) WalkState {
+	if visitor.stop.load() {
+		return .quit
+	}
+	reply := chan WalkState{cap: 1}
+	visitor.results <- WalkParallelMessage{
+		result: result
+		reply:  reply
+	}
+	state := <-reply
+	if state.is_quit() {
+		visitor.stop.store(true)
+		return .quit
+	}
+	if visitor.stop.load() {
+		return .quit
+	}
+	return state
+}
+
+fn (mut visitor WalkParallelStreamVisitor) visit(result WalkResult) WalkState {
+	if visitor.stop.load() {
+		return .quit
+	}
+	visitor.results <- WalkParallelStreamResult{
+		result: result
+	}
+	if visitor.stop.load() {
+		return .quit
+	}
+	return .continue_
 }
 
 fn prepare_root_entry(path string, follow_links bool) (DirEntry, IgnoreError) {

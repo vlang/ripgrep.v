@@ -29,7 +29,14 @@ fn test_strip_line_terminator_various() {
 	assert roundtrip_crlf(r'[a\r\n]') == '[a]'
 
 	assert roundtrip(r'(?-u)\s', `a`) == r'(?-u)\s'
-	assert roundtrip(r'(?-u)\s', `\n`) == r'(?-u)[ \t\r\v\f]'
+	mut expected_space := '(?-u)['.bytes()
+	expected_space << ` `
+	expected_space << `\t`
+	expected_space << `\r`
+	expected_space << u8(0x0b)
+	expected_space << u8(0x0c)
+	expected_space << `]`
+	assert roundtrip(r'(?-u)\s', `\n`).bytes() == expected_space
 
 	assert roundtrip_err(r'\n', `\n`)
 	assert roundtrip_err(r'abc\n', `\n`)

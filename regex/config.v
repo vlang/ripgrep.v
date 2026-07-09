@@ -167,6 +167,7 @@ fn ConfiguredHIR.new(config Config, patterns []string) !ConfiguredHIR {
 			if config.fixed_strings {
 				alts << '(?:${escape_regex(p)})'
 			} else {
+				validate_rust_regex_syntax(p, config)!
 				alts << '(?:${p})'
 			}
 		}
@@ -289,17 +290,215 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 	mut i := 0
 	mut in_class := false
 	mut escaped := false
+	mut inline_ignore_whitespace := false
+	mut inline_crlf := false
 	for i < pattern.len {
 		ch := pattern[i]
-		if config.crlf && !escaped && !in_class && ch == `$` {
+		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?x)' {
+			inline_ignore_whitespace = true
+			i += 4
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-i)' {
+			i += 5
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?R)' {
+			inline_crlf = true
+			i += 4
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-R)' {
+			inline_crlf = false
+			i += 5
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?U)' {
+			i += 4
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && i + 6 <= pattern.len && pattern[i..i + 6] == '(?i-m)' {
+			out << '(?i)'.bytes()
+			i += 6
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && ch == `[` {
+			if replacement := normalize_posix_alpha_class_at(pattern, i, config) {
+				out << replacement.text.bytes()
+				i = replacement.next
+				escaped = false
+				continue
+			}
+			if replacement := normalize_class_set_operation_at(pattern, i, config) {
+				out << replacement.text.bytes()
+				i = replacement.next
+				escaped = false
+				continue
+			}
+		}
+		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?x:' {
+			if end := matching_group_end(pattern, i) {
+				inner := strip_ignored_whitespace(pattern[i + 4..int(end)])
+				out << '(?:'.bytes()
+				out << normalize_backend_pattern(inner, config).bytes()
+				out << `)`
+				i = int(end) + 1
+				escaped = false
+				continue
+			}
+		}
+		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-x:' {
+			if end := matching_group_end(pattern, i) {
+				out << '(?:'.bytes()
+				out << normalize_backend_pattern(pattern[i + 5..int(end)], config).bytes()
+				out << `)`
+				i = int(end) + 1
+				escaped = false
+				continue
+			}
+		}
+		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-i:' {
+			if end := matching_group_end(pattern, i) {
+				out << '(?:'.bytes()
+				out << normalize_backend_pattern(pattern[i + 5..int(end)], config).bytes()
+				out << `)`
+				i = int(end) + 1
+				escaped = false
+				continue
+			}
+		}
+		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?R:' {
+			if end := matching_group_end(pattern, i) {
+				mut inner_config := config
+				inner_config.crlf = true
+				out << '(?:'.bytes()
+				out << normalize_backend_pattern(pattern[i + 4..int(end)], inner_config).bytes()
+				out << `)`
+				i = int(end) + 1
+				escaped = false
+				continue
+			}
+		}
+		if inline_ignore_whitespace && !escaped && !in_class && is_extended_whitespace(ch) {
+			i++
+			escaped = false
+			continue
+		}
+		if (config.crlf || inline_crlf) && !escaped && !in_class && ch == `$` {
 			out << r'\x0D?$'.bytes()
 			i++
+			continue
+		}
+		if !escaped && !in_class && i + 3 < pattern.len && ch == `(` && pattern[i + 1] == `?`
+			&& pattern[i + 2] == `<` && pattern[i + 3] != `=` && pattern[i + 3] != `!` {
+			out << '(?P<'.bytes()
+			i += 3
+			escaped = false
 			continue
 		}
 		if !escaped && ch == `[` {
 			in_class = true
 		} else if !escaped && ch == `]` {
 			in_class = false
+		}
+		if !escaped && !in_class && ch == `\\` {
+			if end := rust_word_boundary_variant_end(pattern, i) {
+				out << r'\b'.bytes()
+				i = int(end)
+				escaped = false
+				continue
+			}
+			if i + 1 < pattern.len {
+				next := pattern[i + 1]
+				match next {
+					`A` {
+						out << `^`
+						i += 2
+						escaped = false
+						continue
+					}
+					`z` {
+						out << `$`
+						i += 2
+						escaped = false
+						continue
+					}
+					`<`, `>` {
+						out << r'\b'.bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`d` {
+						out << '[0-9]'.bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`D` {
+						out << negated_backend_class('0-9', config).bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`w` {
+						out << word_backend_class(config).bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`W` {
+						out << negated_backend_class(word_backend_class_body(config), config).bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`p`, `P` {
+						if end := rust_property_escape_end(pattern, i) {
+							property := pattern[i + 3..int(end) - 1]
+							if next == `p` {
+								if replacement := rust_property_replacement(property) {
+									out << replacement.bytes()
+									i = int(end)
+									escaped = false
+									continue
+								}
+							} else if body := rust_property_class_body(property) {
+								out << negated_backend_class(body, config).bytes()
+								i = int(end)
+								escaped = false
+								continue
+							}
+						} else if i + 3 <= pattern.len && pattern[i..i + 3] == r'\pL' {
+							out << letter_backend_class().bytes()
+							i += 3
+							escaped = false
+							continue
+						}
+					}
+					else {}
+				}
+			}
+		}
+		if !escaped && !in_class && is_possessive_single_quantifier(pattern, i) {
+			out << ch
+			i += 2
+			escaped = false
+			continue
+		}
+		if !escaped && !in_class && ch == `{` {
+			if end := possessive_braced_quantifier_end(pattern, i) {
+				out << pattern[i..int(end) + 1].bytes()
+				i = int(end) + 2
+				escaped = false
+				continue
+			}
 		}
 		if !escaped && i + 7 <= pattern.len && ch == `\\` && pattern[i + 2] == `{`
 			&& pattern[i + 3..i + 6] == 'Any' && pattern[i + 6] == `}` {
@@ -321,6 +520,247 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 		i++
 	}
 	return out.bytestr()
+}
+
+fn matching_group_end(pattern string, start int) ?usize {
+	mut depth := 0
+	mut escaped := false
+	mut in_class := false
+	for i := start; i < pattern.len; i++ {
+		ch := pattern[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == `\\` {
+			escaped = true
+			continue
+		}
+		if in_class {
+			if ch == `]` {
+				in_class = false
+			}
+			continue
+		}
+		if ch == `[` {
+			in_class = true
+			continue
+		}
+		if ch == `(` {
+			depth++
+			continue
+		}
+		if ch == `)` {
+			depth--
+			if depth == 0 {
+				return usize(i)
+			}
+		}
+	}
+	return none
+}
+
+fn rust_word_boundary_variant_end(pattern string, i int) ?usize {
+	variants := [r'\b{start}', r'\b{end}', r'\b{start-half}', r'\b{end-half}']
+	for variant in variants {
+		if i + variant.len <= pattern.len && pattern[i..i + variant.len] == variant {
+			return usize(i + variant.len)
+		}
+	}
+	return none
+}
+
+fn rust_property_escape_end(pattern string, i int) ?usize {
+	if i + 3 >= pattern.len || pattern[i] != `\\` || (pattern[i + 1] != `p`
+		&& pattern[i + 1] != `P`) || pattern[i + 2] != `{` {
+		return none
+	}
+	mut end := i + 3
+	for end < pattern.len && pattern[end] != `}` {
+		end++
+	}
+	if end >= pattern.len {
+		return none
+	}
+	return usize(end + 1)
+}
+
+fn rust_property_replacement(property string) ?string {
+	if property.to_lower() == 'ascii' {
+		return ascii_backend_class()
+	}
+	if body := rust_property_class_body(property) {
+		return '[${body}]'
+	}
+	return none
+}
+
+fn rust_property_class_body(property string) ?string {
+	match property.to_lower() {
+		'ascii' { return ascii_backend_class_body() }
+		'l', 'letter' { return letter_backend_class_body() }
+		'gc=lu', 'general_category=lu', 'uppercaseletter' { return 'A-ZΑ-Ϋ' }
+		'greek', 'script=greek', 'sc=greek' { return 'Α-Ͽ' }
+		else { return none }
+	}
+}
+
+fn word_backend_class(config Config) string {
+	return '[${word_backend_class_body(config)}]'
+}
+
+fn word_backend_class_body(config Config) string {
+	if config.unicode {
+		return 'A-Za-z0-9_À-ÖØ-öø-ÿͰ-Ͽ'
+	}
+	return 'A-Za-z0-9_'
+}
+
+fn letter_backend_class() string {
+	return '[${letter_backend_class_body()}]'
+}
+
+fn letter_backend_class_body() string {
+	return 'A-Za-zÀ-ÖØ-öø-ÿͰ-Ͽ'
+}
+
+fn ascii_backend_class() string {
+	return '[${ascii_backend_class_body()}]'
+}
+
+fn ascii_backend_class_body() string {
+	mut out := []u8{cap: 8}
+	out << `\t`
+	out << `\r`
+	out << ' -~'.bytes()
+	return out.bytestr()
+}
+
+fn negated_backend_class(excluded string, config Config) string {
+	mut out := '[^${excluded}'
+	if line_term := config.line_terminator {
+		if line_term.is_crlf() {
+			out += r'\r\n'
+		} else {
+			out += escaped_class_byte(line_term.as_byte())
+		}
+	}
+	out += ']'
+	return out
+}
+
+fn escaped_class_byte(byte u8) string {
+	match byte {
+		`\\`, `]`, `-`, `^` { return '\\${byte.ascii_str()}' }
+		else { return byte.ascii_str() }
+	}
+}
+
+fn is_extended_whitespace(b u8) bool {
+	return b == ` ` || b == `\t` || b == `\n` || b == `\r` || b == `\f`
+}
+
+fn is_possessive_single_quantifier(pattern string, i int) bool {
+	return pattern[i] in [`*`, `+`, `?`] && i + 1 < pattern.len && pattern[i + 1] == `+`
+}
+
+fn possessive_braced_quantifier_end(pattern string, i int) ?usize {
+	if pattern[i] != `{` {
+		return none
+	}
+	mut j := i + 1
+	mut saw_digit := false
+	for j < pattern.len && pattern[j] >= `0` && pattern[j] <= `9` {
+		saw_digit = true
+		j++
+	}
+	if !saw_digit {
+		return none
+	}
+	if j < pattern.len && pattern[j] == `,` {
+		j++
+		for j < pattern.len && pattern[j] >= `0` && pattern[j] <= `9` {
+			j++
+		}
+	}
+	if j + 1 < pattern.len && pattern[j] == `}` && pattern[j + 1] == `+` {
+		return usize(j)
+	}
+	return none
+}
+
+fn validate_rust_regex_syntax(pattern string, config Config) ! {
+	mut i := 0
+	mut in_class := false
+	for i < pattern.len {
+		ch := pattern[i]
+		if ch == `\\` {
+			if i + 1 >= pattern.len {
+				return
+			}
+			next := pattern[i + 1]
+			if is_pcre_only_escape(next) {
+				return Error.regex('unsupported escape sequence')
+			}
+			if !in_class && !config.octal && next >= `0` && next <= `9` {
+				return Error.regex('backreferences are not supported')
+			}
+			i += 2
+			continue
+		}
+		if in_class {
+			if ch == `]` {
+				in_class = false
+			} else if i + 1 < pattern.len
+				&& ((ch == `&` && pattern[i + 1] == `&`) || (ch == `-` && pattern[i + 1] == `-`)
+				|| (ch == `~` && pattern[i + 1] == `~`)) {
+				return Error.regex('character class set operations are not supported')
+			}
+			i++
+			continue
+		}
+		if ch == `[` {
+			if replacement := normalize_class_set_operation_at(pattern, i, config) {
+				i = replacement.next
+				continue
+			}
+			in_class = true
+			i++
+			continue
+		}
+		if ch == `{` && i + 1 < pattern.len && pattern[i + 1] == `,` {
+			return Error.regex('repetition quantifier expects a valid decimal')
+		}
+		if ch == `(` && i + 1 < pattern.len && pattern[i + 1] == `*` {
+			return Error.regex('unsupported regex group syntax')
+		}
+		if ch == `(` && i + 2 < pattern.len && pattern[i + 1] == `?` {
+			kind := pattern[i + 2]
+			if kind == `=` || kind == `!` {
+				return Error.regex('look-around is not supported')
+			}
+			if kind == `<` && i + 3 < pattern.len && (pattern[i + 3] == `=`
+				|| pattern[i + 3] == `!`) {
+				return Error.regex('look-around is not supported')
+			}
+			if kind == `P` && i + 3 < pattern.len && (pattern[i + 3] == `=`
+				|| pattern[i + 3] == `>`) {
+				return Error.regex('backreferences are not supported')
+			}
+			if is_pcre_only_group_kind(kind) {
+				return Error.regex('unsupported regex group syntax')
+			}
+		}
+		i++
+	}
+}
+
+fn is_pcre_only_escape(ch u8) bool {
+	return ch in [`C`, `G`, `K`, `N`, `R`, `X`, `Z`, `g`, `h`, `H`, `k`, `V`]
+}
+
+fn is_pcre_only_group_kind(ch u8) bool {
+	return ch in [`#`, `&`, `'`, `(`, `>`, `|`]
 }
 
 /// Returns true if the given literal string contains any byte from the line
@@ -443,6 +883,255 @@ struct ClassAtom {
 	ok         bool
 }
 
+struct PatternReplacement {
+	text string
+	next int
+}
+
+fn normalize_posix_alpha_class_at(pattern string, start int, config Config) ?PatternReplacement {
+	if start + 11 <= pattern.len && pattern[start..start + 11] == '[[:alpha:]]' {
+		return PatternReplacement{
+			text: '[A-Za-z]'
+			next: start + 11
+		}
+	}
+	prefix := '[^[:alpha:'
+	if start + prefix.len > pattern.len || pattern[start..start + prefix.len] != prefix {
+		return none
+	}
+	mut i := start + prefix.len
+	for i + 1 < pattern.len {
+		if pattern[i] == `]` && pattern[i + 1] == `]` {
+			return PatternReplacement{
+				text: negated_backend_class('A-Za-z', config)
+				next: i + 2
+			}
+		}
+		i++
+	}
+	return none
+}
+
+fn normalize_class_set_operation_at(pattern string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || pattern[start] != `[` {
+		return none
+	}
+	end := find_class_end_nested(pattern, start) or { return none }
+	body := pattern[start + 1..end]
+	if !body.contains('&&') && !body.contains('--') && !body.contains('~~') {
+		return none
+	}
+	class_set, ok, next := parse_class_set_expression(pattern, start + 1, end)
+	if !ok || next != end {
+		return none
+	}
+	mut stripped := class_set.clone()
+	if line_term := config.line_terminator {
+		if line_term.is_crlf() {
+			stripped[int(`\r`)] = false
+			stripped[int(`\n`)] = false
+		} else {
+			stripped[int(line_term.as_byte())] = false
+		}
+	}
+	return PatternReplacement{
+		text: byte_class_to_backend_pattern(stripped)
+		next: end + 1
+	}
+}
+
+fn find_class_end_nested(pattern string, start int) ?int {
+	if start >= pattern.len || pattern[start] != `[` {
+		return none
+	}
+	mut i := start + 1
+	if i < pattern.len && pattern[i] == `^` {
+		i++
+	}
+	for i < pattern.len {
+		if pattern[i] == `\\` {
+			i = skip_regex_escape(pattern, i)
+			continue
+		}
+		if i + 1 < pattern.len && pattern[i] == `[` && pattern[i + 1] == `:` {
+			mut posix_end := i + 2
+			for posix_end + 1 < pattern.len {
+				if pattern[posix_end] == `:` && pattern[posix_end + 1] == `]` {
+					i = posix_end + 2
+					break
+				}
+				posix_end++
+			}
+			if posix_end + 1 >= pattern.len {
+				return none
+			}
+			continue
+		}
+		if pattern[i] == `[` {
+			nested_end := find_class_end_nested(pattern, i) or { return none }
+			i = nested_end + 1
+			continue
+		}
+		if pattern[i] == `]` {
+			return i
+		}
+		i++
+	}
+	return none
+}
+
+fn skip_regex_escape(pattern string, start int) int {
+	if start + 1 >= pattern.len {
+		return pattern.len
+	}
+	next := pattern[start + 1]
+	if (next == `p` || next == `P`) && start + 2 < pattern.len && pattern[start + 2] == `{` {
+		mut i := start + 3
+		for i < pattern.len && pattern[i] != `}` {
+			i++
+		}
+		if i < pattern.len {
+			return i + 1
+		}
+	}
+	return start + 2
+}
+
+fn parse_class_set_expression(pattern string, start int, end int) ([]bool, bool, int) {
+	mut i := start
+	mut negated := false
+	if i < end && pattern[i] == `^` {
+		negated = true
+		i++
+	}
+	mut set, ok, next := parse_class_union_until_operation(pattern, i, end)
+	if !ok {
+		return set, false, next
+	}
+	i = next
+	for i < end {
+		if i + 1 >= end {
+			return set, false, i
+		}
+		op := pattern[i..i + 2]
+		if op != '&&' && op != '--' && op != '~~' {
+			return set, false, i
+		}
+		right, right_ok, right_next := parse_class_union_until_operation(pattern, i + 2, end)
+		if !right_ok {
+			return set, false, right_next
+		}
+		apply_class_set_operation(mut set, right, op)
+		i = right_next
+	}
+	if negated {
+		invert_byte_class(mut set)
+	}
+	return set, true, i
+}
+
+fn parse_class_union_until_operation(pattern string, start int, end int) ([]bool, bool, int) {
+	mut i := start
+	mut set := empty_byte_class()
+	mut saw_atom := false
+	for i < end {
+		if i + 1 < end && ((pattern[i] == `&` && pattern[i + 1] == `&`)
+			|| (pattern[i] == `-` && pattern[i + 1] == `-`) || (pattern[i] == `~`
+			&& pattern[i + 1] == `~`)) {
+			break
+		}
+		start_atom, next_i := parse_class_atom_bounded(pattern, i, end)
+		i = next_i
+		if !start_atom.ok {
+			return set, false, i
+		}
+		saw_atom = true
+		if i < end && pattern[i] == `-` && !(i + 1 < end && pattern[i + 1] == `-`) {
+			i++
+			end_atom, after_end := parse_class_atom_bounded(pattern, i, end)
+			i = after_end
+			if !end_atom.ok {
+				return set, false, i
+			}
+			if start_atom.has_single && end_atom.has_single {
+				add_byte_range(mut set, start_atom.single, end_atom.single)
+			} else {
+				add_byte_class(mut set, start_atom.set)
+				add_byte_class(mut set, end_atom.set)
+			}
+		} else {
+			add_byte_class(mut set, start_atom.set)
+		}
+	}
+	return set, saw_atom, i
+}
+
+fn parse_class_atom_bounded(pattern string, i int, end int) (ClassAtom, int) {
+	if i >= end {
+		return ClassAtom{}, i
+	}
+	if pattern[i] == `[` {
+		if i + 11 <= pattern.len && pattern[i..i + 11] == '[[:alpha:]]' {
+			mut set := empty_byte_class()
+			add_byte_range(mut set, `A`, `Z`)
+			add_byte_range(mut set, `a`, `z`)
+			return ClassAtom{
+				set: set
+				ok:  true
+			}, i + 11
+		}
+		nested_end := find_class_end_nested(pattern, i) or { return ClassAtom{}, end }
+		nested, ok, next := parse_class_set_expression(pattern, i + 1, nested_end)
+		if !ok || next != nested_end {
+			return ClassAtom{}, nested_end + 1
+		}
+		return ClassAtom{
+			set: nested
+			ok:  true
+		}, nested_end + 1
+	}
+	if pattern[i] == `\\` {
+		set, has_single, single, ok, next := parse_escape_class(pattern, i)
+		if next > end {
+			return ClassAtom{}, end
+		}
+		return ClassAtom{
+			set:        set
+			single:     single
+			has_single: has_single
+			ok:         ok
+		}, next
+	}
+	byte := pattern[i]
+	mut set := empty_byte_class()
+	set[int(byte)] = true
+	return ClassAtom{
+		set:        set
+		single:     byte
+		has_single: true
+		ok:         true
+	}, i + 1
+}
+
+fn apply_class_set_operation(mut set []bool, right []bool, op string) {
+	for i, present in right {
+		match op {
+			'&&' {
+				set[i] = set[i] && present
+			}
+			'--' {
+				if present {
+					set[i] = false
+				}
+			}
+			'~~' {
+				set[i] = set[i] != present
+			}
+			else {}
+		}
+	}
+}
+
 fn parse_class_set(pattern string, start int) ([]bool, bool, int) {
 	mut i := start
 	mut negated := false
@@ -563,6 +1252,23 @@ fn parse_escape_class(pattern string, i int) ([]bool, bool, u8, bool, int) {
 			}
 			return set, false, u8(0), true, i + 2
 		}
+		`p`, `P` {
+			if end := rust_property_escape_end(pattern, i) {
+				property := pattern[i + 3..int(end) - 1]
+				if mut set := rust_property_byte_class(property) {
+					if next == `P` {
+						invert_byte_class(mut set)
+					}
+					return set, false, u8(0), true, int(end)
+				}
+			} else if i + 3 <= pattern.len && pattern[i..i + 3] == r'\pL' {
+				mut set := empty_byte_class()
+				add_byte_range(mut set, `A`, `Z`)
+				add_byte_range(mut set, `a`, `z`)
+				return set, false, u8(0), true, i + 3
+			}
+			return full_byte_class(), false, u8(0), false, skip_regex_escape(pattern, i)
+		}
 		else {
 			has_byte, byte, next_i := parse_escape_byte(pattern, i)
 			if !has_byte {
@@ -679,6 +1385,95 @@ fn add_word_bytes(mut set []bool) {
 	set[int(`_`)] = true
 }
 
+fn rust_property_byte_class(property string) ?[]bool {
+	mut set := empty_byte_class()
+	match property.to_lower() {
+		'ascii' {
+			add_byte_range(mut set, u8(0), u8(0x7f))
+			return set
+		}
+		'l', 'letter' {
+			add_byte_range(mut set, `A`, `Z`)
+			add_byte_range(mut set, `a`, `z`)
+			return set
+		}
+		'gc=lu', 'general_category=lu', 'uppercaseletter' {
+			add_byte_range(mut set, `A`, `Z`)
+			return set
+		}
+		else {
+			return none
+		}
+	}
+}
+
+fn byte_class_to_backend_pattern(set []bool) string {
+	mut any := false
+	for present in set {
+		if present {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return r'(?!)'
+	}
+	mut out := []u8{cap: 64}
+	out << `[`
+	mut i := 0
+	for i < set.len {
+		if !set[i] {
+			i++
+			continue
+		}
+		start := u8(i)
+		mut end := i
+		for end + 1 < set.len && set[end + 1] {
+			end++
+		}
+		append_backend_class_byte(mut out, start)
+		if end > i {
+			out << `-`
+			append_backend_class_byte(mut out, u8(end))
+		}
+		i = end + 1
+	}
+	out << `]`
+	return out.bytestr()
+}
+
+fn append_backend_class_byte(mut out []u8, byte u8) {
+	match byte {
+		`\\`, `]`, `-`, `^` {
+			out << `\\`
+			out << byte
+		}
+		`\n` {
+			out << `\\`
+			out << `n`
+		}
+		`\r` {
+			out << `\\`
+			out << `r`
+		}
+		`\t` {
+			out << `\\`
+			out << `t`
+		}
+		else {
+			if byte < 0x20 || byte >= 0x7f {
+				hex := '0123456789ABCDEF'
+				out << `\\`
+				out << `x`
+				out << hex[int(byte >> 4)]
+				out << hex[int(byte & 0x0f)]
+			} else {
+				out << byte
+			}
+		}
+	}
+}
+
 fn strip_line_terminator_from_match(pattern string, line_term matcher.LineTerminator) !string {
 	mut out := []u8{cap: pattern.len}
 	mut i := 0
@@ -700,10 +1495,8 @@ fn strip_line_terminator_from_match(pattern string, line_term matcher.LineTermin
 		if byte == `\\` && i + 1 < pattern.len {
 			next := pattern[i + 1]
 			if next == `s` {
-				if line_term.is_crlf() {
-					out << '[ \\t\\v\\f]'.bytes()
-				} else if line_term.as_byte() == `\n` {
-					out << '[ \\t\\r\\v\\f]'.bytes()
+				if line_term_can_match_ascii_whitespace(line_term) {
+					append_ascii_whitespace_class_without_line_term(mut out, line_term, true)
 				} else {
 					out << `\\`
 					out << next
@@ -766,12 +1559,10 @@ fn strip_class_line_terminator(pattern string, start int, line_term matcher.Line
 		if pattern[i] == `\\` && i + 1 < pattern.len {
 			next := pattern[i + 1]
 			if next == `s` {
-				if line_term.is_crlf() {
-					out << ' \\t\\v\\f'.bytes()
-				} else if line_term.as_byte() == `\n` {
-					out << ' \\t\\r\\v\\f'.bytes()
+				if line_term_can_match_ascii_whitespace(line_term) {
+					append_ascii_whitespace_class_without_line_term(mut out, line_term, false)
 				} else {
-					out << `\\`
+					out << pattern[i]
 					out << next
 				}
 				kept++
@@ -819,6 +1610,27 @@ fn strip_class_line_terminator(pattern string, start int, line_term matcher.Line
 
 fn is_byte_escape_start(byte u8) bool {
 	return byte == `x` || byte == `u` || byte == `U`
+}
+
+fn line_term_can_match_ascii_whitespace(line_term matcher.LineTerminator) bool {
+	if line_term.is_crlf() {
+		return true
+	}
+	return line_term.as_byte() in [` `, `\t`, `\r`, u8(0x0b), u8(0x0c), `\n`]
+}
+
+fn append_ascii_whitespace_class_without_line_term(mut out []u8, line_term matcher.LineTerminator, wrap bool) {
+	if wrap {
+		out << `[`
+	}
+	for byte in [` `, `\t`, `\r`, u8(0x0b), u8(0x0c), `\n`] {
+		if !line_term_rejects_byte(line_term, byte) {
+			out << byte
+		}
+	}
+	if wrap {
+		out << `]`
+	}
 }
 
 fn append_escaped_byte(mut out []u8, byte u8) {

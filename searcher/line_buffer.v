@@ -8,8 +8,7 @@ $if !windows {
 }
 
 /// The default buffer capacity that we use for the line buffer.
-pub const default_buffer_capacity = 256 * (1 << 10) // 256 KB
-const binary_detection_buffer_capacity = 64 * (1 << 10)
+pub const default_buffer_capacity = 64 * (1 << 10) // 64 KB
 
 enum BufferAllocationKind {
 	eager
@@ -273,9 +272,6 @@ mut:
 	/// If binary data was found, this records the absolute byte offset at
 	/// which it was first detected.
 	binary_byte_offset_ ?u64
-	/// A binary offset detected beyond one or more complete Rust-sized read
-	/// chunks. The offset is reported after the preceding chunks are searched.
-	pending_binary_byte_offset_ ?u64
 }
 
 /// Set the binary detection method used on this line buffer.
@@ -293,7 +289,6 @@ fn (mut lb LineBuffer) clear() {
 	lb.end = 0
 	lb.absolute_byte_offset_ = 0
 	lb.binary_byte_offset_ = none
-	lb.pending_binary_byte_offset_ = none
 }
 
 /// The absolute byte offset which corresponds to the starting offsets
@@ -358,12 +353,6 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 	}
 	lb.roll()
 	assert lb.pos == 0
-	if offset := lb.pending_binary_byte_offset_ {
-		lb.binary_byte_offset_ = offset
-		lb.pending_binary_byte_offset_ = none
-		lb.last_lineterm = lb.end
-		return lb.buffer().len != 0
-	}
 	for {
 		lb.ensure_capacity()!
 		oldend := lb.end
@@ -384,9 +373,6 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 		if binary_byte := lb.config.binary.quit_byte() {
 			if i := find_byte(newbytes, binary_byte) {
 				absolute_offset := lb.absolute_byte_offset_ + u64(oldend + i)
-				if lb.defer_binary_detection(oldend + i, absolute_offset, false) {
-					return lb.buffer().len != 0
-				}
 				lb.end = oldend + i
 				lb.last_lineterm = lb.end
 				lb.binary_byte_offset_ = absolute_offset
@@ -396,9 +382,6 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 			if i := find_byte(newbytes, binary_byte) {
 				absolute_offset := lb.absolute_byte_offset_ + u64(oldend + i)
 				replace_bytes(mut newbytes, binary_byte, lb.config.lineterm)
-				if lb.defer_binary_detection(oldend + i, absolute_offset, true) {
-					return lb.buffer().len != 0
-				}
 				if lb.binary_byte_offset_ == none {
 					lb.binary_byte_offset_ = absolute_offset
 				}
@@ -410,32 +393,6 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 		}
 	}
 	return false
-}
-
-fn (mut lb LineBuffer) defer_binary_detection(local_offset usize, absolute_offset u64, keep_remainder bool) bool {
-	chunk := usize(binary_detection_buffer_capacity)
-	if chunk == 0 || local_offset < chunk {
-		return false
-	}
-	safe_end := (local_offset / chunk) * chunk
-	if safe_end == 0 || safe_end >= lb.end {
-		return false
-	}
-	searchable := lb.buf[..int(safe_end)]
-	last_lineterm := if i := rfind_byte(searchable, lb.config.lineterm) {
-		i + 1
-	} else {
-		usize(0)
-	}
-	if last_lineterm == 0 {
-		return false
-	}
-	if !keep_remainder {
-		lb.end = last_lineterm
-	}
-	lb.last_lineterm = last_lineterm
-	lb.pending_binary_byte_offset_ = absolute_offset
-	return true
 }
 
 /// Roll the unconsumed parts of the buffer to the front.

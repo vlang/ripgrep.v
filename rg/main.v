@@ -5,6 +5,7 @@ import core
 import core.flags
 import ignore
 import printer
+import sync.stdatomic
 import time
 
 const parallel_job_queue_capacity = 256
@@ -144,6 +145,9 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	args.walk_builder()!.build_parallel().run(mut visitor)
 	if err := visitor.err {
+		if cli.is_broken_pipe_error(err) {
+			return visitor.matched
+		}
 		return err
 	}
 	stats = visitor.stats
@@ -152,9 +156,14 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	if stats_value := stats {
 		mut wtr := visitor.searcher.printer().get_mut()
-		print_stats(mode, stats_value, started_at, mut wtr)!
+		print_stats(mode, stats_value, started_at, mut wtr) or {}
 	}
-	visitor.searcher.printer().flush()!
+	visitor.searcher.printer().flush() or {
+		if cli.is_broken_pipe_error(err) {
+			return visitor.matched
+		}
+		return err
+	}
 	return visitor.matched
 }
 
@@ -207,7 +216,7 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		searched = true
 		search_result := searcher.search(&haystack) or {
 			if cli.is_broken_pipe_error(err) {
-				return err
+				return matched
 			}
 			core.err_message('${*haystack.path()}: ${err.msg()}')
 			continue
@@ -227,9 +236,14 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	if stats_value := stats {
 		mut wtr := searcher.printer().get_mut()
-		print_stats(mode, stats_value, started_at, mut wtr)!
+		print_stats(mode, stats_value, started_at, mut wtr) or {}
 	}
-	searcher.printer().flush()!
+	searcher.printer().flush() or {
+		if cli.is_broken_pipe_error(err) {
+			return matched
+		}
+		return err
+	}
 	return matched
 }
 
@@ -241,17 +255,9 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
 	mut bufwtr := args.buffer_writer()
-	if args.quit_after_match() {
-		return search(args, mode)
-	}
 
 	thread_count := parallel_worker_count(args.threads())
-	mut separator := []u8{}
-	mut has_separator := false
-	if sep := args.file_separator_bytes() {
-		separator = sep
-		has_separator = true
-	}
+	stop := stdatomic.new_atomic(false)
 	walk := args.walk_builder()!.build_parallel()
 	mut workers := []core.SearchWorker[cli.Buffer]{cap: thread_count}
 	for _ in 0 .. thread_count {
@@ -261,24 +267,39 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		workers << args.search_worker_buffer(matcher_, searcher_, printer_)!
 	}
 	jobs := chan SearchParallelJob{cap: parallel_job_queue_capacity}
-	results := chan SearchParallelChunkResult{cap: thread_count}
+	results := chan SearchParallelResult{cap: parallel_job_queue_capacity}
 	mut threads := []thread bool{}
 	for worker_index in 0 .. thread_count {
 		worker := workers[worker_index]
 		threads << spawn search_parallel_worker(worker, jobs, results, args.stats() != none,
-			separator.clone(), has_separator, worker_index)
+			args.quit_after_match(), stop, worker_index)
 	}
-	producer := spawn search_parallel_producer(walk, args.haystack_builder(), jobs, thread_count)
+	producer := spawn search_parallel_producer(walk, args.haystack_builder(), jobs, thread_count,
+		stop)
 
 	mut matched := false
 	mut stats := args.stats()
-	for _ in 0 .. thread_count {
+	mut output_err := ?IError(none)
+	mut done_count := 0
+	for done_count < thread_count {
 		result := <-results
+		if result.done {
+			done_count++
+			continue
+		}
 		matched = matched || result.matched
+		if result.matched && args.quit_after_match() {
+			stop.store(true)
+		}
 		for message in result.errors {
 			core.err_message(message)
 		}
-		bufwtr.print(&result.buffer)!
+		if output_err == none {
+			bufwtr.print(&result.buffer) or {
+				output_err = err
+				stop.store(true)
+			}
+		}
 		if stats_value := stats {
 			if result_stats := result.stats {
 				stats = stats_value + result_stats
@@ -289,13 +310,24 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	for thread in threads {
 		thread.wait()
 	}
+	if err := output_err {
+		if cli.is_broken_pipe_error(err) {
+			return matched
+		}
+		return err
+	}
 	if args.has_implicit_path() && producer_result.haystack_count == 0 {
 		eprint_nothing_searched()
 	}
 	if stats_value := stats {
 		mut wtr := bufwtr.buffer()
-		print_stats(mode, stats_value, started_at, mut wtr)!
-		bufwtr.print(&wtr)!
+		print_stats(mode, stats_value, started_at, mut wtr) or {}
+		bufwtr.print(&wtr) or {
+			if cli.is_broken_pipe_error(err) {
+				return matched
+			}
+			return err
+		}
 	}
 	return matched
 }
@@ -309,95 +341,95 @@ struct SearchParallelProducerResult {
 	haystack_count int
 }
 
-struct SearchParallelQueueVisitor {
-	haystack_builder core.HaystackBuilder
-	jobs             chan SearchParallelJob
-mut:
-	haystack_count int
-}
-
-fn (mut visitor SearchParallelQueueVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	if haystack := visitor.haystack_builder.build_from_result(result) {
-		visitor.jobs <- SearchParallelJob{
-			haystack: haystack
-		}
-		visitor.haystack_count++
-	}
-	return .continue_
-}
-
-struct SearchParallelChunkResult {
+struct SearchParallelResult {
 	index    int
+	done     bool
 	matched  bool
-	searched bool
 	stats    ?printer.Stats
 	buffer   cli.Buffer
 	errors   []string
 }
 
-fn search_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, jobs chan SearchParallelJob, stop_count int) SearchParallelProducerResult {
-	mut visitor := SearchParallelQueueVisitor{
-		haystack_builder: haystack_builder
-		jobs:             jobs
+fn search_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, jobs chan SearchParallelJob, stop_count int, stop &stdatomic.AtomicVal[bool]) SearchParallelProducerResult {
+	events := chan ignore.WalkParallelStreamResult{cap: parallel_job_queue_capacity}
+	stream := spawn walk_parallel_stream_runner(walk, events, stop)
+	mut haystack_count := 0
+	for {
+		event := <-events
+		if event.done {
+			break
+		}
+		if stop.load() {
+			continue
+		}
+		if haystack := haystack_builder.build_from_result(event.result) {
+			jobs <- SearchParallelJob{
+				haystack: haystack
+			}
+			haystack_count++
+		}
 	}
-	walk.run(mut visitor)
+	stream.wait()
 	for _ in 0 .. stop_count {
 		jobs <- SearchParallelJob{
 			stop: true
 		}
 	}
 	return SearchParallelProducerResult{
-		haystack_count: visitor.haystack_count
+		haystack_count: haystack_count
 	}
 }
 
-fn search_parallel_worker(searcher_in core.SearchWorker[cli.Buffer], jobs chan SearchParallelJob, results chan SearchParallelChunkResult, stats_enabled bool, separator []u8, has_separator bool, index int) bool {
+fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {
+	walk.stream(events, stop)
+	return true
+}
+
+fn search_parallel_worker(searcher_in core.SearchWorker[cli.Buffer], jobs chan SearchParallelJob, results chan SearchParallelResult, stats_enabled bool, quit_after_match bool, stop &stdatomic.AtomicVal[bool], index int) bool {
 	mut searcher := searcher_in
-	mut chunk_buffer := searcher.printer().get_mut().take()
-	mut printed := false
-	mut result := SearchParallelChunkResult{
-		index:    index
-		matched:  false
-		searched: false
-		stats:    if stats_enabled {
-			?printer.Stats(printer.Stats.new())
-		} else {
-			?printer.Stats(none)
-		}
-		buffer:   chunk_buffer
-		errors:   []string{}
-	}
 	for {
 		job := <-jobs
 		if job.stop {
 			break
 		}
 		haystack := job.haystack
-		result.searched = true
+		if stop.load() {
+			continue
+		}
 		searcher.printer().get_mut().clear()
 		search_result := searcher.search(&haystack) or {
-			result.errors << '${*haystack.path()}: ${err.msg()}'
+			results <- SearchParallelResult{
+				index:  index
+				buffer: searcher.printer().get_mut().take()
+				errors: ['${*haystack.path()}: ${err.msg()}']
+			}
 			continue
+		}
+		mut result := SearchParallelResult{
+			index:   index
+			matched: false
+			stats:   ?printer.Stats(none)
+			buffer:  searcher.printer().get_mut().take()
+			errors:  []string{}
 		}
 		if search_result.has_match() {
 			result.matched = true
+			if quit_after_match {
+				stop.store(true)
+			}
 		}
-		if stats_value := result.stats {
+		if stats_enabled {
 			if result_stats := search_result.stats() {
-				result.stats = stats_value + *result_stats
+				result.stats = *result_stats
 			}
 		}
-		file_buffer := searcher.printer().get_mut().take()
-		if !file_buffer.is_empty() {
-			if printed && has_separator {
-				result.buffer.write(separator) or {}
-			}
-			result.buffer.append_buffer(&file_buffer)
-			printed = true
-		}
+		results <- result
 	}
 	searcher.printer().flush() or {}
-	results <- result
+	results <- SearchParallelResult{
+		index: index
+		done:  true
+	}
 	return true
 }
 
@@ -405,9 +437,6 @@ fn parallel_worker_count(thread_setting usize) int {
 	mut count := int(thread_setting)
 	if count < 1 {
 		count = 1
-	}
-	if count > 4 {
-		count = 4
 	}
 	return count
 }
@@ -429,20 +458,110 @@ fn files(args &flags.HiArgs) !bool {
 		if args.quit_after_match() {
 			break
 		}
-		path_printer.write(haystack.path())!
+		path_printer.write(haystack.path()) or {
+			if cli.is_broken_pipe_error(err) {
+				return matched
+			}
+			return err
+		}
 	}
-	path_printer.flush()!
+	path_printer.flush() or {
+		if cli.is_broken_pipe_error(err) {
+			return matched
+		}
+		return err
+	}
 	return matched
 }
 
 /// The top-level entry point for file listing when multiple threads were
 /// requested.
-///
-/// V-specific: real parallel traversal is not translated yet, so this falls
-/// back to the sequential file listing path.
 fn files_parallel(args &flags.HiArgs) !bool {
-	// V-specific: see `search_parallel`.
-	return files(args)
+	if args.sort_requires_buffering() {
+		return files(args)
+	}
+	stop := stdatomic.new_atomic(false)
+	results := chan FilesParallelResult{cap: parallel_job_queue_capacity}
+	walk := args.walk_builder()!.build_parallel()
+	producer := spawn files_parallel_producer(walk, args.has_implicit_path(), args.quit_after_match(),
+		results, stop)
+
+	mut matched := false
+	mut output_err := ?IError(none)
+	mut path_printer := args.path_printer_builder().build(args.stdout())
+	for {
+		result := <-results
+		if result.done {
+			break
+		}
+		matched = matched || result.matched
+		if output_err == none && result.has_path {
+			path_printer.write(&result.path) or {
+				output_err = err
+				stop.store(true)
+			}
+		}
+	}
+	producer.wait()
+	if err := output_err {
+		if cli.is_broken_pipe_error(err) {
+			return matched
+		}
+		return err
+	}
+	path_printer.flush() or {
+		if cli.is_broken_pipe_error(err) {
+			return matched
+		}
+		return err
+	}
+	return matched
+}
+
+struct FilesParallelResult {
+	done     bool
+	matched  bool
+	has_path bool
+	path     string
+}
+
+fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit_after_match bool, results chan FilesParallelResult, stop &stdatomic.AtomicVal[bool]) bool {
+	events := chan ignore.WalkParallelStreamResult{cap: parallel_job_queue_capacity}
+	stream := spawn walk_parallel_stream_runner(walk, events, stop)
+	for {
+		event := <-events
+		if event.done {
+			break
+		}
+		if stop.load() {
+			continue
+		}
+		if event.result.is_error {
+			core.err_message(event.result.err.msg())
+			continue
+		}
+		dent := event.result.entry
+		if err := dent.error() {
+			core.ignore_message(err.msg())
+		}
+		if !files_should_print(&dent) {
+			continue
+		}
+		path := files_print_path(&dent, strip_dot_prefix)
+		results <- FilesParallelResult{
+			matched:  true
+			has_path: true
+			path:     path
+		}
+		if quit_after_match {
+			stop.store(true)
+		}
+	}
+	stream.wait()
+	results <- FilesParallelResult{
+		done: true
+	}
+	return true
 }
 
 fn files_stream(args &flags.HiArgs) !bool {
@@ -453,9 +572,17 @@ fn files_stream(args &flags.HiArgs) !bool {
 	}
 	args.walk_builder()!.build_parallel().run(mut visitor)
 	if err := visitor.err {
+		if cli.is_broken_pipe_error(err) {
+			return visitor.matched
+		}
 		return err
 	}
-	visitor.path_printer.flush()!
+	visitor.path_printer.flush() or {
+		if cli.is_broken_pipe_error(err) {
+			return visitor.matched
+		}
+		return err
+	}
 	return visitor.matched
 }
 
@@ -492,13 +619,16 @@ fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.Wal
 }
 
 fn (mut visitor FilesParallelVisitor) write_path(dent &ignore.DirEntry) ! {
+	path_value := files_print_path(dent, visitor.strip_dot_prefix)
+	visitor.path_printer.write(&path_value)!
+}
+
+fn files_print_path(dent &ignore.DirEntry, strip_dot_prefix bool) string {
 	path := *dent.path()
-	if visitor.strip_dot_prefix && path.starts_with('./') {
-		path_value := path[2..].to_owned()
-		visitor.path_printer.write(&path_value)!
-		return
+	if strip_dot_prefix && path.starts_with('./') {
+		return path[2..].to_owned()
 	}
-	visitor.path_printer.write(dent.path())!
+	return path.to_owned()
 }
 
 fn files_should_print(dent &ignore.DirEntry) bool {

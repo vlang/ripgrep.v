@@ -11,6 +11,7 @@ $if !windows {
 }
 
 #include <errno.h>
+#include "@VMODROOT/core/messages_lock.h"
 
 const messages_errno_eintr = 4
 const messages_errno_epipe = 32
@@ -45,14 +46,15 @@ consulted to determine what the exit status ought to be.
 */
 
 /// Like eprintln, but flushes stdout before writing stderr.
-///
-/// V-specific: the current port writes directly to stderr so broken pipes can
-/// be detected, but it does not expose Rust's stdout locking behavior here.
 pub fn eprintln_locked(msg string) {
 	write_stderr_line('rg: ${msg}')
 }
 
 fn write_stderr_line(msg string) {
+	C.rg_messages_lock()
+	defer {
+		C.rg_messages_unlock()
+	}
 	flush_stdout()
 	write_stderr_all(msg.bytes())
 	write_stderr_all('\n'.bytes())
@@ -81,10 +83,10 @@ fn write_stderr_all(buf []u8) {
 			if code == messages_errno_epipe {
 				exit(0)
 			}
-			return
+			exit(2)
 		}
 		if written == 0 {
-			return
+			exit(2)
 		}
 		written_total += written
 	}
@@ -164,3 +166,6 @@ fn ignore_messages_state_ref() &stdatomic.AtomicVal[bool] {
 fn errored_state_ref() &stdatomic.AtomicVal[bool] {
 	return errored_state
 }
+
+fn C.rg_messages_lock()
+fn C.rg_messages_unlock()

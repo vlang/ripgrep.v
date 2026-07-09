@@ -321,39 +321,43 @@ pub fn (args HiArgs) matcher() !core.PatternMatcher {
 /// If the `pcre2` feature is not enabled then this always returns an
 /// error.
 fn (args HiArgs) matcher_pcre2() !core.PatternMatcher {
-	mut builder := pcre2.RegexMatcherBuilder.new()
-	builder.multi_line(true)
-	builder.fixed_strings(args.fixed_strings)
-	match args.case {
-		.sensitive { builder.caseless(false) }
-		.insensitive { builder.caseless(true) }
-		.smart { builder.case_smart(true) }
-	}
-	if boundary := args.boundary {
-		match boundary {
-			.line { builder.whole_line(true) }
-			.word { builder.word(true) }
+	$if pcre2 ? {
+		mut builder := pcre2.RegexMatcherBuilder.new()
+		builder.multi_line(true)
+		builder.fixed_strings(args.fixed_strings)
+		match args.case {
+			.sensitive { builder.caseless(false) }
+			.insensitive { builder.caseless(true) }
+			.smart { builder.case_smart(true) }
 		}
+		if boundary := args.boundary {
+			match boundary {
+				.line { builder.whole_line(true) }
+				.word { builder.word(true) }
+			}
+		}
+		$if x64 {
+			builder.jit_if_available(true)
+			// The PCRE2 docs say that 32KB is the default, and that 1MB
+			// should be big enough for anything. But let's crank it to
+			// 10MB.
+			builder.max_jit_stack_size(10 * (1 << 20))
+		}
+		if !args.no_unicode {
+			builder.utf(true)
+			builder.ucp(true)
+		}
+		if args.multiline {
+			builder.dotall(args.multiline_dotall)
+		}
+		if args.crlf {
+			builder.crlf(true)
+		}
+		m := builder.build_many(args.patterns.patterns)!
+		return core.PatternMatcher.pcre2(m)
+	} $else {
+		return error('PCRE2 is not available in this build of ripgrep')
 	}
-	$if x64 {
-		builder.jit_if_available(true)
-		// The PCRE2 docs say that 32KB is the default, and that 1MB
-		// should be big enough for anything. But let's crank it to
-		// 10MB.
-		builder.max_jit_stack_size(10 * (1 << 20))
-	}
-	if !args.no_unicode {
-		builder.utf(true)
-		builder.ucp(true)
-	}
-	if args.multiline {
-		builder.dotall(args.multiline_dotall)
-	}
-	if args.crlf {
-		builder.crlf(true)
-	}
-	m := builder.build_many(args.patterns.patterns)!
-	return core.PatternMatcher.pcre2(m)
 }
 
 /// Build a matcher using Rust's regex engine.

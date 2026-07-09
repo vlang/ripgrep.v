@@ -9,10 +9,22 @@ import os
 $if !windows {
 	#include <sys/mman.h>
 	#include <unistd.h>
+	#include <iconv.h>
+	#include <errno.h>
+	#flag darwin -liconv
+	#flag freebsd -L/usr/local/lib -liconv
+	#flag openbsd -L/usr/local/lib -liconv
+	#flag termux -L/data/data/com.termux/files/usr/lib -liconv
 	fn C.mmap(addr voidptr, len u64, prot i32, flags i32, fd i32, offset i64) voidptr
 	fn C.munmap(addr voidptr, len u64) i32
 	fn C.pread(fd i32, buf voidptr, count u64, offset i64) isize
+	fn C.iconv_open(tocode charptr, fromcode charptr) voidptr
+	fn C.iconv_close(cd voidptr) i32
+	fn C.iconv(cd voidptr, inbuf &charptr, inbytesleft &usize, outbuf &charptr, outbytesleft &usize) usize
 }
+
+const searcher_errno_e2big = 7
+const searcher_errno_einval = 22
 
 interface IClone {}
 
@@ -306,6 +318,7 @@ enum EncodingKind {
 	windows1252
 	shiftjis
 	eucjp
+	xuserdefined
 	iconv
 }
 
@@ -317,7 +330,7 @@ enum EncodingKind {
 /// If the given label does not correspond to a valid encoding, then this
 /// returns an error.
 pub fn Encoding.new(label string) !Encoding {
-	normalized := label.to_lower()
+	normalized := label.trim_space().to_lower()
 	kind, canonical, iconv_name := encoding_for_label(normalized) or {
 		return ConfigError.unknown_encoding(label.bytes())
 	}
@@ -336,7 +349,7 @@ fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 		'utf-16', 'utf-16le', 'utf16le' {
 			return EncodingKind.utf16le, 'utf-16le', ''
 		}
-		'utf-16be', 'utf16be' {
+		'unicodefffe', 'utf-16be', 'utf16be' {
 			return EncodingKind.utf16be, 'utf-16be', ''
 		}
 		'utf-32', 'utf-32le', 'utf32le' {
@@ -353,6 +366,9 @@ fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 		}
 		'cseucpkdfmtjapanese', 'euc-jp', 'eucjp', 'x-euc-jp' {
 			return EncodingKind.eucjp, 'EUC-JP', ''
+		}
+		'x-user-defined' {
+			return EncodingKind.xuserdefined, 'x-user-defined', ''
 		}
 		else {
 			return iconv_encoding_for_label(label)
@@ -418,6 +434,9 @@ fn iconv_encoding_for_label(label string) ?(EncodingKind, string, string) {
 	if label in ['iso-8859-10', 'iso8859-10', 'iso885910', 'l6', 'latin6'] {
 		return EncodingKind.iconv, 'ISO-8859-10', 'ISO-8859-10'
 	}
+	if label in ['dos-874', 'iso-8859-11', 'iso8859-11', 'iso885911', 'tis-620', 'windows-874'] {
+		return EncodingKind.iconv, 'windows-874', 'WINDOWS-874'
+	}
 	if label in ['iso-8859-13', 'iso8859-13', 'iso885913'] {
 		return EncodingKind.iconv, 'ISO-8859-13', 'ISO-8859-13'
 	}
@@ -435,6 +454,12 @@ fn iconv_encoding_for_label(label string) ?(EncodingKind, string, string) {
 	}
 	if label in ['koi8-ru', 'koi8-u'] {
 		return EncodingKind.iconv, 'KOI8-U', 'KOI8-U'
+	}
+	if label in ['csmacintosh', 'mac', 'macintosh', 'x-mac-roman'] {
+		return EncodingKind.iconv, 'macintosh', 'MACINTOSH'
+	}
+	if label in ['x-mac-cyrillic', 'x-mac-ukrainian'] {
+		return EncodingKind.iconv, 'x-mac-cyrillic', 'MAC-CYRILLIC'
 	}
 	if label in ['big5', 'big5-hkscs', 'cn-big5', 'csbig5', 'x-x-big5'] {
 		return EncodingKind.iconv, 'Big5', 'BIG5'
@@ -956,8 +981,12 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ matcher.Matcher, mut file os
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if needs_transcoding {
-		s.fill_transcoded_buffer_from_file(mut file, path, has_path)!
-			mut search := SliceByLine.new(s, matcher_ref_value(&matcher_), s.multi_line_buffer,
+		mut decoded := TranscodingReader.new(&file, s.config)
+		defer {
+			decoded.close()
+		}
+		mut rdr := LineBufferReader.new(&decoded, &s.line_buffer)
+			mut search := ReadByLine.new(s, matcher_ref_value(&matcher_), rdr,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else {
@@ -979,6 +1008,9 @@ pub fn (mut s Searcher) search_reader(matcher_ matcher.Matcher, mut read_from io
 		search.run()!
 	} else if s.config.encoding != none || s.config.bom_sniffing {
 		mut decoded := TranscodingReader.new(&read_from, s.config)
+		defer {
+			decoded.close()
+		}
 		mut rdr := LineBufferReader.new(&decoded, &s.line_buffer)
 			mut search := ReadByLine.new(s, matcher_ref_value(&matcher_), rdr, sink_ref_value(&write_to))
 		search.run()!
@@ -1070,11 +1102,15 @@ fn file_has_bom_at_current(mut file os.File) bool {
 
 fn file_has_bom_at(mut file os.File, pos i64) bool {
 	$if windows {
-		// V-specific: the Windows port still needs a positioned-read helper
-		// before bare `search_file` can sniff a BOM without moving the cursor.
-		_ = file
-		_ = pos
-		return false
+		current := file.tell() or { return false }
+		file.seek(pos, .start) or { return false }
+		mut prefix := []u8{len: 3}
+		nread := file.read(mut prefix) or {
+			file.seek(current, .start) or {}
+			return false
+		}
+		file.seek(current, .start) or {}
+		return slice_has_bom(prefix[..nread])
 	} $else {
 		mut prefix := []u8{len: 3}
 		nread := C.pread(file.fd, prefix.data, u64(prefix.len), pos)
@@ -1127,6 +1163,9 @@ fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
 			.eucjp {
 				return decode_iconv(slice, 'EUC-JP')
 			}
+			.xuserdefined {
+				return decode_x_user_defined(slice)
+			}
 			.iconv {
 				return decode_iconv(slice, encoding.iconv_name)
 			}
@@ -1168,6 +1207,12 @@ mut:
 	pending     []u8
 	pending_pos int
 	passthrough bool
+	streaming   bool
+	stream_kind EncodingKind
+	iconv_streaming bool
+	iconv_stream IconvStream
+	raw_tail    []u8
+	finished    bool
 }
 
 fn TranscodingReader.new[^r](rdr &^r io.Reader, config Config) TranscodingReader[^r] {
@@ -1185,44 +1230,83 @@ fn (mut rdr TranscodingReader[^r]) read[^r](mut buf []u8) !int {
 		nread := copy(mut buf, rdr.pending[rdr.pending_pos..])
 		rdr.pending_pos += nread
 		return nread
-		}
-		if rdr.passthrough {
-			return reader_ref_read(mut rdr.rdr, mut buf)!
-		}
-		return io.Eof{}
 	}
+	if rdr.passthrough {
+		return reader_ref_read(mut rdr.rdr, mut buf)!
+	}
+	if rdr.streaming {
+		return rdr.read_streaming(mut buf)!
+	}
+	if rdr.iconv_streaming {
+		return rdr.read_iconv_streaming(mut buf)!
+	}
+	return io.Eof{}
+}
+
+fn (mut rdr TranscodingReader[^r]) close[^r]() {
+	if rdr.iconv_streaming {
+		rdr.iconv_stream.close()
+		rdr.iconv_streaming = false
+	}
+}
 
 fn (mut rdr TranscodingReader[^r]) initialize[^r]() ! {
 	rdr.initialized = true
 	if rdr.config.encoding != none {
-		mut raw := []u8{}
-		read_to_end(mut rdr.rdr, mut raw)!
-		rdr.pending = transcode_slice_with_config(rdr.config, raw)!
+		encoding := rdr.config.encoding or { return }
+		mut prefix := []u8{}
+		if rdr.config.bom_sniffing {
+			prefix = rdr.read_prefix(3)!
+			if slice_has_utf16le_bom(prefix) {
+				rdr.start_streaming(.utf16le, prefix[2..])
+				return
+			}
+			if slice_has_utf16be_bom(prefix) {
+				rdr.start_streaming(.utf16be, prefix[2..])
+				return
+			}
+			if slice_has_utf8_bom(prefix) {
+				rdr.pending = prefix[3..].clone()
+				rdr.passthrough = true
+				return
+			}
+		}
+		match encoding.kind {
+			.utf8 {
+				rdr.pending = prefix.clone()
+				rdr.passthrough = true
+			}
+			.utf16le, .utf16be, .utf32le, .utf32be, .windows1252, .xuserdefined {
+				rdr.start_streaming(encoding.kind, prefix)
+			}
+			.shiftjis {
+				rdr.start_iconv_streaming('SHIFT_JIS', prefix)!
+			}
+			.eucjp {
+				rdr.start_iconv_streaming('EUC-JP', prefix)!
+			}
+			.iconv {
+				rdr.start_iconv_streaming(encoding.iconv_name, prefix)!
+			}
+			else {
+				mut raw := prefix.clone()
+				read_to_end(mut rdr.rdr, mut raw)!
+				rdr.pending = transcode_slice_with_config(rdr.config, raw)!
+			}
+		}
 		return
 	}
 	if !rdr.config.bom_sniffing {
 		rdr.passthrough = true
 		return
 	}
-	mut prefix := []u8{len: 3}
-	mut nread_total := 0
-	for nread_total < prefix.len {
-			nread := reader_ref_read(mut rdr.rdr, mut prefix[nread_total..]) or {
-				if is_reader_eof(err) {
-					break
-				}
-			return err
-		}
-		if nread == 0 {
-			break
-		}
-		nread_total += nread
+	got := rdr.read_prefix(3)!
+	if slice_has_utf16le_bom(got) {
+		rdr.start_streaming(.utf16le, got[2..])
+		return
 	}
-	got := prefix[..nread_total]
-	if slice_has_utf16le_bom(got) || slice_has_utf16be_bom(got) {
-		mut raw := got.clone()
-		read_to_end(mut rdr.rdr, mut raw)!
-		rdr.pending = transcode_slice_with_config(rdr.config, raw)!
+	if slice_has_utf16be_bom(got) {
+		rdr.start_streaming(.utf16be, got[2..])
 		return
 	}
 	if slice_has_utf8_bom(got) {
@@ -1232,6 +1316,274 @@ fn (mut rdr TranscodingReader[^r]) initialize[^r]() ! {
 	}
 	rdr.pending = got.clone()
 	rdr.passthrough = true
+}
+
+fn (mut rdr TranscodingReader[^r]) read_prefix[^r](n int) ![]u8 {
+	mut prefix := []u8{len: n}
+	mut nread_total := 0
+	for nread_total < prefix.len {
+		nread := reader_ref_read(mut rdr.rdr, mut prefix[nread_total..]) or {
+			if is_reader_eof(err) {
+				break
+			}
+			return err
+		}
+		if nread == 0 {
+			break
+		}
+		nread_total += nread
+	}
+	return prefix[..nread_total].clone()
+}
+
+fn (mut rdr TranscodingReader[^r]) start_streaming(kind EncodingKind, initial []u8) {
+	rdr.streaming = true
+	rdr.stream_kind = kind
+	rdr.raw_tail = initial.clone()
+}
+
+fn (mut rdr TranscodingReader[^r]) start_iconv_streaming[^r](label string, initial []u8) ! {
+	$if windows {
+		mut raw := initial.clone()
+		read_to_end(mut rdr.rdr, mut raw)!
+		rdr.pending = decode_iconv(raw, label)!
+	} $else {
+		rdr.iconv_stream = IconvStream.new(label)!
+		rdr.iconv_streaming = true
+		rdr.raw_tail = initial.clone()
+	}
+}
+
+fn (mut rdr TranscodingReader[^r]) read_streaming[^r](mut buf []u8) !int {
+	for rdr.pending_pos >= rdr.pending.len {
+		rdr.pending = []u8{}
+		rdr.pending_pos = 0
+		if rdr.finished {
+			return io.Eof{}
+		}
+		mut raw := rdr.raw_tail.clone()
+		rdr.raw_tail = []u8{}
+		mut scratch := []u8{len: 8 * (1 << 10)}
+		nread := reader_ref_read(mut rdr.rdr, mut scratch) or {
+			if is_reader_eof(err) {
+				rdr.finished = true
+				if raw.len == 0 {
+					return io.Eof{}
+				}
+				rdr.pending = rdr.decode_stream_chunk(raw, true)
+				continue
+			}
+			return err
+		}
+		if nread == 0 {
+			rdr.finished = true
+			if raw.len == 0 {
+				return io.Eof{}
+			}
+			rdr.pending = rdr.decode_stream_chunk(raw, true)
+			continue
+		}
+		raw << scratch[..nread]
+		rdr.pending = rdr.decode_stream_chunk(raw, false)
+	}
+	ncopy := copy(mut buf, rdr.pending[rdr.pending_pos..])
+	rdr.pending_pos += ncopy
+	return ncopy
+}
+
+fn (mut rdr TranscodingReader[^r]) decode_stream_chunk(raw []u8, final bool) []u8 {
+	match rdr.stream_kind {
+		.windows1252 {
+			return decode_windows1252(raw)
+		}
+		.xuserdefined {
+			return decode_x_user_defined(raw)
+		}
+		.utf16le {
+			usable := rdr.stream_usable_len(raw, 2, final)
+			return decode_utf16(raw[..usable], false)
+		}
+		.utf16be {
+			usable := rdr.stream_usable_len(raw, 2, final)
+			return decode_utf16(raw[..usable], true)
+		}
+		.utf32le {
+			usable := rdr.stream_usable_len(raw, 4, final)
+			return decode_utf32(raw[..usable], false)
+		}
+		.utf32be {
+			usable := rdr.stream_usable_len(raw, 4, final)
+			return decode_utf32(raw[..usable], true)
+		}
+		else {
+			return raw.clone()
+		}
+	}
+}
+
+fn (mut rdr TranscodingReader[^r]) stream_usable_len(raw []u8, unit int, final bool) int {
+	if final {
+		return raw.len
+	}
+	usable := raw.len - (raw.len % unit)
+	if usable < raw.len {
+		rdr.raw_tail = raw[usable..].clone()
+	}
+	return usable
+}
+
+fn (mut rdr TranscodingReader[^r]) read_iconv_streaming[^r](mut buf []u8) !int {
+	for rdr.pending_pos >= rdr.pending.len {
+		rdr.pending = []u8{}
+		rdr.pending_pos = 0
+		if rdr.finished {
+			return io.Eof{}
+		}
+		mut raw := rdr.raw_tail.clone()
+		rdr.raw_tail = []u8{}
+		mut scratch := []u8{len: 8 * (1 << 10)}
+		nread := reader_ref_read(mut rdr.rdr, mut scratch) or {
+			if is_reader_eof(err) {
+				rdr.finished = true
+				if raw.len == 0 {
+					return io.Eof{}
+				}
+				converted := rdr.iconv_stream.convert(raw, true)!
+				rdr.pending = converted.bytes
+				continue
+			}
+			return err
+		}
+		if nread == 0 {
+			rdr.finished = true
+			if raw.len == 0 {
+				return io.Eof{}
+			}
+			converted := rdr.iconv_stream.convert(raw, true)!
+			rdr.pending = converted.bytes
+			continue
+		}
+		raw << scratch[..nread]
+		converted := rdr.iconv_stream.convert(raw, false)!
+		rdr.pending = converted.bytes
+		rdr.raw_tail = converted.tail
+	}
+	ncopy := copy(mut buf, rdr.pending[rdr.pending_pos..])
+	rdr.pending_pos += ncopy
+	return ncopy
+}
+
+struct IconvConvertResult {
+	bytes []u8
+	tail  []u8
+}
+
+struct IconvStream {
+mut:
+	cd     voidptr = unsafe { nil }
+	active bool
+}
+
+fn IconvStream.new(label string) !IconvStream {
+	$if windows {
+		_ = label
+		return error('iconv streaming is not available on Windows')
+	} $else {
+		mut src_encoding := normalize_iconv_encoding(label)
+		dst_encoding := 'UTF-8'
+		cd := C.iconv_open(charptr(dst_encoding.str), charptr(src_encoding.str))
+		if isize(cd) == -1 {
+			return error('platform can\'t convert from ${src_encoding} to ${dst_encoding}')
+		}
+		return IconvStream{
+			cd:     cd
+			active: true
+		}
+	}
+}
+
+fn normalize_iconv_encoding(label string) string {
+	mut encoding_name := label.to_upper()
+	match encoding_name {
+		'UTF16LE' { encoding_name = 'UTF-16LE' }
+		'UTF16BE' { encoding_name = 'UTF-16BE' }
+		'UTF32LE' { encoding_name = 'UTF-32LE' }
+		'UTF32BE' { encoding_name = 'UTF-32BE' }
+		else {}
+	}
+	if encoding_name == 'LOCAL' {
+		$if windows {
+			encoding_name = 'ANSI'
+		} $else {
+			encoding_name = 'UTF-8'
+		}
+	}
+	return encoding_name
+}
+
+fn (mut stream IconvStream) close() {
+	$if !windows {
+		if stream.active && !isnil(stream.cd) {
+			C.iconv_close(stream.cd)
+		}
+	}
+	stream.cd = unsafe { nil }
+	stream.active = false
+}
+
+fn (mut stream IconvStream) convert(input []u8, final bool) !IconvConvertResult {
+	$if windows {
+		_ = stream
+		_ = input
+		_ = final
+		return error('iconv streaming is not available on Windows')
+	} $else {
+		if !stream.active || isnil(stream.cd) {
+			return error('iconv stream is closed')
+		}
+		mut out_len := input.len * 4
+		if out_len < 64 {
+			out_len = 64
+		}
+		mut out := []u8{len: out_len}
+		mut src_ptr := charptr(input.data)
+		mut src_left := usize(input.len)
+		mut written_total := 0
+		for {
+			if written_total >= out.len {
+				out << []u8{len: 8 * (1 << 10)}
+			}
+			mut dst_ptr := unsafe { charptr(voidptr(usize(out.data) + usize(written_total))) }
+			mut dst_left := usize(out.len - written_total)
+			res := C.iconv(stream.cd, &src_ptr, &src_left, &dst_ptr, &dst_left)
+			written_total = out.len - int(dst_left)
+			if res != usize(-1) {
+				out.trim(written_total)
+				return IconvConvertResult{
+					bytes: out
+					tail:  []u8{}
+				}
+			}
+			c_errno := int(C.errno)
+			if c_errno == searcher_errno_e2big {
+				if written_total >= out.len {
+					out << []u8{len: 8 * (1 << 10)}
+				}
+				continue
+			}
+			if c_errno == searcher_errno_einval && !final {
+				consumed := input.len - int(src_left)
+				out.trim(written_total)
+				return IconvConvertResult{
+					bytes: out
+					tail:  input[consumed..].clone()
+				}
+			}
+			msg := if c_errno == 0 { 'unknown iconv failure' } else { os.posix_get_error_msg(c_errno) }
+			return error('convert encoding string fail: ${msg}')
+		}
+		return IconvConvertResult{}
+	}
 }
 
 fn read_to_end(mut read_from &io.Reader, mut dst []u8) ! {
@@ -1331,6 +1683,18 @@ fn decode_windows1252(slice []u8) []u8 {
 			continue
 		}
 		append_utf8(mut out, windows1252_codepoint(byte))
+	}
+	return out
+}
+
+fn decode_x_user_defined(slice []u8) []u8 {
+	mut out := []u8{cap: slice.len}
+	for byte in slice {
+		if byte < 0x80 {
+			append_utf8(mut out, u32(byte))
+		} else {
+			append_utf8(mut out, u32(0xf780) + u32(byte) - u32(0x80))
+		}
 	}
 	return out
 }

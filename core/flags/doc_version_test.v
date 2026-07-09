@@ -6,8 +6,14 @@ fn test_generate_version_short_starts_with_program_name() {
 
 fn test_generate_version_pcre2_reports_availability() {
 	text, available := generate_version_pcre2()
-	assert !available
-	assert text.contains('PCRE2 is not available')
+	$if pcre2 ? {
+		assert available
+		assert text.contains('PCRE2')
+		assert text.contains('is available')
+	} $else {
+		assert !available
+		assert text.contains('PCRE2 is not available')
+	}
 }
 
 fn test_generate_version_long_contains_features_and_pcre2() {

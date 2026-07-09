@@ -1,6 +1,7 @@
 module ignore
 
 import os
+import sync.stdatomic
 
 fn wfile(path string, contents string) {
 	os.write_file(path, contents) or { panic(err.msg()) }
@@ -62,6 +63,22 @@ fn walk_collect_entries_parallel(builder WalkBuilder) []DirEntry {
 	return collector.dents
 }
 
+struct ParallelSkipCollector {
+mut:
+	paths []string
+}
+
+fn (mut collector ParallelSkipCollector) visit(result WalkResult) WalkState {
+	if result.is_error {
+		return .continue_
+	}
+	collector.paths << (*result.entry.path()).to_owned()
+	if *result.entry.file_name() == 'skip' {
+		return .skip
+	}
+	return .continue_
+}
+
 fn walk_collect_parallel(prefix string, builder WalkBuilder) []string {
 	mut paths := []string{}
 	for dent in walk_collect_entries_parallel(builder) {
@@ -71,6 +88,35 @@ fn walk_collect_parallel(prefix string, builder WalkBuilder) []string {
 		}
 		paths << normal_path(path)
 	}
+	paths.sort()
+	return paths
+}
+
+fn walk_parallel_stream_test_runner(walk WalkParallel, events chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {
+	walk.stream(events, stop)
+	return true
+}
+
+fn walk_collect_stream(prefix string, builder WalkBuilder) []string {
+	stop := stdatomic.new_atomic(false)
+	events := chan WalkParallelStreamResult{cap: 32}
+	stream := spawn walk_parallel_stream_test_runner(builder.build_parallel(), events, stop)
+	mut paths := []string{}
+	for {
+		event := <-events
+		if event.done {
+			break
+		}
+		if event.result.is_error {
+			continue
+		}
+		path := strip_prefix(event.result.entry.path(), prefix)
+		if path == '' {
+			continue
+		}
+		paths << normal_path(path)
+	}
+	stream.wait()
 	paths.sort()
 	return paths
 }
@@ -478,4 +524,85 @@ fn test_filter() {
 	mut builder := WalkBuilder.new(td.path())
 	builder.filter_entry(filter_not_a)
 	assert_paths(td.path(), builder, ['x', 'x/y', 'x/y/foo'])
+}
+
+fn test_parallel_skip_prevents_descent() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	root1 := os.join_path(td.path(), 'one')
+	root2 := os.join_path(td.path(), 'two')
+	mkdirp(os.join_path(root1, 'skip/child'))
+	mkdirp(os.join_path(root2, 'keep/child'))
+	wfile(os.join_path(root1, 'skip/child/file'), '')
+	wfile(os.join_path(root2, 'keep/child/file'), '')
+
+	mut builder := WalkBuilder.new(root1)
+	builder.add(root2)
+	builder.threads(2)
+	mut collector := ParallelSkipCollector{}
+	builder.build_parallel().run(mut collector)
+
+	mut paths := []string{}
+	for path in collector.paths {
+		paths << normal_path(strip_prefix(path, td.path()))
+	}
+	paths.sort()
+	assert 'one/skip' in paths
+	assert 'one/skip/child' !in paths
+	assert 'one/skip/child/file' !in paths
+	assert 'two/keep/child/file' in paths
+}
+
+fn test_parallel_single_root_uses_requested_workers() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	assert builder.build_parallel().worker_count() == 4
+}
+
+fn test_parallel_stream_collects_single_root_children() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mkdirp(os.join_path(td.path(), 'a/b'))
+	mkdirp(os.join_path(td.path(), 'x/y'))
+	wfile(os.join_path(td.path(), 'a/b/foo'), '')
+	wfile(os.join_path(td.path(), 'x/y/bar'), '')
+
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	got := walk_collect_stream(td.path(), builder)
+	assert got == mkpaths(['a', 'a/b', 'a/b/foo', 'x', 'x/y', 'x/y/bar'])
+}
+
+fn test_parallel_single_root_skip_prevents_descent() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mkdirp(os.join_path(td.path(), 'skip/child'))
+	mkdirp(os.join_path(td.path(), 'keep/child'))
+	wfile(os.join_path(td.path(), 'skip/child/file'), '')
+	wfile(os.join_path(td.path(), 'keep/child/file'), '')
+
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	mut collector := ParallelSkipCollector{}
+	builder.build_parallel().run(mut collector)
+
+	mut paths := []string{}
+	for path in collector.paths {
+		paths << normal_path(strip_prefix(path, td.path()))
+	}
+	paths.sort()
+	assert 'skip' in paths
+	assert 'skip/child' !in paths
+	assert 'skip/child/file' !in paths
+	assert 'keep/child/file' in paths
 }

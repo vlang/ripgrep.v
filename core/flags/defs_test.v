@@ -697,6 +697,10 @@ fn test_encoding() {
 	enc := new_encoding('utf-16') or { panic(err.msg()) }
 	assert args.encoding == encoding_some(enc)
 
+	args = parse_low_raw(['-E', 'cp1251']) or { panic(err.msg()) }
+	cp1251 := new_encoding('cp1251') or { panic(err.msg()) }
+	assert args.encoding == encoding_some(cp1251)
+
 	args = parse_low_raw(['-E', 'utf-16', '--no-encoding']) or { panic(err.msg()) }
 	assert args.encoding == encoding_auto()
 

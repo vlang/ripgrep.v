@@ -532,14 +532,14 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 }
 
 /// Returns an iterator over parent ignore matchers, including this one.
-pub fn (ig &^a Ignore) parents[^a]() Parents[^a] {
+pub fn (ig &Ignore) parents() Parents {
 	mut items := []Ignore{}
 	for i := ig.nodes.len - 1; i >= 0; i-- {
-		mut item := ig
+		mut item := ig.clone()
 		item.nodes = ig.nodes[..i + 1].clone()
 		items << item
 	}
-	return Parents[^a]{
+	return Parents{
 		items: items
 		index: 0
 	}
@@ -556,18 +556,20 @@ fn (ig &^a Ignore) absolute_base[^a]() ?&^a string {
 
 /// An iterator over all parents of an ignore matcher, including itself.
 ///
-/// The lifetime `'a` refers to the lifetime of the initial `Ignore` matcher.
-pub struct Parents[^a] {
+/// V-specific: `Ignore` stores parent state as prefixes of one `nodes` array
+/// instead of persistent parent objects, so this iterator yields owned parent
+/// matcher values rather than borrowed references.
+pub struct Parents {
 mut:
 	items []Ignore
 	index int
 }
 
-pub fn (mut p Parents[^a]) next[^a]() ?&^a Ignore {
+pub fn (mut p Parents) next() ?Ignore {
 	if p.index >= p.items.len {
 		return none
 	}
-	item := &p.items[p.index]
+	item := p.items[p.index]
 	p.index++
 	return item
 }

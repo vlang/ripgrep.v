@@ -182,3 +182,19 @@ fn test_hiargs_builds_search_worker_components() {
 	assert stats.searches_with_match() == 1
 	assert stats.matches() == 1
 }
+
+fn test_hiargs_pcre2_reports_unavailable_without_feature() {
+	$if pcre2 ? {
+		return
+	}
+	mut low := default_low_args()
+	low.engine = .pcre2
+	low.patterns = [pattern_regexp('needle')]
+	low.positional = ['haystack.txt']
+	hi := must_hiargs(mut low)
+	hi.matcher() or {
+		assert err.msg().contains('PCRE2 is not available')
+		return
+	}
+	panic('expected PCRE2 unavailable error')
+}

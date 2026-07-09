@@ -341,6 +341,49 @@ fn test_absolute_parent_anchored() {
 	assert ig2.matched('src/foo', false).is_ignore()
 }
 
+fn test_parents_iterator_yields_owned_matchers() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mkdirp(os.join_path(td.path(), '.git'))
+	mkdirp(os.join_path(td.path(), 'src'))
+	wfile(os.join_path(td.path(), '.gitignore'), 'foo')
+
+	ig0 := IgnoreBuilder.new().build()
+	ig1, has_err1, _ := ig0.add_child(td.path())
+	assert !has_err1
+	ig2, has_err2, _ := ig1.add_child(os.join_path(td.path(), 'src'))
+	assert !has_err2
+
+	mut parents := ig2.parents()
+	first := parents.next() or { panic('missing first parent') }
+	second := parents.next() or { panic('missing second parent') }
+	third := parents.next() or { panic('missing root parent') }
+	if _ := parents.next() {
+		panic('parents iterator should be exhausted')
+	}
+
+	if *first.path() != *ig2.path() {
+		panic('first parent path should be self')
+	}
+	if *second.path() != *ig1.path() {
+		panic('second parent path should be direct parent')
+	}
+	if *third.path() != *ig0.path() {
+		panic('third parent path should be root')
+	}
+	if !first.matched('foo', false).is_ignore() {
+		panic('first parent should retain child rules')
+	}
+	if !second.matched('foo', false).is_ignore() {
+		panic('second parent should retain root rules')
+	}
+	if !third.matched('foo', false).is_none() {
+		panic('root parent should not have loaded child rules')
+	}
+}
+
 fn test_git_info_exclude_in_linked_worktree() {
 	td := tmpdir()
 	defer {

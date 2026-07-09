@@ -313,14 +313,6 @@ pub fn is_broken_pipe_error(err IError) bool {
 	if err.code() == errno_epipe {
 		return true
 	}
-	if err.code() == 0 && err.msg() == '' {
-		// V-specific: when a write error passes through generic printer/sink
-		// interfaces, the current ownership frontend can erase the original
-		// errno-backed error into an empty `IError`. The CLI only constructs
-		// empty errors through those write paths today, so keep treating it as
-		// a broken pipe at the same boundary Rust walks its error chain.
-		return true
-	}
 	msg := err.msg().to_lower()
 	return msg.contains('broken pipe') || msg.contains('the pipe is being closed')
 }

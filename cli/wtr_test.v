@@ -117,3 +117,7 @@ fn test_buffer_writer_reports_broken_pipe() {
 	}
 	panic('expected write to broken pipe to fail')
 }
+
+fn test_empty_error_is_not_broken_pipe() {
+	assert !is_broken_pipe_error(error(''))
+}

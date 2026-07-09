@@ -141,7 +141,9 @@ mut:
 
 /// Create a new builder with the default configuration.
 pub fn CommandReaderBuilder.new() CommandReaderBuilder {
-	return CommandReaderBuilder{}
+	return CommandReaderBuilder{
+		async_stderr: true
+	}
 }
 
 pub fn (builder CommandReaderBuilder) clone() CommandReaderBuilder {
@@ -181,19 +183,22 @@ pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 		return error(CommandError.io(error(process.err)).msg())
 	}
 	if command.has_stdin_path {
-		builder.write_buffered_stdin(mut process, command.stdin_path)!
+		builder.write_buffered_stdin(mut process, command.stdin_path) or {
+			process.close()
+			return err
+		}
 	}
 	stderr := if builder.async_stderr {
-		StderrReader.new_async()
+		StderrReader.new_async(mut process)
 	} else {
 		StderrReader.sync()
-		}
-		return CommandReader{
-			process:     process
-			has_process: true
-			stderr:      stderr
-		}
 	}
+	return CommandReader{
+		process:     process
+		has_process: true
+		stderr:      stderr
+	}
+}
 
 fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !CommandReader {
 	_ = builder
@@ -242,21 +247,36 @@ fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !Comman
 	process.use_stdio_ctl = true
 	process.stdio_fd = [-1, stdout_pipe.read_fd, stderr_pipe.read_fd]!
 	stderr := if builder.async_stderr {
-		StderrReader.new_async()
+		StderrReader.new_async(mut process)
 	} else {
 		StderrReader.sync()
-		}
-		return CommandReader{
-			process:     process
-			has_process: true
-			stderr:      stderr
-		}
 	}
+	return CommandReader{
+		process:     process
+		has_process: true
+		stderr:      stderr
+	}
+}
 
 fn (builder CommandReaderBuilder) write_buffered_stdin(mut process os.Process, path string) ! {
 	_ = builder
-	bytes := os.read_bytes(path) or { return error(CommandError.io(err).msg()) }
-	process.stdin_write(bytes.bytestr())
+	mut file := os.open(path) or { return error(CommandError.io(err).msg()) }
+	defer {
+		file.close()
+	}
+	mut buf := []u8{len: 32 * 1024}
+	for {
+		nread := file.read(mut buf) or {
+			if err is io.Eof {
+				break
+			}
+			return error(CommandError.io(err).msg())
+		}
+		if nread <= 0 {
+			break
+		}
+		process.stdin_write(buf[..nread].bytestr())
+	}
 	close_process_pipe(mut process, .stdin)
 }
 
@@ -439,8 +459,11 @@ pub fn (mut reader CommandReader) close() ! {
 	// cause a well-behaved child process to exit. If child.stdout is None
 	// we assume that close() has already been called and do nothing.
 	reader.close_stdout()
-	reader.process.wait()
+	if reader.process.status in [.running, .stopped] {
+		reader.process.wait()
+	}
 	if reader.process.code == 0 {
+		reader.finish_stderr()
 		reader.process.close()
 		reader.has_process = false
 		return
@@ -477,9 +500,6 @@ pub fn (mut reader CommandReader) read(mut buf []u8) !int {
 		return reader.read_from_stdout_buffer(mut buf)
 	}
 	for {
-		if reader.stderr.kind == .async {
-			reader.read_stderr_available()
-		}
 		if out := reader.process.pipe_read(.stdout) {
 			if out.len > 0 {
 				reader.stdout_buffer = out.bytes()
@@ -536,6 +556,9 @@ fn (mut reader CommandReader) read_stderr_available() {
 	if !reader.has_process || reader.stderr.done {
 		return
 	}
+	if reader.stderr.kind == .async {
+		return
+	}
 	for {
 		if chunk := reader.process.pipe_read(.stderr) {
 			if chunk.len == 0 {
@@ -556,6 +579,10 @@ fn (mut reader CommandReader) read_stderr_to_end() CommandError {
 	if reader.stderr.done || !reader.has_process {
 		return CommandError.stderr(reader.stderr.bytes)
 	}
+	if reader.stderr.kind == .async {
+		reader.finish_stderr()
+		return CommandError.stderr(reader.stderr.bytes)
+	}
 	reader.read_stderr_available()
 	tail := reader.process.stderr_slurp()
 	if tail.len > 0 {
@@ -563,6 +590,18 @@ fn (mut reader CommandReader) read_stderr_to_end() CommandError {
 	}
 	reader.stderr.done = true
 	return CommandError.stderr(reader.stderr.bytes)
+}
+
+fn (mut reader CommandReader) finish_stderr() {
+	if reader.stderr.done {
+		return
+	}
+	if reader.stderr.kind == .async {
+		reader.stderr.bytes = <-reader.stderr.done_chan
+		reader.stderr.done = true
+		return
+	}
+	reader.read_stderr_to_end()
 }
 
 enum StderrReaderKind {
@@ -575,23 +614,49 @@ enum StderrReaderKind {
 struct StderrReader {
 	kind StderrReaderKind
 mut:
-	bytes []u8
-	done  bool
+	bytes     []u8
+	done      bool
+	done_chan chan []u8
 }
 
 /// Create a reader for stderr that reads contents asynchronously.
 ///
-/// V-specific: stderr is drained opportunistically while stdout is polled
-/// instead of by launching a dedicated thread.
-fn StderrReader.new_async() StderrReader {
-	return StderrReader{
-		kind: .async
+/// V-specific: the Unix implementation drains the stderr file descriptor on a
+/// dedicated thread. Other platforms fall back to synchronous stderr reads.
+fn StderrReader.new_async(mut process os.Process) StderrReader {
+	$if !windows {
+		fd := process.stdio_fd[2]
+		if fd != -1 {
+			process.stdio_fd[2] = -1
+			done_chan := chan []u8{cap: 1}
+			spawn stderr_drain_fd(fd, done_chan)
+			return StderrReader{
+				kind:      .async
+				done_chan: done_chan
+			}
+		}
 	}
+	return StderrReader.sync()
+}
+
+fn stderr_drain_fd(fd int, done_chan chan []u8) {
+	mut bytes := []u8{}
+	for {
+		chunk, nread := os.fd_read(fd, 4096)
+		if nread <= 0 {
+			break
+		}
+		bytes << chunk.bytes()
+	}
+	os.fd_close(fd)
+	done_chan <- bytes
 }
 
 /// Create a reader for stderr that reads contents synchronously.
 fn StderrReader.sync() StderrReader {
+	done_chan := chan []u8{cap: 1}
 	return StderrReader{
-		kind: .sync
+		kind:      .sync
+		done_chan: done_chan
 	}
 }

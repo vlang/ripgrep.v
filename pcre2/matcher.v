@@ -1,7 +1,42 @@
 module pcre2
 
 import matcher
-import regex.pcre
+
+$if pcre2 ? {
+	$if $pkgconfig('libpcre2-8') {
+		#pkgconfig --cflags --libs libpcre2-8
+	} $else $if macos {
+		#flag -I/opt/homebrew/include
+		#flag -L/opt/homebrew/lib
+		#flag -lpcre2-8
+	} $else {
+		#flag -lpcre2-8
+	}
+	#include "@VMODROOT/pcre2/pcre2_shim.h"
+	fn C.rg_pcre2_opt_caseless() u32
+	fn C.rg_pcre2_opt_dotall() u32
+	fn C.rg_pcre2_opt_extended() u32
+	fn C.rg_pcre2_opt_multiline() u32
+	fn C.rg_pcre2_opt_ucp() u32
+	fn C.rg_pcre2_opt_utf() u32
+	fn C.rg_pcre2_error_nomatch() int
+	fn C.rg_pcre2_unset() usize
+	fn C.rg_pcre2_jit_available() int
+	fn C.rg_pcre2_error_message(code int, buf &char, len usize) &char
+	fn C.rg_pcre2_compile(pattern &u8, len usize, options u32, crlf int, errorcode &int, erroroffset &usize) voidptr
+	fn C.rg_pcre2_jit_compile(code voidptr) int
+	fn C.rg_pcre2_match_context_create(max_jit_stack_size usize) voidptr
+	fn C.rg_pcre2_match_data_create(code voidptr) voidptr
+	fn C.rg_pcre2_match_data_free(match_data voidptr)
+	fn C.rg_pcre2_match(code voidptr, subject &u8, len usize, start usize, options u32, match_data voidptr, match_context voidptr) int
+	fn C.rg_pcre2_ovector(match_data voidptr) &usize
+	fn C.rg_pcre2_capture_count(code voidptr) u32
+	fn C.rg_pcre2_name_count(code voidptr) u32
+	fn C.rg_pcre2_name_entry_size(code voidptr) u32
+	fn C.rg_pcre2_name_table(code voidptr) &u8
+	fn C.rg_pcre2_name_entry_group(table &u8, entry_size u32, index u32) u32
+	fn C.rg_pcre2_name_entry_name(table &u8, entry_size u32, index u32) &u8
+}
 
 /// A builder for configuring the compilation of a PCRE2 regex.
 pub struct RegexMatcherBuilder implements IClone {
@@ -41,54 +76,82 @@ pub fn (builder RegexMatcherBuilder) build(pattern string) !RegexMatcher {
 ///
 /// If there was a problem building the regex, then an error is returned.
 pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher {
-	mut pats := []string{cap: patterns.len}
-	for p in patterns {
-		pats << if builder.fixed_strings {
-			'(?:${pcre_escape(p)})'
-		} else {
-			'(?:${p})'
+	$if pcre2 ? {
+		mut pats := []string{cap: patterns.len}
+		for p in patterns {
+			pats << if builder.fixed_strings {
+				'(?:${pcre_escape(p)})'
+			} else {
+				'(?:${p})'
+			}
 		}
-	}
-	mut singlepat := if patterns.len == 0 {
-		// A way to spell a pattern that can never match anything.
-		r'[^\S\s]'.to_owned()
-	} else {
-		pats.join('|')
-	}
-	if builder.jit && !is_jit_available() {
-		return Error.regex_message('PCRE2 JIT is not available')
-	}
-	if builder.extended {
-		singlepat = apply_extended_mode(singlepat)
-	}
-	singlepat = normalize_backend_pattern(singlepat, builder.crlf)
-	mut flags := ''
-	if builder.caseless || (builder.case_smart && !has_uppercase_literal(&singlepat)) {
-		flags += 'i'
-	}
-	if builder.multi_line || builder.crlf {
-		flags += 'm'
-	}
-	if builder.dotall {
-		flags += 's'
-	}
-	if flags.len > 0 {
-		singlepat = '(?${flags})${singlepat}'
-	}
-	// V-specific: the local backend does not expose PCRE2 option knobs for
-	// UTF/UCP/JIT stack configuration. These settings are retained on the
-	// matcher so the translated builder API remains observable, while matching
-	// itself uses the closest available `regex.pcre` semantics.
-	_ = builder.ucp
-	_ = builder.utf
-	_ = builder.jit_if_available
-	_ = builder.max_jit_stack_size
-	regex := pcre.compile(singlepat) or { return Error.regex(err) }
-	return RegexMatcher{
-		regex:      regex
-		word:       builder.word
-		whole_line: builder.whole_line
-		crlf:       builder.crlf
+		singlepat := if patterns.len == 0 {
+			// A way to spell a pattern that can never match anything.
+			r'[^\S\s]'.to_owned()
+		} else {
+			pats.join('|')
+		}
+		mut options := u32(0)
+		if builder.caseless || (builder.case_smart && !has_uppercase_literal(&singlepat)) {
+			options |= C.rg_pcre2_opt_caseless()
+		}
+		if builder.multi_line || builder.crlf {
+			options |= C.rg_pcre2_opt_multiline()
+		}
+		if builder.dotall {
+			options |= C.rg_pcre2_opt_dotall()
+		}
+		if builder.extended {
+			options |= C.rg_pcre2_opt_extended()
+		}
+		if builder.utf {
+			options |= C.rg_pcre2_opt_utf()
+		}
+		if builder.ucp {
+			options |= C.rg_pcre2_opt_ucp()
+		}
+		mut errorcode := 0
+		mut erroroffset := usize(0)
+		code := C.rg_pcre2_compile(&u8(singlepat.str), usize(singlepat.len), options,
+			if builder.crlf { 1 } else { 0 }, &errorcode, &erroroffset)
+		if isnil(code) {
+			message := pcre2_error_message(errorcode)
+			return Error.regex_message('${message} at offset ${erroroffset}')
+		}
+		mut jit_enabled := false
+		if builder.jit || builder.jit_if_available {
+			if C.rg_pcre2_jit_available() == 0 {
+				if builder.jit {
+					return Error.regex_message('PCRE2 JIT is not available')
+				}
+			} else {
+				jit_rc := C.rg_pcre2_jit_compile(code)
+				if jit_rc != 0 {
+					if builder.jit {
+						return Error.regex_message(pcre2_error_message(jit_rc))
+					}
+				} else {
+					jit_enabled = true
+				}
+			}
+		}
+		mut match_context := voidptr(0)
+		if max_stack := builder.max_jit_stack_size {
+			if jit_enabled {
+				match_context = C.rg_pcre2_match_context_create(max_stack)
+			}
+		}
+		return RegexMatcher{
+			code:                code
+			match_context:       match_context
+			capture_count_value: usize(C.rg_pcre2_capture_count(code)) + 1
+			capture_names:       pcre2_capture_names(code)
+			word:                builder.word
+			whole_line:          builder.whole_line
+			crlf:                builder.crlf
+		}
+	} $else {
+		return Error.regex_message('PCRE2 is not available in this build of ripgrep')
 	}
 }
 
@@ -308,10 +371,13 @@ pub fn (mut builder RegexMatcherBuilder) max_jit_stack_size(bytes ?usize) &Regex
 
 /// An implementation of the `Matcher` trait using PCRE2.
 pub struct RegexMatcher implements IClone {
-	regex pcre.Regex
-	word  bool
-	whole_line bool
-	crlf bool
+	code                voidptr
+	match_context       voidptr
+	capture_count_value usize
+	capture_names       map[string]usize
+	word                bool
+	whole_line          bool
+	crlf                bool
 }
 
 /// Create a new matcher from the given pattern using the default
@@ -326,25 +392,52 @@ pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch
 }
 
 pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
-	if at > haystack.len {
+	$if pcre2 ? {
+		if at > haystack.len {
+			return matcher.FallibleMatch.absent(), []string{}
+		}
+		if isnil(re.code) {
+			return Error.regex_message('PCRE2 regex is not initialized')
+		}
+		mut start := at
+		for start <= haystack.len {
+			match_data := C.rg_pcre2_match_data_create(re.code)
+			if isnil(match_data) {
+				return Error.regex_message('failed to allocate PCRE2 match data')
+			}
+			mut empty_subject := [u8(0)]
+			subject := if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
+			rc := C.rg_pcre2_match(re.code, subject, usize(haystack.len), start, u32(0),
+				match_data, re.match_context)
+			if rc == C.rg_pcre2_error_nomatch() {
+				C.rg_pcre2_match_data_free(match_data)
+				return matcher.FallibleMatch.absent(), []string{}
+			}
+			if rc < 0 {
+				C.rg_pcre2_match_data_free(match_data)
+				return Error.regex_message(pcre2_error_message(rc))
+			}
+			ovector := C.rg_pcre2_ovector(match_data)
+			match_start := unsafe { ovector[0] }
+			match_end := unsafe { ovector[1] }
+			mat := matcher.Match.new(match_start, match_end)
+			if re.accept_match(haystack, mat) {
+				groups := re.capture_groups_from_ovector(haystack, ovector)
+				C.rg_pcre2_match_data_free(match_data)
+				return matcher.FallibleMatch.some(mat), groups
+			}
+			C.rg_pcre2_match_data_free(match_data)
+			next := if match_end > match_start { match_start + 1 } else { match_end + 1 }
+			if next <= start {
+				start++
+			} else {
+				start = next
+			}
+		}
 		return matcher.FallibleMatch.absent(), []string{}
+	} $else {
+		return Error.regex_message('PCRE2 is not available in this build of ripgrep')
 	}
-	text := haystack.bytestr()
-	mut start := int(at)
-	for start <= text.len {
-		found := re.regex.find_from(text, start) or { return matcher.FallibleMatch.absent(), []string{} }
-		mat := matcher.Match.new(usize(found.start), usize(found.end))
-		if re.accept_match(haystack, mat) {
-			return matcher.FallibleMatch.some(mat), found.groups.clone()
-		}
-		next := if found.end > found.start { found.start + 1 } else { found.end + 1 }
-		if next <= start {
-			start++
-		} else {
-			start = next
-		}
-	}
-	return matcher.FallibleMatch.absent(), []string{}
 }
 
 pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
@@ -353,14 +446,78 @@ pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
 }
 
 pub fn (re RegexMatcher) capture_count() usize {
-	return usize(re.regex.total_groups + 1)
+	return re.capture_count_value
 }
 
 pub fn (re RegexMatcher) capture_index(name string) ?usize {
-	if index := re.regex.group_map[name] {
-		return usize(index + 1)
+	if index := re.capture_names[name] {
+		return index
 	}
 	return none
+}
+
+fn (re RegexMatcher) capture_groups_from_ovector(haystack []u8, ovector &usize) []string {
+	$if pcre2 ? {
+		mut groups := []string{cap: int(re.capture_count_value)}
+		unset := C.rg_pcre2_unset()
+		for i := usize(1); i < re.capture_count_value; i++ {
+			start := unsafe { ovector[i * 2] }
+			end := unsafe { ovector[i * 2 + 1] }
+			if start == unset || end == unset || start > haystack.len || end > haystack.len
+				|| start > end {
+				groups << ''
+				continue
+			}
+			groups << haystack[start..end].bytestr()
+		}
+		return groups
+	} $else {
+		_ = re
+		_ = haystack
+		_ = ovector
+		return []string{}
+	}
+}
+
+fn pcre2_capture_names(code voidptr) map[string]usize {
+	$if pcre2 ? {
+		mut names := map[string]usize{}
+		name_count := C.rg_pcre2_name_count(code)
+		if name_count == 0 {
+			return names
+		}
+		entry_size := C.rg_pcre2_name_entry_size(code)
+		table := C.rg_pcre2_name_table(code)
+		if isnil(table) {
+			return names
+		}
+		for i := u32(0); i < name_count; i++ {
+			group := usize(C.rg_pcre2_name_entry_group(table, entry_size, i))
+			name_ptr := C.rg_pcre2_name_entry_name(table, entry_size, i)
+			if !isnil(name_ptr) {
+				name := unsafe { tos_clone(name_ptr) }
+				names[name] = group
+			}
+		}
+		return names
+	} $else {
+		_ = code
+		return map[string]usize{}
+	}
+}
+
+fn pcre2_error_message(code int) string {
+	$if pcre2 ? {
+		mut buf := []u8{len: 256}
+		C.rg_pcre2_error_message(code, &char(buf.data), usize(buf.len))
+		mut end := 0
+		for end < buf.len && buf[end] != 0 {
+			end++
+		}
+		return buf[..end].bytestr()
+	} $else {
+		return 'PCRE2 error ${code}'
+	}
 }
 
 pub fn (re RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {

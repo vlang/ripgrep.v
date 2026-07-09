@@ -65,11 +65,27 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 			simple_ascii:         none
 			fast_line_regex:      none
 			non_matching_bytes:   matcher.ByteSet.full()
+			reject_invalid_empty: false
 		}
 	}
-	byte_literal := byte_literal_from_patterns(patterns.clone(), builder.config)
-	unicode_case_literal := unicode_case_literal_from_patterns(patterns.clone(), builder.config)
-	simple_ascii := simple_ascii_from_patterns(patterns.clone(), builder.config)
+	needs_backend_normalization := patterns_need_backend_normalization(patterns.clone())
+	reject_invalid_empty := builder.config.unicode
+		&& patterns_can_report_backend_invalid_empty(patterns.clone())
+	byte_literal := if needs_backend_normalization {
+		?[]u8(none)
+	} else {
+		byte_literal_from_patterns(patterns.clone(), builder.config)
+	}
+	unicode_case_literal := if needs_backend_normalization {
+		?string(none)
+	} else {
+		unicode_case_literal_from_patterns(patterns.clone(), builder.config)
+	}
+	simple_ascii := if needs_backend_normalization {
+		?SimpleAsciiPattern(none)
+	} else {
+		simple_ascii_from_patterns(patterns.clone(), builder.config)
+	}
 	mut chir := builder.config.build_many(patterns)!
 	// 'whole_line' is a strict subset of 'word', so when it is enabled,
 	// we don't need to both with any specific to word matching.
@@ -90,10 +106,12 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 	// regex engine is likely to handle this case for us since it's so
 	// simple, but the idea applies.)
 	//
-	fast := InnerLiterals.new(&chir, &regex).one_regex()!
 	mut fast_line_regex := ?pcre.Regex(none)
-	if fast.has_value {
-		fast_line_regex = ?pcre.Regex(fast.value)
+	if !needs_backend_normalization {
+		fast := InnerLiterals.new(&chir, &regex).one_regex()!
+		if fast.has_value {
+			fast_line_regex = ?pcre.Regex(fast.value)
+		}
 	}
 	// We override the line terminator in case the configured HIR doesn't
 	// support it.
@@ -107,7 +125,35 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 		simple_ascii:         simple_ascii
 		fast_line_regex:      fast_line_regex
 		non_matching_bytes:   non_matching_bytes
+		reject_invalid_empty: reject_invalid_empty
 	}
+}
+
+fn patterns_need_backend_normalization(patterns []string) bool {
+	for pattern in patterns {
+		if pattern.contains('(?x)') || pattern.contains('(?-i)') || pattern.contains('(?R)')
+			|| pattern.contains('(?-R)') || pattern.contains('(?U)') || pattern.contains('(?i-m)')
+			|| pattern.contains('(?x:') || pattern.contains('(?-x:') || pattern.contains('(?-i:')
+			|| pattern.contains('(?R:') || pattern.contains('(?<') || pattern.contains(r'\b{')
+			|| pattern.contains(r'\A') || pattern.contains(r'\z') || pattern.contains(r'\<')
+			|| pattern.contains(r'\>') || pattern.contains(r'\W') || pattern.contains(r'\D')
+			|| pattern.contains('[[:alpha:]]') || pattern.contains('[^[:alpha:]]')
+			|| pattern.contains(r'\p') || pattern.contains(r'\P') || pattern.contains('&&')
+			|| pattern.contains('--') || pattern.contains('~~') {
+			return true
+		}
+	}
+	return false
+}
+
+fn patterns_can_report_backend_invalid_empty(patterns []string) bool {
+	for pattern in patterns {
+		if pattern.contains(r'\W') || pattern.contains(r'\D') || pattern.contains(r'\P')
+			|| pattern.contains('[^[:alpha:]]') {
+			return true
+		}
+	}
+	return false
 }
 
 /// Build a new matcher from a plain alternation of literals.
@@ -397,6 +443,8 @@ pub struct RegexMatcher implements IClone {
 	fast_line_regex ?pcre.Regex
 	/// A set of bytes that will never appear in a match.
 	non_matching_bytes matcher.ByteSet
+	/// Whether to reject zero-width backend matches at invalid UTF-8 bytes.
+	reject_invalid_empty bool
 }
 
 /// Create a new matcher from the given pattern using the default
@@ -551,6 +599,10 @@ pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLin
 }
 
 fn (re RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
+	if re.reject_invalid_empty && mat.start() == mat.end()
+		&& is_invalid_utf8_at(haystack, mat.start()) {
+		return false
+	}
 	if re.config.whole_line && !is_whole_line_match(re.config, haystack, mat) {
 		return false
 	}
@@ -558,6 +610,55 @@ fn (re RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
 		return false
 	}
 	return true
+}
+
+fn is_invalid_utf8_at(haystack []u8, offset usize) bool {
+	if offset >= haystack.len {
+		return false
+	}
+	byte := haystack[offset]
+	if byte < 0x80 {
+		return false
+	}
+	if byte >= 0xc2 && byte <= 0xdf {
+		return offset + 1 >= haystack.len || !is_utf8_continuation(haystack[offset + 1])
+	}
+	if byte == 0xe0 {
+		return offset + 2 >= haystack.len || haystack[offset + 1] < 0xa0
+			|| haystack[offset + 1] > 0xbf || !is_utf8_continuation(haystack[offset + 2])
+	}
+	if byte >= 0xe1 && byte <= 0xec {
+		return offset + 2 >= haystack.len || !is_utf8_continuation(haystack[offset + 1])
+			|| !is_utf8_continuation(haystack[offset + 2])
+	}
+	if byte == 0xed {
+		return offset + 2 >= haystack.len || haystack[offset + 1] < 0x80
+			|| haystack[offset + 1] > 0x9f || !is_utf8_continuation(haystack[offset + 2])
+	}
+	if byte >= 0xee && byte <= 0xef {
+		return offset + 2 >= haystack.len || !is_utf8_continuation(haystack[offset + 1])
+			|| !is_utf8_continuation(haystack[offset + 2])
+	}
+	if byte == 0xf0 {
+		return offset + 3 >= haystack.len || haystack[offset + 1] < 0x90
+			|| haystack[offset + 1] > 0xbf || !is_utf8_continuation(haystack[offset + 2])
+			|| !is_utf8_continuation(haystack[offset + 3])
+	}
+	if byte >= 0xf1 && byte <= 0xf3 {
+		return offset + 3 >= haystack.len || !is_utf8_continuation(haystack[offset + 1])
+			|| !is_utf8_continuation(haystack[offset + 2])
+			|| !is_utf8_continuation(haystack[offset + 3])
+	}
+	if byte == 0xf4 {
+		return offset + 3 >= haystack.len || haystack[offset + 1] < 0x80
+			|| haystack[offset + 1] > 0x8f || !is_utf8_continuation(haystack[offset + 2])
+			|| !is_utf8_continuation(haystack[offset + 3])
+	}
+	return true
+}
+
+fn is_utf8_continuation(byte u8) bool {
+	return byte >= 0x80 && byte <= 0xbf
 }
 
 fn is_whole_line_match(config Config, haystack []u8, mat matcher.Match) bool {
@@ -644,9 +745,16 @@ fn byte_literal_from_pattern(pattern string, config Config) ?[]u8 {
 		return pattern.bytes()
 	}
 	if !pattern.starts_with('(?-u)') {
+		if pattern.starts_with('(?-u:') && pattern.ends_with(')') {
+			return byte_literal_from_non_unicode_pattern(pattern[5..pattern.len - 1])
+		}
 		return none
 	}
-	mut i := 5
+	return byte_literal_from_non_unicode_pattern(pattern[5..])
+}
+
+fn byte_literal_from_non_unicode_pattern(pattern string) ?[]u8 {
+	mut i := 0
 	if i >= pattern.len {
 		return none
 	}

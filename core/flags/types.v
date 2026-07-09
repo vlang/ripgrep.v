@@ -3,6 +3,7 @@ module flags
 import encoding.utf8
 import os
 import printer
+import searcher
 import strconv
 
 pub enum Category {
@@ -368,44 +369,11 @@ pub:
 }
 
 pub fn new_encoding(label string) !Encoding {
-	normalized := label.to_lower()
-	if canonical := canonical_encoding_label(normalized) {
-		return Encoding{
-			label: canonical
-		}
+	encoding := searcher.Encoding.new(label) or {
+		return error('unrecognized encoding')
 	}
-	return error('unrecognized encoding')
-}
-
-fn canonical_encoding_label(label string) ?string {
-	match label {
-		'unicode-1-1-utf-8', 'unicode11utf8', 'unicode20utf8', 'utf-8', 'utf8', 'x-unicode20utf8' {
-			return 'utf-8'
-		}
-		'utf-16', 'utf-16le', 'utf16le' {
-			return 'utf-16le'
-		}
-		'utf-16be', 'utf16be' {
-			return 'utf-16be'
-		}
-		'utf-32', 'utf-32le', 'utf32le' {
-			return 'utf-32le'
-		}
-		'utf-32be', 'utf32be' {
-			return 'utf-32be'
-		}
-		'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100', 'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252', 'x-cp1252' {
-			return 'windows-1252'
-		}
-		'csshiftjis', 'ms932', 'ms_kanji', 'shift-jis', 'shift_jis', 'sjis', 'windows-31j', 'x-sjis' {
-			return 'Shift_JIS'
-		}
-		'cseucpkdfmtjapanese', 'euc-jp', 'eucjp', 'x-euc-jp' {
-			return 'EUC-JP'
-		}
-		else {
-			return none
-		}
+	return Encoding{
+		label: encoding.label.clone()
 	}
 }
 

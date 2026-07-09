@@ -2,6 +2,20 @@ module flags
 
 import os
 
+$if pcre2 ? {
+	$if $pkgconfig('libpcre2-8') {
+		#pkgconfig --cflags --libs libpcre2-8
+	} $else $if macos {
+		#flag -I/opt/homebrew/include
+		#flag -L/opt/homebrew/lib
+		#flag -lpcre2-8
+	} $else {
+		#flag -lpcre2-8
+	}
+	#include "@VMODROOT/pcre2/pcre2_shim.h"
+	fn C.rg_pcre2_version(buf &char, len usize) &char
+}
+
 /*
 Provides routines for generating version strings.
 
@@ -56,9 +70,23 @@ pub fn generate_version_long() string {
 /// ripgrep.
 pub fn generate_version_pcre2() (string, bool) {
 	$if pcre2 ? {
-		return 'PCRE2 is available\n', true
+		return 'PCRE2 ${pcre2_version()} is available\n', true
 	} $else {
 		return 'PCRE2 is not available in this build of ripgrep.\n', false
+	}
+}
+
+fn pcre2_version() string {
+	$if pcre2 ? {
+		mut buf := []u8{len: 128}
+		C.rg_pcre2_version(&char(buf.data), usize(buf.len))
+		mut end := 0
+		for end < buf.len && buf[end] != 0 {
+			end++
+		}
+		return buf[..end].bytestr()
+	} $else {
+		return 'unavailable'
 	}
 }
 

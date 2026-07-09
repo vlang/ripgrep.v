@@ -31,6 +31,36 @@ fn (mut rdr ByteSliceReaderForSearch) read(mut buf []u8) !int {
 	return nread
 }
 
+struct LimitedChunkReaderForSearch {
+mut:
+	bytes      []u8
+	pos        int
+	chunk      int
+	fail_after int
+}
+
+fn LimitedChunkReaderForSearch.new(bytes []u8, chunk int, fail_after int) LimitedChunkReaderForSearch {
+	return LimitedChunkReaderForSearch{
+		bytes:      bytes.clone()
+		chunk:      chunk
+		fail_after: fail_after
+	}
+}
+
+fn (mut rdr LimitedChunkReaderForSearch) read(mut buf []u8) !int {
+	if rdr.pos >= rdr.bytes.len {
+		return io.Eof{}
+	}
+	if rdr.pos >= rdr.fail_after {
+		return error('reader consumed too much input')
+	}
+	remaining_before_fail := rdr.fail_after - rdr.pos
+	max_chunk := if rdr.chunk < remaining_before_fail { rdr.chunk } else { remaining_before_fail }
+	nread := copy(mut buf, rdr.bytes[rdr.pos..rdr.pos + max_chunk])
+	rdr.pos += nread
+	return nread
+}
+
 struct LiteralMatcher {
 	needle    []u8
 	line_term ?matcher.LineTerminator
@@ -333,6 +363,17 @@ fn test_transcode_explicit_windows1252_encoding() {
 	assert got == [u8(0xe2), 0x82, 0xac, 0xef, 0xbf, 0xbd, `\n`]
 }
 
+fn test_transcode_explicit_x_user_defined_encoding() {
+	haystack := [u8(`A`), 0x80, `B`]
+	mut builder := SearcherBuilder.new()
+	encoding := Encoding.new('x-user-defined')!
+	builder.encoding(encoding)
+	searcher_ := builder.build()
+
+	got := transcode_slice_with_config(searcher_.config, haystack)!
+	assert got == [u8(`A`), 0xef, 0x9e, 0x80, `B`]
+}
+
 fn test_search_reader_reports_line_matches() {
 	text := 'alpha\nSherlock\nbeta Sherlock\nomega\n'
 	mut source := ByteSliceReaderForSearch.new(text)
@@ -394,6 +435,67 @@ fn test_search_reader_explicit_utf16le_encoding() {
 	]
 	assert sink.finished
 	assert sink.byte_count == 8
+}
+
+fn test_search_reader_explicit_utf16le_streams_until_quit() {
+	mut haystack := [u8(`f`), 0, `o`, 0, `o`, 0, `\n`, 0]
+	for _ in 0 .. 256 {
+		haystack << [u8(`x`), 0, `\n`, 0]
+	}
+	mut source := LimitedChunkReaderForSearch.new(haystack, 5, 16)
+	mut builder := SearcherBuilder.new()
+	encoding := Encoding.new('utf-16le')!
+	builder.encoding(encoding)
+	builder.max_matches(u64(1))
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_reader(LiteralMatcher.new('foo'), mut source, &sink)!
+
+	assert sink.matches == [
+		'1:0:foo\n',
+	]
+	assert source.pos < 16
+}
+
+fn test_search_reader_bom_sniffed_utf16le_streams_until_quit() {
+	mut haystack := [u8(0xff), 0xfe, `f`, 0, `o`, 0, `o`, 0, `\n`, 0]
+	for _ in 0 .. 256 {
+		haystack << [u8(`x`), 0, `\n`, 0]
+	}
+	mut source := LimitedChunkReaderForSearch.new(haystack, 5, 20)
+	mut builder := SearcherBuilder.new()
+	builder.max_matches(u64(1))
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_reader(LiteralMatcher.new('foo'), mut source, &sink)!
+
+	assert sink.matches == [
+		'1:0:foo\n',
+	]
+	assert source.pos < 20
+}
+
+fn test_search_reader_iconv_encoding_streams_until_quit() {
+	$if windows {
+		return
+	}
+	mut haystack := 'foo\n'.bytes()
+	for _ in 0 .. 256 {
+		haystack << 'x\n'.bytes()
+	}
+	mut source := LimitedChunkReaderForSearch.new(haystack, 5, 16)
+	mut builder := SearcherBuilder.new()
+	encoding := Encoding.new('cp1251')!
+	builder.encoding(encoding)
+	builder.max_matches(u64(1))
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_reader(LiteralMatcher.new('foo'), mut source, &sink)!
+
+	assert sink.matches == [
+		'1:0:foo\n',
+	]
+	assert source.pos < 16
 }
 
 fn test_search_path_reports_line_matches() {
