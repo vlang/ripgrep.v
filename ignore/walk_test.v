@@ -581,6 +581,28 @@ fn test_parallel_stream_collects_single_root_children() {
 	assert got == mkpaths(['a', 'a/b', 'a/b/foo', 'x', 'x/y', 'x/y/bar'])
 }
 
+fn test_parallel_single_root_child_gitignore() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mkdirp(os.join_path(td.path(), '.git'))
+	mkdirp(os.join_path(td.path(), 'cmd/v2'))
+	mkdirp(os.join_path(td.path(), 'vlib/db/sqlite'))
+	wfile(os.join_path(td.path(), 'cmd/v2/.gitignore'), '*.c')
+	wfile(os.join_path(td.path(), 'cmd/v2/keep.v'), '')
+	wfile(os.join_path(td.path(), 'cmd/v2/drop.c'), '')
+	wfile(os.join_path(td.path(), 'vlib/db/sqlite/README.md'), '')
+
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	expected := ['cmd', 'cmd/v2', 'cmd/v2/keep.v', 'vlib', 'vlib/db', 'vlib/db/sqlite',
+		'vlib/db/sqlite/README.md']
+	assert walk_collect(td.path(), builder.clone()) == mkpaths(expected), 'single threaded'
+	assert walk_collect_parallel(td.path(), builder.clone()) == mkpaths(expected), 'parallel'
+	assert walk_collect_stream(td.path(), builder) == mkpaths(expected), 'stream'
+}
+
 fn test_parallel_single_root_skip_prevents_descent() {
 	td := tmpdir()
 	defer {

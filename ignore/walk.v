@@ -1346,7 +1346,11 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &std
 		return
 	}
 	if wp.paths.len == 1 && !wp.has_sort_by_name && !wp.has_sort_by_path {
-		wp.stream_single_root_parallel(results, stop, wp.paths[0], worker_count)
+		// V-specific: the first-level single-root stream path can share matcher
+		// state across worker threads. Keep the producer traversal serial here
+		// so default CLI search/listing observes the same ignore decisions as
+		// `Walk` while search workers still provide parallelism above this layer.
+		wp.stream_serial(results, stop)
 		return
 	}
 	jobs := chan WalkParallelJob{cap: wp.paths.len + worker_count}
