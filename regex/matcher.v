@@ -498,7 +498,18 @@ pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.Fa
 		}
 	}
 	if literal := re.unicode_case_literal {
-		return find_unicode_case_literal_at(haystack, literal, at)!, []string{}
+		mut start := at
+		for {
+			found := find_unicode_case_literal_at(haystack, literal, start)!
+			mat := found.get() or { return matcher.FallibleMatch.absent(), []string{} }
+			if re.accept_match(haystack, mat) {
+				return matcher.FallibleMatch.some(mat), []string{}
+			}
+			start = mat.start() + 1
+			if start > haystack.len {
+				return matcher.FallibleMatch.absent(), []string{}
+			}
+		}
 	}
 	if simple := re.simple_ascii {
 		mut start := at
@@ -565,21 +576,21 @@ pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLin
 	if literal := re.byte_literal {
 		found := find_byte_literal_at(haystack, literal, 0)!
 		if found.has_value {
-			return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(found.value.end()))
+			return re.line_match_kind(found.value.end())
 		}
 		return matcher.FallibleLineMatchKind.absent()
 	}
 	if literal := re.unicode_case_literal {
 		found := find_unicode_case_literal_at(haystack, literal, 0)!
 		if found.has_value {
-			return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(found.value.end()))
+			return re.line_match_kind(found.value.end())
 		}
 		return matcher.FallibleLineMatchKind.absent()
 	}
 	if simple := re.simple_ascii {
 		found := find_simple_ascii_at(haystack, simple, 0)!
 		if found.has_value {
-			return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(found.value.end()))
+			return re.line_match_kind(found.value.end())
 		}
 		return matcher.FallibleLineMatchKind.absent()
 	}
@@ -596,6 +607,19 @@ pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLin
 	}
 	end := maybe_mat.value.end()
 	return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(end))
+}
+
+fn (re RegexMatcher) line_match_kind(pos usize) matcher.FallibleLineMatchKind {
+	kind := if re.needs_accept_match_confirmation() {
+		matcher.LineMatchKind.candidate(pos)
+	} else {
+		matcher.LineMatchKind.confirmed(pos)
+	}
+	return matcher.FallibleLineMatchKind.some(kind)
+}
+
+fn (re RegexMatcher) needs_accept_match_confirmation() bool {
+	return re.reject_invalid_empty || re.config.whole_line || re.config.word
 }
 
 fn (re RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {

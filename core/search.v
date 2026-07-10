@@ -77,6 +77,49 @@ fn (mut rdr StdinReader) read(mut buf []u8) !int {
 	return rdr.file.read(mut buf[..stdin_read_capacity])!
 }
 
+// V-specific: owning process readers must not be copied into an `io.Reader`
+// interface value. These adapters let the interface carry a pointer while the
+// original reader keeps its process/file ownership.
+struct CommandReaderRef[^r] {
+mut:
+	rdr &^r cli.CommandReader
+}
+
+fn CommandReaderRef.new[^r](rdr &^r cli.CommandReader) CommandReaderRef[^r] {
+	return CommandReaderRef[^r]{
+		rdr: rdr
+	}
+}
+
+fn (mut rdr CommandReaderRef[^r]) read[^r](mut buf []u8) !int {
+	return rdr.rdr.read_for_search(mut buf) or {
+		if cli.is_broken_pipe_error(err) || err.msg() == '' {
+			return io.Eof{}
+		}
+		return error(err.msg())
+	}
+}
+
+struct DecompressionReaderRef[^r] {
+mut:
+	rdr &^r cli.DecompressionReader
+}
+
+fn DecompressionReaderRef.new[^r](rdr &^r cli.DecompressionReader) DecompressionReaderRef[^r] {
+	return DecompressionReaderRef[^r]{
+		rdr: rdr
+	}
+}
+
+fn (mut rdr DecompressionReaderRef[^r]) read[^r](mut buf []u8) !int {
+	return rdr.rdr.read_for_search(mut buf) or {
+		if cli.is_broken_pipe_error(err) || err.msg() == '' {
+			return io.Eof{}
+		}
+		return error(err.msg())
+	}
+}
+
 /// A builder for configuring and constructing a search worker.
 pub struct SearchWorkerBuilder implements IClone {
 mut:
@@ -430,7 +473,10 @@ fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
 	mut rdr := worker.command_builder.build(cmd) or {
 		return error("preprocessor command could not start: '${bin} ${path}': ${err.msg()}")
 	}
-	result := worker.search_reader(path.clone(), mut rdr) or {
+	mut rdr_ref := CommandReaderRef.new(&rdr)
+	result := worker.search_reader(path.clone(), mut rdr_ref) or {
+		// The search error takes precedence: close the reader to reap the
+		// child process, but discard any close error.
 		search_err := err
 		rdr.close() or {}
 		if cli.is_broken_pipe_error(search_err) {
@@ -440,7 +486,7 @@ fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
 	}
 	rdr.close() or {
 		if cli.is_broken_pipe_error(err) {
-			return err
+			return result
 		}
 		return error("preprocessor command failed: '${bin} ${path}': ${err.msg()}")
 	}
@@ -453,12 +499,20 @@ fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
 fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
 	decomp_builder := worker.decomp_builder or { return worker.search_path(path) }
 	mut rdr := decomp_builder.build(path.clone())!
-	result := worker.search_reader(path.clone(), mut rdr) or {
+	mut rdr_ref := DecompressionReaderRef.new(&rdr)
+	result := worker.search_reader(path.clone(), mut rdr_ref) or {
+		// The search error takes precedence: close the reader to reap the
+		// child process, but discard any close error.
 		search_err := err
 		rdr.close() or {}
 		return search_err
 	}
-	rdr.close()!
+	rdr.close() or {
+		if cli.is_broken_pipe_error(err) {
+			return result
+		}
+		return error(err.msg())
+	}
 	return result
 }
 

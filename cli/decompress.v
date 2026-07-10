@@ -178,8 +178,10 @@ pub fn (builder DecompressionReaderBuilder) build(path string) !DecompressionRea
 		return DecompressionReader.new_passthru(path)
 	}
 	return DecompressionReader{
-		kind:        .command
-		cmd_reader:  cmd_reader
+		inner: &DecompressionReaderInner{
+			kind:       .command
+			cmd_reader: cmd_reader
+		}
 	}
 }
 
@@ -219,7 +221,15 @@ enum DecompressionReaderKind {
 /// meant to be an alternative to using decompression libraries in favor of the
 /// simplicity and portability of using external commands such as `gzip` and
 /// `xz`.
-pub struct DecompressionReader implements IClone {
+pub struct DecompressionReader {
+	// V-specific: dynamic `io.Reader` calls copy concrete reader values at the
+	// interface boundary. Keep the owned process/file state behind a shared
+	// inner pointer so copies all mutate and close the same reader.
+mut:
+	inner &DecompressionReaderInner = unsafe { nil }
+}
+
+struct DecompressionReaderInner {
 mut:
 	kind       DecompressionReaderKind
 	cmd_reader CommandReader
@@ -239,9 +249,11 @@ pub fn DecompressionReader.new(path string) !DecompressionReader {
 fn DecompressionReader.new_passthru(path string) !DecompressionReader {
 	file := os.open(path) or { return CommandError.io(err) }
 	return DecompressionReader{
-		kind:     .passthru
-		file:     file
-		has_file: true
+		inner: &DecompressionReaderInner{
+			kind:     .passthru
+			file:     file
+			has_file: true
+		}
 	}
 }
 
@@ -249,29 +261,57 @@ fn DecompressionReader.new_passthru(path string) !DecompressionReader {
 /// process, if one was used. If the child process exits with a nonzero exit
 /// code, the returned Err value will include its stderr.
 pub fn (mut reader DecompressionReader) close() ! {
-	if reader.closed {
+	if isnil(reader.inner) {
 		return
 	}
-	reader.closed = true
-	if reader.kind == .command {
-		reader.cmd_reader.close()!
+	mut inner := reader.inner
+	if inner.closed {
 		return
 	}
-	if reader.has_file {
-		reader.file.close()
-		reader.has_file = false
+	inner.closed = true
+	if inner.kind == .command {
+		mut cmd_reader := &inner.cmd_reader
+		cmd_reader.close() or { return error(err.msg()) }
+		return
+	}
+	if inner.has_file {
+		inner.file.close()
+		inner.has_file = false
 	}
 }
 
 pub fn (mut reader DecompressionReader) read(mut buf []u8) !int {
-	if reader.kind == .command {
-		return reader.cmd_reader.read(mut buf)
+	return reader.read_impl(mut buf, false)
+}
+
+/// Read decompressed bytes for a searcher that will explicitly call `close`
+/// after it has produced a search result.
+pub fn (mut reader DecompressionReader) read_for_search(mut buf []u8) !int {
+	return reader.read_impl(mut buf, true)
+}
+
+fn (mut reader DecompressionReader) read_impl(mut buf []u8, for_search bool) !int {
+	if isnil(reader.inner) {
+		return io.Eof{}
 	}
-	if !reader.has_file {
+	mut inner := reader.inner
+	if inner.kind == .command {
+		mut cmd_reader := &inner.cmd_reader
+		if for_search {
+			return cmd_reader.read_for_search(mut buf) or {
+				if is_broken_pipe_error(err) || err.msg() == '' {
+					return io.Eof{}
+				}
+				return error(err.msg())
+			}
+		}
+		return cmd_reader.read(mut buf) or { return error(err.msg()) }
+	}
+	if !inner.has_file {
 		reader.close()!
 		return io.Eof{}
 	}
-	nread := reader.file.read(mut buf)!
+	nread := inner.file.read(mut buf)!
 	if nread == 0 {
 		reader.close()!
 		return io.Eof{}

@@ -42,11 +42,9 @@ static inline long long rg_v_creation_time_seconds(const char *path, int *ok) {
 #else
 #include <sys/stat.h>
 
-int stat(char *path, void *buf);
-
 static inline long long rg_v_birthtime_seconds(const char *path, int *ok) {
 	struct stat st;
-	if (stat((char *)path, (void *)&st) != 0) {
+	if (stat(path, &st) != 0) {
 		*ok = 0;
 		return 0;
 	}

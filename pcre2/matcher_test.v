@@ -3,11 +3,7 @@ module pcre2
 import matcher
 
 fn has_pcre2_feature() bool {
-	$if pcre2 ? {
-		return true
-	} $else {
-		return false
-	}
+	return pcre2_enabled()
 }
 
 // Test that enabling word matches does the right thing and demonstrate
@@ -25,6 +21,46 @@ fn test_word() {
 	boundary_builder.word(false)
 	boundary_matcher := boundary_builder.build(r'\b-2\b') or { panic(err) }
 	assert !matcher.is_match(boundary_matcher, 'abc -2 foo'.bytes())!
+}
+
+fn test_word_rewrite_backtracks_at_same_start() {
+	if !has_pcre2_feature() {
+		return
+	}
+	mut builder := RegexMatcherBuilder.new()
+	builder.word(true)
+	matcher_ := builder.build_many(['foo', 'foobar']) or { panic(err) }
+	mat := matcher_.find_at('foobar'.bytes(), 0)!.get() or { panic('missing match') }
+	assert mat.start() == usize(0)
+	assert mat.end() == usize(6)
+}
+
+fn test_whole_line_rewrite_backtracks_at_same_start() {
+	if !has_pcre2_feature() {
+		return
+	}
+	mut builder := RegexMatcherBuilder.new()
+	builder.whole_line(true)
+	matcher_ := builder.build_many(['foo', 'foo bar']) or { panic(err) }
+	mat := matcher_.find_at('foo bar\n'.bytes(), 0)!.get() or { panic('missing match') }
+	assert mat.start() == usize(0)
+	assert mat.end() == usize(7)
+}
+
+fn test_clone_retain_free_keeps_other_clone_alive() {
+	if !has_pcre2_feature() {
+		return
+	}
+	mut matcher_ := RegexMatcherBuilder.new().build(r'abc') or { panic(err) }
+	mut cloned := matcher_.clone()
+	assert matcher.is_match(cloned, 'abc'.bytes())!
+	unsafe {
+		cloned.free()
+	}
+	assert matcher.is_match(matcher_, 'abc'.bytes())!
+	unsafe {
+		matcher_.free()
+	}
 }
 
 // Test that enabling CRLF permits `$` to match at the end of a line.

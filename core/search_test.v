@@ -156,3 +156,32 @@ fn test_search_worker_preprocessor() {
 		panic('preprocessor search failed: has_match=${result.has_match()} output=${wtr.bytes.bytestr()}')
 	}
 }
+
+fn test_search_worker_decompress_reports_command_stderr() {
+	$if windows {
+		return
+	}
+	os.find_abs_path_of_executable('gzip') or { return }
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_search_worker_bad_${os.getpid()}.gz')
+	os.write_file(path, 'not gzip\n') or { panic(err) }
+	defer {
+		os.rm(path) or {}
+	}
+
+	mut walk := ignore.WalkBuilder.new(path).build()
+	walk_result := walk.next() or { panic('expected walk result') }
+	hay := HaystackBuilder.new().build_from_result(walk_result) or { panic('expected haystack') }
+	matcher_ := regex.RegexMatcher.new('needle') or { panic(err) }
+	standard := printer.StandardBuilder.new().build(BufferWriter{})
+	printer_ := Printer.standard(standard)
+	mut builder := SearchWorkerBuilder.new()
+	builder.search_zip(true)
+	mut worker := builder.build(PatternMatcher.rust_regex(matcher_), searcher.Searcher.new(), printer_)
+	worker.search(&hay) or {
+		if !err.msg().contains('not in gzip format') {
+			panic('unexpected decompression error: ${err.msg()}')
+		}
+		return
+	}
+	panic('expected decompression stderr error')
+}

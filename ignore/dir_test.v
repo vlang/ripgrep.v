@@ -341,6 +341,26 @@ fn test_absolute_parent_anchored() {
 	assert ig2.matched('src/foo', false).is_ignore()
 }
 
+fn test_absolute_parent_anchored_descendant_keeps_root_base() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mkdirp(os.join_path(td.path(), 'a/src/f/b'))
+	wfile(os.join_path(td.path(), '.ignore'), '/a/*/b')
+
+	ig0 := IgnoreBuilder.new().build()
+	ig1, has_err1, _ := ig0.add_parents(os.join_path(td.path(), 'a/src'))
+	assert !has_err1
+	ig2, has_err2, _ := ig1.add_child('a/src')
+	assert !has_err2
+	ig3, has_err3, _ := ig2.add_child('a/src/f')
+	assert !has_err3
+
+	assert ig2.matched('a/src/f', true).is_none()
+	assert ig3.matched('a/src/f/b', true).is_none()
+}
+
 fn test_parents_iterator_yields_owned_matchers() {
 	td := tmpdir()
 	defer {

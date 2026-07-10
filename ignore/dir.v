@@ -468,7 +468,7 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 	if ig.opts.parents {
 		if absolute_base := ig.absolute_base() {
 			absolute_path := parent_absolute_match_path(*absolute_base,
-				ig.last_relative_dir_before_absolute_path(), path)
+				ig.first_relative_dir_after_absolute_path(), path)
 			for i := ig.nodes.len - 1; i >= 0; i-- {
 				node := &ig.nodes[i]
 				if !node.is_absolute_parent {
@@ -946,15 +946,18 @@ fn (ig &Ignore) any_git_parent() bool {
 	return ig.has_git_parent
 }
 
-fn (ig &Ignore) last_relative_dir_before_absolute_path() string {
-	if ig.nodes.len == 0 {
-		return ''
+fn (ig &Ignore) first_relative_dir_after_absolute_path() string {
+	mut saw_absolute_parent := false
+	for node in ig.nodes {
+		if node.is_absolute_parent {
+			saw_absolute_parent = true
+			continue
+		}
+		if saw_absolute_parent {
+			return node.dir
+		}
 	}
-	node := &ig.nodes[ig.nodes.len - 1]
-	if node.is_absolute_parent {
-		return ''
-	}
-	return node.dir
+	return ''
 }
 
 fn none_string() ?string {

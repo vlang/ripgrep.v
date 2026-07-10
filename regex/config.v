@@ -268,12 +268,13 @@ pub fn (chir ConfiguredHIR) into_word() ConfiguredHIR {
 
 fn (chir ConfiguredHIR) backend_pattern() string {
 	mut flags := ''
-	pattern := normalize_backend_pattern(chir.hir.to_regex(), chir.config)
+	has_haystack_anchor := chir.hir.contains_haystack_anchor()
+	pattern := normalize_backend_pattern(chir.hir.to_regex(), chir.config, has_haystack_anchor)
 	analysis := AstAnalysis.from_pattern(pattern) or { AstAnalysis.new() }
 	if chir.config.is_case_insensitive(analysis) {
 		flags += 'i'
 	}
-	if chir.config.multi_line || chir.config.crlf {
+	if (chir.config.multi_line || chir.config.crlf) && !has_haystack_anchor {
 		flags += 'm'
 	}
 	if chir.config.dot_matches_new_line {
@@ -285,7 +286,7 @@ fn (chir ConfiguredHIR) backend_pattern() string {
 	return '(?${flags})${pattern}'
 }
 
-fn normalize_backend_pattern(pattern string, config Config) string {
+fn normalize_backend_pattern(pattern string, config Config, explicit_line_anchors bool) string {
 	mut out := []u8{cap: pattern.len}
 	mut i := 0
 	mut in_class := false
@@ -341,12 +342,18 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 				escaped = false
 				continue
 			}
+			if replacement := normalize_property_class_at(pattern, i, config) {
+				out << replacement.text.bytes()
+				i = replacement.next
+				escaped = false
+				continue
+			}
 		}
 		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?x:' {
 			if end := matching_group_end(pattern, i) {
 				inner := strip_ignored_whitespace(pattern[i + 4..int(end)])
 				out << '(?:'.bytes()
-				out << normalize_backend_pattern(inner, config).bytes()
+				out << normalize_backend_pattern(inner, config, explicit_line_anchors).bytes()
 				out << `)`
 				i = int(end) + 1
 				escaped = false
@@ -356,7 +363,8 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-x:' {
 			if end := matching_group_end(pattern, i) {
 				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 5..int(end)], config).bytes()
+				out << normalize_backend_pattern(pattern[i + 5..int(end)], config,
+					explicit_line_anchors).bytes()
 				out << `)`
 				i = int(end) + 1
 				escaped = false
@@ -366,7 +374,8 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-i:' {
 			if end := matching_group_end(pattern, i) {
 				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 5..int(end)], config).bytes()
+				out << normalize_backend_pattern(pattern[i + 5..int(end)], config,
+					explicit_line_anchors).bytes()
 				out << `)`
 				i = int(end) + 1
 				escaped = false
@@ -378,7 +387,8 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 				mut inner_config := config
 				inner_config.crlf = true
 				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 4..int(end)], inner_config).bytes()
+				out << normalize_backend_pattern(pattern[i + 4..int(end)], inner_config,
+					explicit_line_anchors).bytes()
 				out << `)`
 				i = int(end) + 1
 				escaped = false
@@ -386,6 +396,24 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 			}
 		}
 		if inline_ignore_whitespace && !escaped && !in_class && is_extended_whitespace(ch) {
+			i++
+			escaped = false
+			continue
+		}
+		if explicit_line_anchors && (config.multi_line || config.crlf) && !escaped && !in_class
+			&& ch == `^` {
+			out << r'(?m:^)'.bytes()
+			i++
+			escaped = false
+			continue
+		}
+		if explicit_line_anchors && (config.multi_line || config.crlf) && !escaped && !in_class
+			&& ch == `$` {
+			if config.crlf || inline_crlf {
+				out << r'\x0D?(?m:$)'.bytes()
+			} else {
+				out << r'(?m:$)'.bytes()
+			}
 			i++
 			escaped = false
 			continue
@@ -436,13 +464,26 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 						continue
 					}
 					`d` {
-						out << '[0-9]'.bytes()
+						out << digit_backend_class(config).bytes()
 						i += 2
 						escaped = false
 						continue
 					}
 					`D` {
-						out << negated_backend_class('0-9', config).bytes()
+						out << negated_backend_class(digit_backend_class_body(config), config).bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`s` {
+						out << whitespace_backend_class(config).bytes()
+						i += 2
+						escaped = false
+						continue
+					}
+					`S` {
+						out << negated_backend_class(whitespace_backend_class_body(config),
+							config).bytes()
 						i += 2
 						escaped = false
 						continue
@@ -460,26 +501,30 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 						continue
 					}
 					`p`, `P` {
-						if end := rust_property_escape_end(pattern, i) {
-							property := pattern[i + 3..int(end) - 1]
+						if property_escape := rust_property_escape_at(pattern, i) {
 							if next == `p` {
-								if replacement := rust_property_replacement(property) {
+								if replacement := rust_property_replacement(property_escape.property,
+									config) {
 									out << replacement.bytes()
-									i = int(end)
+									i = property_escape.next
 									escaped = false
 									continue
 								}
-							} else if body := rust_property_class_body(property) {
-								out << negated_backend_class(body, config).bytes()
-								i = int(end)
-								escaped = false
-								continue
+							} else {
+								if normalize_property_name(property_escape.property) == 'any' {
+									out << r'(?:a^)'.bytes()
+									i = property_escape.next
+									escaped = false
+									continue
+								}
+								if body := rust_property_class_body(property_escape.property,
+									config) {
+									out << negated_backend_class(body, config).bytes()
+									i = property_escape.next
+									escaped = false
+									continue
+								}
 							}
-						} else if i + 3 <= pattern.len && pattern[i..i + 3] == r'\pL' {
-							out << letter_backend_class().bytes()
-							i += 3
-							escaped = false
-							continue
 						}
 					}
 					else {}
@@ -496,21 +541,6 @@ fn normalize_backend_pattern(pattern string, config Config) string {
 			if end := possessive_braced_quantifier_end(pattern, i) {
 				out << pattern[i..int(end) + 1].bytes()
 				i = int(end) + 2
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && i + 7 <= pattern.len && ch == `\\` && pattern[i + 2] == `{`
-			&& pattern[i + 3..i + 6] == 'Any' && pattern[i + 6] == `}` {
-			if pattern[i + 1] == `p` {
-				out << '(?:.|\n|\r)'.bytes()
-				i += 7
-				escaped = false
-				continue
-			}
-			if pattern[i + 1] == `P` {
-				out << r'(?!)'.bytes()
-				i += 7
 				escaped = false
 				continue
 			}
@@ -585,24 +615,90 @@ fn rust_property_escape_end(pattern string, i int) ?usize {
 	return usize(end + 1)
 }
 
-fn rust_property_replacement(property string) ?string {
-	if property.to_lower() == 'ascii' {
+struct RustPropertyEscape {
+	property string
+	next     int
+}
+
+fn rust_property_escape_at(pattern string, i int) ?RustPropertyEscape {
+	if i + 2 >= pattern.len || pattern[i] != `\\` || (pattern[i + 1] != `p`
+		&& pattern[i + 1] != `P`) {
+		return none
+	}
+	if end := rust_property_escape_end(pattern, i) {
+		return RustPropertyEscape{
+			property: pattern[i + 3..int(end) - 1].to_owned()
+			next:     int(end)
+		}
+	}
+	next := pattern[i + 2]
+	if is_ascii_property_letter(next) {
+		return RustPropertyEscape{
+			property: next.ascii_str().to_owned()
+			next:     i + 3
+		}
+	}
+	return none
+}
+
+fn is_ascii_property_letter(byte u8) bool {
+	return (byte >= `A` && byte <= `Z`) || (byte >= `a` && byte <= `z`)
+}
+
+fn rust_property_replacement(property string, config Config) ?string {
+	normalized := normalize_property_name(property)
+	if normalized == 'any' {
+		return '(?:.|\n|\r)'
+	}
+	if normalized == 'ascii' {
 		return ascii_backend_class()
 	}
-	if body := rust_property_class_body(property) {
+	if body := rust_property_class_body(property, config) {
 		return '[${body}]'
 	}
 	return none
 }
 
-fn rust_property_class_body(property string) ?string {
-	match property.to_lower() {
+fn rust_property_class_body(property string, config Config) ?string {
+	normalized := normalize_property_name(property)
+	match normalized {
 		'ascii' { return ascii_backend_class_body() }
-		'l', 'letter' { return letter_backend_class_body() }
-		'gc=lu', 'general_category=lu', 'uppercaseletter' { return 'A-ZΑ-Ϋ' }
-		'greek', 'script=greek', 'sc=greek' { return 'Α-Ͽ' }
+		'decimalnumber', 'gc=nd', 'generalcategory=nd', 'nd' { return decimal_digit_backend_class_body(config) }
+		'l', 'letter', 'alphabetic', 'alpha' { return letter_backend_class_body() }
+		'gc=lu', 'generalcategory=lu', 'lu', 'uppercaseletter' { return uppercase_letter_backend_class_body() }
+		'arabic', 'sc=arabic', 'script=arabic' { return ranges_backend_class_body(arabic_ranges()) }
+		'cyrillic', 'sc=cyrillic', 'script=cyrillic' { return ranges_backend_class_body(cyrillic_ranges()) }
+		'greek', 'sc=greek', 'script=greek' { return ranges_backend_class_body(greek_ranges()) }
+		'han', 'sc=han', 'script=han' { return ranges_backend_class_body(han_ranges()) }
+		'hebrew', 'sc=hebrew', 'script=hebrew' { return ranges_backend_class_body(hebrew_ranges()) }
+		'hiragana', 'sc=hiragana', 'script=hiragana' { return ranges_backend_class_body(hiragana_ranges()) }
+		'katakana', 'sc=katakana', 'script=katakana' { return ranges_backend_class_body(katakana_ranges()) }
+		'latin', 'sc=latin', 'script=latin' { return ranges_backend_class_body(latin_ranges()) }
 		else { return none }
 	}
+}
+
+fn normalize_property_name(property string) string {
+	mut out := []u8{cap: property.len}
+	for byte in property.to_lower().bytes() {
+		if byte == `_` || byte == `-` || byte == ` ` {
+			continue
+		}
+		if byte == `:` {
+			out << `=`
+			continue
+		}
+		out << byte
+	}
+	return out.bytestr()
+}
+
+fn rust_property_is_supported(property string, config Config) bool {
+	normalized := normalize_property_name(property)
+	if normalized == 'any' {
+		return true
+	}
+	return rust_property_class_body(property, config) != none
 }
 
 fn word_backend_class(config Config) string {
@@ -611,7 +707,7 @@ fn word_backend_class(config Config) string {
 
 fn word_backend_class_body(config Config) string {
 	if config.unicode {
-		return 'A-Za-z0-9_À-ÖØ-öø-ÿͰ-Ͽ'
+		return letter_backend_class_body() + decimal_digit_backend_class_body(config) + '_'
 	}
 	return 'A-Za-z0-9_'
 }
@@ -621,7 +717,45 @@ fn letter_backend_class() string {
 }
 
 fn letter_backend_class_body() string {
-	return 'A-Za-zÀ-ÖØ-öø-ÿͰ-Ͽ'
+	return ranges_backend_class_body(letter_ranges())
+}
+
+fn uppercase_letter_backend_class_body() string {
+	return ranges_backend_class_body(uppercase_letter_ranges())
+}
+
+fn digit_backend_class(config Config) string {
+	return '[${digit_backend_class_body(config)}]'
+}
+
+fn digit_backend_class_body(config Config) string {
+	if config.unicode {
+		return decimal_digit_backend_class_body(config)
+	}
+	return '0-9'
+}
+
+fn decimal_digit_backend_class_body(config Config) string {
+	_ = config
+	return ranges_backend_class_body(decimal_digit_ranges())
+}
+
+fn whitespace_backend_class(config Config) string {
+	return '[${whitespace_backend_class_body(config)}]'
+}
+
+fn whitespace_backend_class_body(config Config) string {
+	if !config.unicode {
+		return ascii_whitespace_backend_class_body()
+	}
+	return ranges_backend_class_body(whitespace_ranges())
+}
+
+fn ascii_whitespace_backend_class_body() string {
+	return ranges_backend_class_body([
+		UnicodeRange{`\t`, `\r`},
+		UnicodeRange{` `, ` `},
+	])
 }
 
 fn ascii_backend_class() string {
@@ -629,11 +763,337 @@ fn ascii_backend_class() string {
 }
 
 fn ascii_backend_class_body() string {
-	mut out := []u8{cap: 8}
-	out << `\t`
-	out << `\r`
-	out << ' -~'.bytes()
+	return ranges_backend_class_body([
+		UnicodeRange{rune(0), rune(0x7f)},
+	])
+}
+
+struct UnicodeRange {
+	start rune
+	end   rune
+}
+
+fn ranges_backend_class_body(ranges []UnicodeRange) string {
+	mut out := []u8{cap: ranges.len * 8}
+	for range_ in ranges {
+		append_backend_class_rune(mut out, range_.start)
+		if range_.end != range_.start {
+			out << `-`
+			append_backend_class_rune(mut out, range_.end)
+		}
+	}
 	return out.bytestr()
+}
+
+fn append_backend_class_rune(mut out []u8, rn rune) {
+	out << rn.str().bytes()
+}
+
+fn latin_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{`A`, `Z`},
+		UnicodeRange{`a`, `z`},
+		UnicodeRange{rune(0x00aa), rune(0x00aa)},
+		UnicodeRange{rune(0x00b5), rune(0x00b5)},
+		UnicodeRange{rune(0x00ba), rune(0x00ba)},
+		UnicodeRange{rune(0x00c0), rune(0x00d6)},
+		UnicodeRange{rune(0x00d8), rune(0x00f6)},
+		UnicodeRange{rune(0x00f8), rune(0x02af)},
+		UnicodeRange{rune(0x1d00), rune(0x1d7f)},
+		UnicodeRange{rune(0x1d80), rune(0x1dbf)},
+		UnicodeRange{rune(0x1e00), rune(0x1eff)},
+		UnicodeRange{rune(0x2071), rune(0x2071)},
+		UnicodeRange{rune(0x207f), rune(0x207f)},
+		UnicodeRange{rune(0x2090), rune(0x209c)},
+		UnicodeRange{rune(0x212a), rune(0x212b)},
+		UnicodeRange{rune(0x2c60), rune(0x2c7f)},
+		UnicodeRange{rune(0xa720), rune(0xa7ff)},
+		UnicodeRange{rune(0xab30), rune(0xab6f)},
+		UnicodeRange{rune(0xff21), rune(0xff3a)},
+		UnicodeRange{rune(0xff41), rune(0xff5a)},
+	]
+}
+
+fn greek_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x0370), rune(0x03ff)},
+		UnicodeRange{rune(0x1f00), rune(0x1fff)},
+	]
+}
+
+fn cyrillic_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x0400), rune(0x052f)},
+		UnicodeRange{rune(0x1c80), rune(0x1c88)},
+		UnicodeRange{rune(0x1d2b), rune(0x1d2b)},
+		UnicodeRange{rune(0x1d78), rune(0x1d78)},
+		UnicodeRange{rune(0x2de0), rune(0x2dff)},
+		UnicodeRange{rune(0xa640), rune(0xa69f)},
+		UnicodeRange{rune(0xfe2e), rune(0xfe2f)},
+	]
+}
+
+fn hebrew_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x0590), rune(0x05ff)},
+		UnicodeRange{rune(0xfb1d), rune(0xfb4f)},
+	]
+}
+
+fn arabic_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x0600), rune(0x06ff)},
+		UnicodeRange{rune(0x0750), rune(0x077f)},
+		UnicodeRange{rune(0x0870), rune(0x089f)},
+		UnicodeRange{rune(0x08a0), rune(0x08ff)},
+		UnicodeRange{rune(0xfb50), rune(0xfdff)},
+		UnicodeRange{rune(0xfe70), rune(0xfeff)},
+	]
+}
+
+fn han_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x2e80), rune(0x2eff)},
+		UnicodeRange{rune(0x2f00), rune(0x2fdf)},
+		UnicodeRange{rune(0x3005), rune(0x3007)},
+		UnicodeRange{rune(0x3021), rune(0x3029)},
+		UnicodeRange{rune(0x3038), rune(0x303b)},
+		UnicodeRange{rune(0x3400), rune(0x4dbf)},
+		UnicodeRange{rune(0x4e00), rune(0x9fff)},
+		UnicodeRange{rune(0xf900), rune(0xfaff)},
+		UnicodeRange{rune(0x20000), rune(0x2a6df)},
+		UnicodeRange{rune(0x2a700), rune(0x2b73f)},
+		UnicodeRange{rune(0x2b740), rune(0x2b81f)},
+		UnicodeRange{rune(0x2b820), rune(0x2ceaf)},
+		UnicodeRange{rune(0x2ceb0), rune(0x2ebef)},
+		UnicodeRange{rune(0x30000), rune(0x3134f)},
+	]
+}
+
+fn hiragana_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x3040), rune(0x309f)},
+		UnicodeRange{rune(0x1b001), rune(0x1b11f)},
+	]
+}
+
+fn katakana_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{rune(0x30a0), rune(0x30ff)},
+		UnicodeRange{rune(0x31f0), rune(0x31ff)},
+		UnicodeRange{rune(0x32d0), rune(0x32fe)},
+		UnicodeRange{rune(0x3300), rune(0x3357)},
+		UnicodeRange{rune(0xff66), rune(0xff9f)},
+		UnicodeRange{rune(0x1b000), rune(0x1b000)},
+		UnicodeRange{rune(0x1b120), rune(0x1b12f)},
+	]
+}
+
+fn decimal_digit_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{`0`, `9`},
+		UnicodeRange{rune(0x0660), rune(0x0669)},
+		UnicodeRange{rune(0x06f0), rune(0x06f9)},
+		UnicodeRange{rune(0x07c0), rune(0x07c9)},
+		UnicodeRange{rune(0x0966), rune(0x096f)},
+		UnicodeRange{rune(0x09e6), rune(0x09ef)},
+		UnicodeRange{rune(0x0a66), rune(0x0a6f)},
+		UnicodeRange{rune(0x0ae6), rune(0x0aef)},
+		UnicodeRange{rune(0x0b66), rune(0x0b6f)},
+		UnicodeRange{rune(0x0be6), rune(0x0bef)},
+		UnicodeRange{rune(0x0c66), rune(0x0c6f)},
+		UnicodeRange{rune(0x0ce6), rune(0x0cef)},
+		UnicodeRange{rune(0x0d66), rune(0x0d6f)},
+		UnicodeRange{rune(0x0de6), rune(0x0def)},
+		UnicodeRange{rune(0x0e50), rune(0x0e59)},
+		UnicodeRange{rune(0x0ed0), rune(0x0ed9)},
+		UnicodeRange{rune(0x0f20), rune(0x0f29)},
+		UnicodeRange{rune(0x1040), rune(0x1049)},
+		UnicodeRange{rune(0x1090), rune(0x1099)},
+		UnicodeRange{rune(0x17e0), rune(0x17e9)},
+		UnicodeRange{rune(0x1810), rune(0x1819)},
+		UnicodeRange{rune(0x1946), rune(0x194f)},
+		UnicodeRange{rune(0x19d0), rune(0x19d9)},
+		UnicodeRange{rune(0x1a80), rune(0x1a89)},
+		UnicodeRange{rune(0x1a90), rune(0x1a99)},
+		UnicodeRange{rune(0x1b50), rune(0x1b59)},
+		UnicodeRange{rune(0x1bb0), rune(0x1bb9)},
+		UnicodeRange{rune(0x1c40), rune(0x1c49)},
+		UnicodeRange{rune(0x1c50), rune(0x1c59)},
+		UnicodeRange{rune(0xa620), rune(0xa629)},
+		UnicodeRange{rune(0xa8d0), rune(0xa8d9)},
+		UnicodeRange{rune(0xa900), rune(0xa909)},
+		UnicodeRange{rune(0xa9d0), rune(0xa9d9)},
+		UnicodeRange{rune(0xa9f0), rune(0xa9f9)},
+		UnicodeRange{rune(0xaa50), rune(0xaa59)},
+		UnicodeRange{rune(0xabf0), rune(0xabf9)},
+		UnicodeRange{rune(0xff10), rune(0xff19)},
+		UnicodeRange{rune(0x104a0), rune(0x104a9)},
+		UnicodeRange{rune(0x11066), rune(0x1106f)},
+		UnicodeRange{rune(0x110f0), rune(0x110f9)},
+		UnicodeRange{rune(0x11136), rune(0x1113f)},
+		UnicodeRange{rune(0x111d0), rune(0x111d9)},
+		UnicodeRange{rune(0x112f0), rune(0x112f9)},
+		UnicodeRange{rune(0x11450), rune(0x11459)},
+		UnicodeRange{rune(0x114d0), rune(0x114d9)},
+		UnicodeRange{rune(0x11650), rune(0x11659)},
+		UnicodeRange{rune(0x116c0), rune(0x116c9)},
+		UnicodeRange{rune(0x11730), rune(0x11739)},
+		UnicodeRange{rune(0x118e0), rune(0x118e9)},
+		UnicodeRange{rune(0x11950), rune(0x11959)},
+		UnicodeRange{rune(0x11c50), rune(0x11c59)},
+		UnicodeRange{rune(0x11d50), rune(0x11d59)},
+		UnicodeRange{rune(0x11da0), rune(0x11da9)},
+		UnicodeRange{rune(0x16a60), rune(0x16a69)},
+		UnicodeRange{rune(0x16ac0), rune(0x16ac9)},
+		UnicodeRange{rune(0x16b50), rune(0x16b59)},
+		UnicodeRange{rune(0x1d7ce), rune(0x1d7ff)},
+		UnicodeRange{rune(0x1e140), rune(0x1e149)},
+		UnicodeRange{rune(0x1e2f0), rune(0x1e2f9)},
+		UnicodeRange{rune(0x1e950), rune(0x1e959)},
+		UnicodeRange{rune(0x1fbf0), rune(0x1fbf9)},
+	]
+}
+
+fn whitespace_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{`\t`, `\r`},
+		UnicodeRange{` `, ` `},
+		UnicodeRange{rune(0x0085), rune(0x0085)},
+		UnicodeRange{rune(0x00a0), rune(0x00a0)},
+		UnicodeRange{rune(0x1680), rune(0x1680)},
+		UnicodeRange{rune(0x2000), rune(0x200a)},
+		UnicodeRange{rune(0x2028), rune(0x2029)},
+		UnicodeRange{rune(0x202f), rune(0x202f)},
+		UnicodeRange{rune(0x205f), rune(0x205f)},
+		UnicodeRange{rune(0x3000), rune(0x3000)},
+	]
+}
+
+fn letter_ranges() []UnicodeRange {
+	mut ranges := []UnicodeRange{}
+	ranges << latin_ranges()
+	ranges << greek_ranges()
+	ranges << cyrillic_ranges()
+	ranges << hebrew_ranges()
+	ranges << arabic_ranges()
+	ranges << han_ranges()
+	ranges << hiragana_ranges()
+	ranges << katakana_ranges()
+	ranges << [
+		UnicodeRange{rune(0x0900), rune(0x097f)},
+		UnicodeRange{rune(0x0980), rune(0x09ff)},
+		UnicodeRange{rune(0x0a00), rune(0x0a7f)},
+		UnicodeRange{rune(0x0a80), rune(0x0aff)},
+		UnicodeRange{rune(0x0b00), rune(0x0b7f)},
+		UnicodeRange{rune(0x0b80), rune(0x0bff)},
+		UnicodeRange{rune(0x0c00), rune(0x0c7f)},
+		UnicodeRange{rune(0x0c80), rune(0x0cff)},
+		UnicodeRange{rune(0x0d00), rune(0x0d7f)},
+		UnicodeRange{rune(0x0d80), rune(0x0dff)},
+		UnicodeRange{rune(0x0e00), rune(0x0e7f)},
+		UnicodeRange{rune(0x0e80), rune(0x0eff)},
+		UnicodeRange{rune(0x0f00), rune(0x0fff)},
+		UnicodeRange{rune(0x1000), rune(0x109f)},
+		UnicodeRange{rune(0x1100), rune(0x11ff)},
+		UnicodeRange{rune(0x1200), rune(0x137f)},
+		UnicodeRange{rune(0x13a0), rune(0x13ff)},
+		UnicodeRange{rune(0x1400), rune(0x167f)},
+		UnicodeRange{rune(0x1680), rune(0x169f)},
+		UnicodeRange{rune(0x16a0), rune(0x16ff)},
+		UnicodeRange{rune(0x1700), rune(0x171f)},
+		UnicodeRange{rune(0x1720), rune(0x173f)},
+		UnicodeRange{rune(0x1740), rune(0x175f)},
+		UnicodeRange{rune(0x1760), rune(0x177f)},
+		UnicodeRange{rune(0x1780), rune(0x17ff)},
+		UnicodeRange{rune(0x1800), rune(0x18af)},
+		UnicodeRange{rune(0x1900), rune(0x194f)},
+		UnicodeRange{rune(0x1950), rune(0x197f)},
+		UnicodeRange{rune(0x1980), rune(0x19df)},
+		UnicodeRange{rune(0x1a00), rune(0x1a7f)},
+		UnicodeRange{rune(0x1b00), rune(0x1b7f)},
+		UnicodeRange{rune(0x1c00), rune(0x1c7f)},
+		UnicodeRange{rune(0x2c00), rune(0x2c5f)},
+		UnicodeRange{rune(0x2d00), rune(0x2d2f)},
+		UnicodeRange{rune(0x2d30), rune(0x2d7f)},
+		UnicodeRange{rune(0xa000), rune(0xa48f)},
+		UnicodeRange{rune(0xa4d0), rune(0xa4ff)},
+		UnicodeRange{rune(0xa500), rune(0xa63f)},
+		UnicodeRange{rune(0xa6a0), rune(0xa6ff)},
+		UnicodeRange{rune(0xa800), rune(0xa82f)},
+		UnicodeRange{rune(0xa840), rune(0xa87f)},
+		UnicodeRange{rune(0xa880), rune(0xa8df)},
+		UnicodeRange{rune(0xa900), rune(0xa92f)},
+		UnicodeRange{rune(0xa930), rune(0xa95f)},
+		UnicodeRange{rune(0xa960), rune(0xa97f)},
+		UnicodeRange{rune(0xa980), rune(0xa9df)},
+		UnicodeRange{rune(0xaa00), rune(0xaa5f)},
+		UnicodeRange{rune(0xaa60), rune(0xaa7f)},
+		UnicodeRange{rune(0xaa80), rune(0xaadf)},
+		UnicodeRange{rune(0xab00), rune(0xab2f)},
+		UnicodeRange{rune(0xab70), rune(0xabbf)},
+		UnicodeRange{rune(0xac00), rune(0xd7af)},
+		UnicodeRange{rune(0xd7b0), rune(0xd7ff)},
+	]
+	return ranges
+}
+
+fn uppercase_letter_ranges() []UnicodeRange {
+	return [
+		UnicodeRange{`A`, `Z`},
+		UnicodeRange{rune(0x00c0), rune(0x00d6)},
+		UnicodeRange{rune(0x00d8), rune(0x00de)},
+		UnicodeRange{rune(0x0100), rune(0x0136)},
+		UnicodeRange{rune(0x0139), rune(0x0147)},
+		UnicodeRange{rune(0x014a), rune(0x0178)},
+		UnicodeRange{rune(0x0181), rune(0x0243)},
+		UnicodeRange{rune(0x0386), rune(0x0386)},
+		UnicodeRange{rune(0x0388), rune(0x038a)},
+		UnicodeRange{rune(0x038c), rune(0x038c)},
+		UnicodeRange{rune(0x038e), rune(0x03ab)},
+		UnicodeRange{rune(0x03cf), rune(0x03cf)},
+		UnicodeRange{rune(0x03d2), rune(0x03d4)},
+		UnicodeRange{rune(0x03f4), rune(0x03ff)},
+		UnicodeRange{rune(0x0400), rune(0x042f)},
+		UnicodeRange{rune(0x0460), rune(0x0480)},
+		UnicodeRange{rune(0x048a), rune(0x04c0)},
+		UnicodeRange{rune(0x04c1), rune(0x052e)},
+		UnicodeRange{rune(0x10a0), rune(0x10c5)},
+		UnicodeRange{rune(0x1e00), rune(0x1efe)},
+		UnicodeRange{rune(0x1f08), rune(0x1f0f)},
+		UnicodeRange{rune(0x1f18), rune(0x1f1d)},
+		UnicodeRange{rune(0x1f28), rune(0x1f2f)},
+		UnicodeRange{rune(0x1f38), rune(0x1f3f)},
+		UnicodeRange{rune(0x1f48), rune(0x1f4d)},
+		UnicodeRange{rune(0x1f68), rune(0x1f6f)},
+		UnicodeRange{rune(0x1f88), rune(0x1f8f)},
+		UnicodeRange{rune(0x1f98), rune(0x1f9f)},
+		UnicodeRange{rune(0x1fa8), rune(0x1faf)},
+		UnicodeRange{rune(0x1fb8), rune(0x1fbc)},
+		UnicodeRange{rune(0x1fc8), rune(0x1fcc)},
+		UnicodeRange{rune(0x1fd8), rune(0x1fdb)},
+		UnicodeRange{rune(0x1fe8), rune(0x1fec)},
+		UnicodeRange{rune(0x1ff8), rune(0x1ffc)},
+		UnicodeRange{rune(0x2102), rune(0x2107)},
+		UnicodeRange{rune(0x210b), rune(0x2112)},
+		UnicodeRange{rune(0x2115), rune(0x2115)},
+		UnicodeRange{rune(0x2119), rune(0x211d)},
+		UnicodeRange{rune(0x2124), rune(0x2124)},
+		UnicodeRange{rune(0x2126), rune(0x2126)},
+		UnicodeRange{rune(0x2128), rune(0x2128)},
+		UnicodeRange{rune(0x212a), rune(0x212d)},
+		UnicodeRange{rune(0x2130), rune(0x2133)},
+		UnicodeRange{rune(0x213e), rune(0x213f)},
+		UnicodeRange{rune(0x2145), rune(0x2145)},
+		UnicodeRange{rune(0x2c00), rune(0x2c2e)},
+		UnicodeRange{rune(0x2c60), rune(0x2c7f)},
+		UnicodeRange{rune(0xa640), rune(0xa66c)},
+		UnicodeRange{rune(0xa680), rune(0xa69a)},
+		UnicodeRange{rune(0xa722), rune(0xa72e)},
+		UnicodeRange{rune(0xa732), rune(0xa76e)},
+		UnicodeRange{rune(0xa779), rune(0xa7ca)},
+		UnicodeRange{rune(0xff21), rune(0xff3a)},
+	]
 }
 
 fn negated_backend_class(excluded string, config Config) string {
@@ -699,6 +1159,19 @@ fn validate_rust_regex_syntax(pattern string, config Config) ! {
 				return
 			}
 			next := pattern[i + 1]
+			if next == `p` || next == `P` {
+				property_escape := rust_property_escape_at(pattern, i) or {
+					return Error.regex('invalid Unicode property escape')
+				}
+				if !rust_property_is_supported(property_escape.property, config) {
+					return Error.regex('unsupported Unicode property: ${property_escape.property}')
+				}
+				if in_class {
+					return Error.regex('Unicode property escapes inside character classes are not supported')
+				}
+				i = property_escape.next
+				continue
+			}
 			if is_pcre_only_escape(next) {
 				return Error.regex('unsupported escape sequence')
 			}
@@ -721,6 +1194,10 @@ fn validate_rust_regex_syntax(pattern string, config Config) ! {
 		}
 		if ch == `[` {
 			if replacement := normalize_class_set_operation_at(pattern, i, config) {
+				i = replacement.next
+				continue
+			}
+			if replacement := normalize_property_class_at(pattern, i, config) {
 				i = replacement.next
 				continue
 			}
@@ -936,6 +1413,53 @@ fn normalize_class_set_operation_at(pattern string, start int, config Config) ?P
 	}
 	return PatternReplacement{
 		text: byte_class_to_backend_pattern(stripped)
+		next: end + 1
+	}
+}
+
+fn normalize_property_class_at(pattern string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || pattern[start] != `[` {
+		return none
+	}
+	end := find_class_end_nested(pattern, start) or { return none }
+	body := pattern[start + 1..end]
+	if !body.contains(r'\p') && !body.contains(r'\P') {
+		return none
+	}
+	mut out := []u8{cap: body.len}
+	out << `[`
+	mut i := start + 1
+	if i < end && pattern[i] == `^` {
+		out << `^`
+		i++
+	}
+	for i < end {
+		if pattern[i] == `\\` && i + 1 < end {
+			next := pattern[i + 1]
+			if next == `p` || next == `P` {
+				property_escape := rust_property_escape_at(pattern, i) or { return none }
+				if property_escape.next > end {
+					return none
+				}
+				if next == `P` {
+					return none
+				}
+				body_part := rust_property_class_body(property_escape.property, config) or { return none }
+				out << body_part.bytes()
+				i = property_escape.next
+				continue
+			}
+			out << pattern[i]
+			out << next
+			i += 2
+			continue
+		}
+		out << pattern[i]
+		i++
+	}
+	out << `]`
+	return PatternReplacement{
+		text: out.bytestr()
 		next: end + 1
 	}
 }
@@ -1387,17 +1911,24 @@ fn add_word_bytes(mut set []bool) {
 
 fn rust_property_byte_class(property string) ?[]bool {
 	mut set := empty_byte_class()
-	match property.to_lower() {
+	match normalize_property_name(property) {
+		'any' {
+			return full_byte_class()
+		}
 		'ascii' {
 			add_byte_range(mut set, u8(0), u8(0x7f))
 			return set
 		}
-		'l', 'letter' {
+		'decimalnumber', 'gc=nd', 'generalcategory=nd', 'nd' {
+			add_byte_range(mut set, `0`, `9`)
+			return set
+		}
+		'l', 'letter', 'alphabetic', 'alpha' {
 			add_byte_range(mut set, `A`, `Z`)
 			add_byte_range(mut set, `a`, `z`)
 			return set
 		}
-		'gc=lu', 'general_category=lu', 'uppercaseletter' {
+		'gc=lu', 'generalcategory=lu', 'lu', 'uppercaseletter' {
 			add_byte_range(mut set, `A`, `Z`)
 			return set
 		}
@@ -1416,7 +1947,7 @@ fn byte_class_to_backend_pattern(set []bool) string {
 		}
 	}
 	if !any {
-		return r'(?!)'
+		return r'(?:a^)'
 	}
 	mut out := []u8{cap: 64}
 	out << `[`

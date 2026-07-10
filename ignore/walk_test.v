@@ -128,10 +128,15 @@ fn mkpaths(paths []string) []string {
 }
 
 fn assert_paths(prefix string, builder WalkBuilder, expected []string) {
+	want := mkpaths(expected)
 	got := walk_collect(prefix, builder)
-	assert got == mkpaths(expected), 'single threaded'
+	if got != want {
+		panic('single threaded got ${got}, want ${want}')
+	}
 	got_parallel := walk_collect_parallel(prefix, builder)
-	assert got_parallel == mkpaths(expected), 'parallel'
+	if got_parallel != want {
+		panic('parallel got ${got_parallel}, want ${want}')
+	}
 }
 
 fn walk_collect_entries(builder WalkBuilder) []DirEntry {
@@ -164,7 +169,9 @@ fn test_walk_build_is_lazy() {
 			got << normal_path(path)
 		}
 	}
-	assert 'late.txt' in got
+	if 'late.txt' !in got {
+		panic('late file missing from ${got}')
+	}
 }
 
 fn test_no_ignores() {
@@ -252,7 +259,9 @@ fn test_explicit_ignore() {
 
 	mut builder := WalkBuilder.new(td.path())
 	has_err, _ := builder.add_ignore(igpath)
-	assert !has_err
+	if has_err {
+		panic('explicit ignore should parse without error')
+	}
 	assert_paths(td.path(), builder, ['bar', 'a', 'a/bar'])
 }
 
@@ -272,7 +281,9 @@ fn test_explicit_ignore_exclusive_use() {
 	mut builder := WalkBuilder.new(td.path())
 	builder.standard_filters(false)
 	has_err, _ := builder.add_ignore(igpath)
-	assert !has_err
+	if has_err {
+		panic('explicit ignore should parse without error')
+	}
 	assert_paths(td.path(), builder, ['.not-an-ignore', 'bar', 'a', 'a/bar'])
 }
 
@@ -421,12 +432,20 @@ fn test_first_path_not_symlink() {
 	mkdirp(os.join_path(td.path(), 'foo'))
 
 	dents := walk_collect_entries(WalkBuilder.new(os.join_path(td.path(), 'foo')))
-	assert dents.len == 1
-	assert !dents[0].path_is_symlink()
+	if dents.len != 1 {
+		panic('single root entry count: ${dents.len}')
+	}
+	if dents[0].path_is_symlink() {
+		panic('single root should not be marked symlink')
+	}
 
 	parallel_dents := walk_collect_entries_parallel(WalkBuilder.new(os.join_path(td.path(), 'foo')))
-	assert parallel_dents.len == 1
-	assert !parallel_dents[0].path_is_symlink()
+	if parallel_dents.len != 1 {
+		panic('parallel root entry count: ${parallel_dents.len}')
+	}
+	if parallel_dents[0].path_is_symlink() {
+		panic('parallel root should not be marked symlink')
+	}
 }
 
 // because symlinks on windows are weird
@@ -549,10 +568,18 @@ fn test_parallel_skip_prevents_descent() {
 		paths << normal_path(strip_prefix(path, td.path()))
 	}
 	paths.sort()
-	assert 'one/skip' in paths
-	assert 'one/skip/child' !in paths
-	assert 'one/skip/child/file' !in paths
-	assert 'two/keep/child/file' in paths
+	if 'one/skip' !in paths {
+		panic('missing one/skip from ${paths}')
+	}
+	if 'one/skip/child' in paths {
+		panic('skip descended into child: ${paths}')
+	}
+	if 'one/skip/child/file' in paths {
+		panic('skip descended into file: ${paths}')
+	}
+	if 'two/keep/child/file' !in paths {
+		panic('missing keep file from ${paths}')
+	}
 }
 
 fn test_parallel_single_root_uses_requested_workers() {
@@ -562,7 +589,9 @@ fn test_parallel_single_root_uses_requested_workers() {
 	}
 	mut builder := WalkBuilder.new(td.path())
 	builder.threads(4)
-	assert builder.build_parallel().worker_count() == 4
+	if builder.build_parallel().worker_count() != 4 {
+		panic('explicit worker count was not preserved')
+	}
 }
 
 fn test_parallel_stream_collects_single_root_children() {
@@ -578,7 +607,10 @@ fn test_parallel_stream_collects_single_root_children() {
 	mut builder := WalkBuilder.new(td.path())
 	builder.threads(4)
 	got := walk_collect_stream(td.path(), builder)
-	assert got == mkpaths(['a', 'a/b', 'a/b/foo', 'x', 'x/y', 'x/y/bar'])
+	want := mkpaths(['a', 'a/b', 'a/b/foo', 'x', 'x/y', 'x/y/bar'])
+	if got != want {
+		panic('stream got ${got}, want ${want}')
+	}
 }
 
 fn test_parallel_single_root_child_gitignore() {
@@ -598,9 +630,19 @@ fn test_parallel_single_root_child_gitignore() {
 	builder.threads(4)
 	expected := ['cmd', 'cmd/v2', 'cmd/v2/keep.v', 'vlib', 'vlib/db', 'vlib/db/sqlite',
 		'vlib/db/sqlite/README.md']
-	assert walk_collect(td.path(), builder.clone()) == mkpaths(expected), 'single threaded'
-	assert walk_collect_parallel(td.path(), builder.clone()) == mkpaths(expected), 'parallel'
-	assert walk_collect_stream(td.path(), builder) == mkpaths(expected), 'stream'
+	want := mkpaths(expected)
+	got_single := walk_collect(td.path(), builder.clone())
+	if got_single != want {
+		panic('single threaded got ${got_single}, want ${want}')
+	}
+	got_parallel := walk_collect_parallel(td.path(), builder.clone())
+	if got_parallel != want {
+		panic('parallel got ${got_parallel}, want ${want}')
+	}
+	got_stream := walk_collect_stream(td.path(), builder)
+	if got_stream != want {
+		panic('stream got ${got_stream}, want ${want}')
+	}
 }
 
 fn test_parallel_single_root_skip_prevents_descent() {
@@ -623,8 +665,16 @@ fn test_parallel_single_root_skip_prevents_descent() {
 		paths << normal_path(strip_prefix(path, td.path()))
 	}
 	paths.sort()
-	assert 'skip' in paths
-	assert 'skip/child' !in paths
-	assert 'skip/child/file' !in paths
-	assert 'keep/child/file' in paths
+	if 'skip' !in paths {
+		panic('missing skip from ${paths}')
+	}
+	if 'skip/child' in paths {
+		panic('skip descended into child: ${paths}')
+	}
+	if 'skip/child/file' in paths {
+		panic('skip descended into file: ${paths}')
+	}
+	if 'keep/child/file' !in paths {
+		panic('missing keep file from ${paths}')
+	}
 }

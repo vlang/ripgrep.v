@@ -238,12 +238,9 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		mut wtr := searcher.printer().get_mut()
 		print_stats(mode, stats_value, started_at, mut wtr) or {}
 	}
-	searcher.printer().flush() or {
-		if cli.is_broken_pipe_error(err) {
-			return matched
-		}
-		return err
-	}
+	// Rust flushes the buffered stdout writer when it is dropped and ignores
+	// any error at that point, so the final flush error is ignored here too.
+	searcher.printer().flush() or {}
 	return matched
 }
 
@@ -296,8 +293,12 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		}
 		if output_err == none {
 			bufwtr.print(&result.buffer) or {
-				output_err = err
-				stop.store(true)
+				if cli.is_broken_pipe_error(err) {
+					output_err = err
+					stop.store(true)
+				} else {
+					core.err_message(err.msg())
+				}
 			}
 		}
 		if stats_value := stats {
@@ -322,12 +323,7 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	if stats_value := stats {
 		mut wtr := bufwtr.buffer()
 		print_stats(mode, stats_value, started_at, mut wtr) or {}
-		bufwtr.print(&wtr) or {
-			if cli.is_broken_pipe_error(err) {
-				return matched
-			}
-			return err
-		}
+		bufwtr.print(&wtr) or {}
 	}
 	return matched
 }
@@ -547,14 +543,18 @@ fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit
 		if !files_should_print(&dent) {
 			continue
 		}
+		if quit_after_match {
+			results <- FilesParallelResult{
+				matched: true
+			}
+			stop.store(true)
+			continue
+		}
 		path := files_print_path(&dent, strip_dot_prefix)
 		results <- FilesParallelResult{
 			matched:  true
 			has_path: true
 			path:     path
-		}
-		if quit_after_match {
-			stop.store(true)
 		}
 	}
 	stream.wait()

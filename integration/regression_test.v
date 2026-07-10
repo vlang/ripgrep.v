@@ -488,6 +488,10 @@ fn test_regression_r483_matching_no_stdout() {
 	dir.create('file.py', '')
 	cmd.args(['--quiet', '--files', '--glob', '*.py'])
 	eqnice('', cmd.stdout())
+
+	mut parallel_cmd := dir.command()
+	parallel_cmd.args(['-j2', '--quiet', '--files', '--glob', '*.py'])
+	eqnice('', parallel_cmd.stdout())
 }
 
 // See: https://github.com/BurntSushi/ripgrep/issues/483
@@ -496,6 +500,10 @@ fn test_regression_r483_non_matching_exit_code() {
 	dir.create('file.rs', '')
 	cmd.args(['--quiet', '--files', '--glob', '*.py'])
 	cmd.assert_err()
+
+	mut parallel_cmd := dir.command()
+	parallel_cmd.args(['-j2', '--quiet', '--files', '--glob', '*.py'])
+	parallel_cmd.assert_err()
 }
 
 // See: https://github.com/BurntSushi/ripgrep/issues/493

@@ -136,10 +136,38 @@ fn test_candidate_lines_regression_1064() {
 	_ := candidate.get() or { panic('expected match') }
 }
 
+fn test_multiline_haystack_anchor_does_not_become_line_anchor() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.multi_line(true)
+	matcher_ := builder.build(r'\Abaz') or { panic(err) }
+	assert matcher.is_match(matcher_, 'baz'.bytes())!
+	assert !matcher.is_match(matcher_, 'a\nbaz'.bytes())!
+
+	line_anchor := builder.build(r'^baz') or { panic(err) }
+	assert matcher.is_match(line_anchor, 'a\nbaz'.bytes())!
+}
+
+fn test_candidate_lines_whole_line_literal_needs_confirmation() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.line_terminator(`\n`)
+	builder.whole_line(true)
+	line_matcher := builder.build('foo') or { panic(err) }
+	assert !matcher.is_match(line_matcher, 'foobar'.bytes())!
+	candidate := line_matcher.find_candidate_line('foobar\n'.bytes()) or { panic(err) }
+	candidate_kind := candidate.get() or { panic('expected literal candidate') }
+	assert candidate_kind.is_candidate()
+}
+
 fn test_unicode_any_property() {
 	matcher_ := RegexMatcherBuilder.new().build(r'Sherlock\p{Any}+?Holmes') or { panic(err) }
 	assert matcher.is_match(matcher_, 'Sherlock\nHolmes'.bytes())!
 	assert matcher.is_match(matcher_, 'Sherlock Watson Holmes'.bytes())!
+	lowercase := RegexMatcherBuilder.new().build(r'Sherlock\p{any}+?Holmes') or { panic(err) }
+	assert matcher.is_match(lowercase, 'Sherlock\nHolmes'.bytes())!
+	not_any := RegexMatcherBuilder.new().build(r'\P{Any}') or { panic(err) }
+	assert !matcher.is_match(not_any, 'Sherlock!'.bytes())!
+	not_any_one_or_more := RegexMatcherBuilder.new().build(r'\P{Any}+') or { panic(err) }
+	assert !matcher.is_match(not_any_one_or_more, 'Sherlock!'.bytes())!
 }
 
 fn test_capture_groups() {
@@ -262,16 +290,23 @@ fn test_rust_regex_common_unicode_class_compatibility() {
 		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
 		assert matcher.is_match(matcher_, 'mañana'.bytes())!
 		assert matcher.is_match(matcher_, 'κόσμος'.bytes())!
+		assert matcher.is_match(matcher_, 'кириллица'.bytes())!
+		assert matcher.is_match(matcher_, '漢字'.bytes())!
 	}
 	not_word := RegexMatcherBuilder.new().build(r'\W+') or { panic(err.msg()) }
 	assert !matcher.is_match(not_word, 'mañana'.bytes())!
 	assert !matcher.is_match(not_word, 'κόσμος'.bytes())!
 	ascii := RegexMatcherBuilder.new().build(r'\p{ascii}+') or { panic(err.msg()) }
 	assert matcher.is_match(ascii, 'foo bar'.bytes())!
+	assert matcher.is_match(ascii, [u8(0)])!
 	assert !matcher.is_match(ascii, 'κόσμος'.bytes())!
 	not_ascii := RegexMatcherBuilder.new().build(r'\P{ascii}+') or { panic(err.msg()) }
 	assert matcher.is_match(not_ascii, 'mañana'.bytes())!
 	assert matcher.is_match(not_ascii, 'κόσμος'.bytes())!
+	digit := RegexMatcherBuilder.new().build(r'\d+') or { panic(err.msg()) }
+	assert matcher.is_match(digit, '१२३'.bytes())!
+	space := RegexMatcherBuilder.new().build(r'\s+') or { panic(err.msg()) }
+	assert matcher.is_match(space, rune(0x2003).str().bytes())!
 }
 
 fn test_negated_unicode_classes_do_not_match_invalid_utf8_empty() {
@@ -283,10 +318,36 @@ fn test_negated_unicode_classes_do_not_match_invalid_utf8_empty() {
 }
 
 fn test_rust_regex_greek_property_compatibility() {
-	for pattern in [r'\p{Greek}+', r'\p{Script=Greek}+'] {
+	for pattern in [r'\p{Greek}+', r'\p{Script=Greek}+', r'[\p{Greek}]+'] {
 		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
 		assert matcher.is_match(matcher_, 'Delta Δ'.bytes())!
 		assert !matcher.is_match(matcher_, 'Delta'.bytes())!
+	}
+}
+
+fn test_rust_regex_additional_script_property_compatibility() {
+	cases := {
+		r'\p{Han}+':      '漢字'
+		r'\p{Cyrillic}+': 'кириллица'
+		r'\p{Hiragana}+': 'ひらがな'
+		r'\p{Katakana}+': 'カタカナ'
+		r'\p{Hebrew}+':   'שלום'
+		r'\p{Arabic}+':   'سلام'
+	}
+	for pattern, text in cases {
+		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
+		assert matcher.is_match(matcher_, text.bytes())!
+		assert !matcher.is_match(matcher_, 'abc'.bytes())!
+	}
+}
+
+fn test_rust_regex_rejects_unsupported_unicode_properties() {
+	for pattern in [r'\p{Emoji}', r'\p{Script=Deseret}', r'[\P{Greek}]'] {
+		if _ := RegexMatcherBuilder.new().build(pattern) {
+			panic('expected unsupported Unicode property error for ${pattern}')
+		} else {
+			assert err.msg().contains('Unicode property')
+		}
 	}
 }
 
@@ -299,6 +360,7 @@ fn test_rust_regex_class_set_operations() {
 	empty := RegexMatcherBuilder.new().build(r'[a&&b]') or { panic(err.msg()) }
 	assert !matcher.is_match(empty, 'a'.bytes())!
 	assert !matcher.is_match(empty, 'b'.bytes())!
+	assert !matcher.is_match(empty, '!'.bytes())!
 
 	diff := RegexMatcherBuilder.new().build(r'[a--b]') or { panic(err.msg()) }
 	assert matcher.is_match(diff, 'a'.bytes())!

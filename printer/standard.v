@@ -1044,10 +1044,6 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_line_term[^p, ^s]() ! {
 }
 
 fn (mut imp StandardImpl[^p, ^s, W]) write_spec[^p, ^s](spec ColorSpec, buf []u8) ! {
-	if spec.is_none() || !imp.sink.standard.wtr.supports_color() {
-		imp.write(buf)!
-		return
-	}
 	imp.sink.standard.wtr.set_color(spec)!
 	imp.write(buf)!
 	imp.sink.standard.wtr.reset()!
@@ -1055,10 +1051,6 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_spec[^p, ^s](spec ColorSpec, buf []u8
 
 fn (mut imp StandardImpl[^p, ^s, W]) write_path[^p, ^s](mut path PrinterPath[^p]) ! {
 	spec := imp.config().colors.path()
-	if spec.is_none() || !imp.sink.standard.wtr.supports_color() {
-		imp.write(path.as_bytes_view())!
-		return
-	}
 	imp.sink.standard.wtr.set_color(spec)!
 	imp.write(path.as_bytes_view())!
 	imp.sink.standard.wtr.reset()!

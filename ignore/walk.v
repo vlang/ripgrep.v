@@ -819,7 +819,13 @@ fn (mut walk Walk) enqueue_root_path(path string) {
 			walk.push_result(walk_result_from_error(add_err))
 		}
 	}
-	root_device := if walk.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	mut root_device := u64(0)
+	if walk.same_file_system {
+		root_device = device_num(dent.path()) or {
+			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path())))
+			return
+		}
+	}
 	has_root_device := walk.same_file_system
 	walk.enqueue_entry(mut dent, ig, true, root_device, has_root_device)
 }
@@ -960,7 +966,16 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 			}
 		}
 	}
-	root_device := if walk.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	mut root_device := u64(0)
+	if walk.same_file_system {
+		root_device = device_num(dent.path()) or {
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path())))
+			if state.is_quit() {
+				return .quit
+			}
+			return .continue_
+		}
+	}
 	has_root_device := walk.same_file_system
 	return walk.visit_traverse_entry(mut visitor, mut dent, ig, true, root_device, has_root_device)
 }
@@ -1044,7 +1059,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 			}
 		}
 		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
-		walk.traverse_entry(mut child, child_ignore, false, root_device, has_root_device)
+		walk.traverse_entry(mut child, child_ignore.clone(), false, root_device, has_root_device)
 	}
 }
 
@@ -1151,7 +1166,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 			}
 		}
 		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
-		state := walk.visit_traverse_entry(mut visitor, mut child, child_ignore, false,
+		state := walk.visit_traverse_entry(mut visitor, mut child, child_ignore.clone(), false,
 			root_device, has_root_device)
 		if state.is_quit() {
 			return .quit
@@ -1346,11 +1361,7 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &std
 		return
 	}
 	if wp.paths.len == 1 && !wp.has_sort_by_name && !wp.has_sort_by_path {
-		// V-specific: the first-level single-root stream path can share matcher
-		// state across worker threads. Keep the producer traversal serial here
-		// so default CLI search/listing observes the same ignore decisions as
-		// `Walk` while search workers still provide parallelism above this layer.
-		wp.stream_serial(results, stop)
+		wp.stream_single_root_parallel(results, stop, wp.paths[0], worker_count)
 		return
 	}
 	jobs := chan WalkParallelJob{cap: wp.paths.len + worker_count}
@@ -1404,7 +1415,13 @@ fn (wp WalkParallel) visit_single_root_parallel(mut visitor ParallelVisitor, pat
 			return
 		}
 	}
-	root_device := if wp.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	mut root_device := u64(0)
+	if wp.same_file_system {
+		root_device = device_num(dent.path()) or {
+			visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path())))
+			return
+		}
+	}
 	has_root_device := wp.same_file_system
 	if has_root_device {
 		same_fs := is_same_file_system(root_device, dent.path()) or {
@@ -1548,7 +1565,18 @@ fn (wp WalkParallel) stream_single_root_parallel(results chan WalkParallelStream
 			return
 		}
 	}
-	root_device := if wp.same_file_system { device_num(dent.path()) or { u64(0) } } else { u64(0) }
+	mut root_device := u64(0)
+	if wp.same_file_system {
+		root_device = device_num(dent.path()) or {
+			results <- WalkParallelStreamResult{
+				result: walk_result_from_error(io_error(err).with_path(dent.path()))
+			}
+			results <- WalkParallelStreamResult{
+				done: true
+			}
+			return
+		}
+	}
 	has_root_device := wp.same_file_system
 	if has_root_device {
 		same_fs := is_same_file_system(root_device, dent.path()) or {

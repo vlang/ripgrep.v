@@ -91,3 +91,66 @@ fn test_command_reader_close_ignores_successful_stderr() {
 	mut rdr := CommandReader.new(cmd) or { panic(err.msg()) }
 	rdr.close() or { panic(err.msg()) }
 }
+
+fn test_command_reader_search_read_then_close_reports_stderr() {
+	$if windows {
+		return
+	}
+	os.find_abs_path_of_executable('gzip') or { return }
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_command_reader_bad_gzip_${os.getpid()}.gz')
+	os.write_file(path, 'not gzip\n') or { panic(err.msg()) }
+	defer {
+		os.rm(path) or {}
+	}
+	mut cmd := Command.new('gzip')
+	cmd.args(['-d', '-c', path])
+	mut rdr := CommandReader.new(cmd) or { panic(err.msg()) }
+	mut buf := []u8{len: 128}
+	for {
+		rdr.read_for_search(mut buf) or {
+			if err is io.Eof {
+				break
+			}
+			panic(err.msg())
+		}
+	}
+	rdr.close() or {
+		if !err.msg().contains('not in gzip format') {
+			panic('unexpected gzip close error: ${err.msg()}')
+		}
+		return
+	}
+	panic('expected gzip stderr error')
+}
+
+fn test_command_reader_search_read_pointer_then_close_reports_stderr() {
+	$if windows {
+		return
+	}
+	os.find_abs_path_of_executable('gzip') or { return }
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_command_reader_bad_gzip_ptr_${os.getpid()}.gz')
+	os.write_file(path, 'not gzip\n') or { panic(err.msg()) }
+	defer {
+		os.rm(path) or {}
+	}
+	mut cmd := Command.new('gzip')
+	cmd.args(['-d', '-c', path])
+	mut rdr := CommandReader.new(cmd) or { panic(err.msg()) }
+	mut rdr_ptr := &rdr
+	mut buf := []u8{len: 128}
+	for {
+		rdr_ptr.read_for_search(mut buf) or {
+			if err is io.Eof {
+				break
+			}
+			panic(err.msg())
+		}
+	}
+	rdr_ptr.close() or {
+		if !err.msg().contains('not in gzip format') {
+			panic('unexpected gzip close error: ${err.msg()}')
+		}
+		return
+	}
+	panic('expected gzip stderr error')
+}
