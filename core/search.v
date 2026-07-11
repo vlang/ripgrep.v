@@ -143,7 +143,7 @@ pub fn SearchWorkerBuilder.new() SearchWorkerBuilder {
 
 /// Create a new search worker using the given searcher, matcher and
 /// printer.
-pub fn (builder SearchWorkerBuilder) build[W](matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[W]) SearchWorker[W] {
+pub fn (builder &SearchWorkerBuilder) build[W](matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[W]) SearchWorker[W] {
 	config := builder.config.clone()
 	mut decomp_builder := ?cli.DecompressionReaderBuilder(none)
 	if config.search_zip {
@@ -167,7 +167,7 @@ pub fn (builder SearchWorkerBuilder) build[W](matcher_ PatternMatcher, searcher_
 /// `SearchWorkerBuilder.build[cli.StandardStream]` specialization used by the
 /// root CLI, so this keeps the translated build logic available for that
 /// concrete writer.
-pub fn (builder SearchWorkerBuilder) build_standard_stream(matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[cli.StandardStream]) SearchWorker[cli.StandardStream] {
+pub fn (builder &SearchWorkerBuilder) build_standard_stream(matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[cli.StandardStream]) SearchWorker[cli.StandardStream] {
 	config := builder.config.clone()
 	mut decomp_builder := ?cli.DecompressionReaderBuilder(none)
 	if config.search_zip {
@@ -188,7 +188,7 @@ pub fn (builder SearchWorkerBuilder) build_standard_stream(matcher_ PatternMatch
 /// V-specific concrete buffer search worker builder.
 ///
 /// See `build_standard_stream`.
-pub fn (builder SearchWorkerBuilder) build_buffer(matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[cli.Buffer]) SearchWorker[cli.Buffer] {
+pub fn (builder &SearchWorkerBuilder) build_buffer(matcher_ PatternMatcher, searcher_ searcher.Searcher, printer_ Printer[cli.Buffer]) SearchWorker[cli.Buffer] {
 	config := builder.config.clone()
 	mut decomp_builder := ?cli.DecompressionReaderBuilder(none)
 	if config.search_zip {
@@ -325,8 +325,9 @@ pub fn (matcher_ &PatternMatcher) clone() PatternMatcher {
 }
 
 fn (mut matcher_ PatternMatcher) drop() {
-	if matcher_.kind == .pcre2 {
-		matcher_.pcre2.drop()
+	match matcher_.kind {
+		.rust_regex { matcher_.regex.drop() }
+		.pcre2 { matcher_.pcre2.drop() }
 	}
 }
 
@@ -455,7 +456,7 @@ pub fn (mut worker SearchWorker[W]) search(haystack &Haystack) !SearchResult {
 	if worker.config.search_zip && worker.should_decompress(&path) {
 		return worker.search_decompress(path.clone())
 	}
-	return worker.search_path(path)
+	return worker.search_path(&path)
 }
 
 /// Return a mutable reference to the underlying printer.
@@ -483,7 +484,7 @@ fn (worker SearchWorker[W]) should_decompress(path &string) bool {
 /// Search the given file path by first asking the preprocessor for the
 /// data to search instead of opening the path directly.
 fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
-	bin := worker.config.preprocessor or { return worker.search_path(path) }
+	bin := worker.config.preprocessor or { return worker.search_path(&path) }
 	mut cmd := cli.Command.new(bin)
 	cmd.arg(path.clone())
 	cmd.stdin_path(path.clone())
@@ -513,7 +514,7 @@ fn (mut worker SearchWorker[W]) search_preprocessor(path string) !SearchResult {
 /// result. If the given file path isn't recognized as a compressed file,
 /// then search it without doing any decompression.
 fn (mut worker SearchWorker[W]) search_decompress(path string) !SearchResult {
-	decomp_builder := worker.decomp_builder or { return worker.search_path(path) }
+	decomp_builder := worker.decomp_builder or { return worker.search_path(&path) }
 	mut rdr := decomp_builder.build(path.clone())!
 	result := worker.search_decompression_reader(path.clone(), &rdr) or {
 		// The search error takes precedence: close the reader to reap the
@@ -542,15 +543,15 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 }
 
 	/// Search the contents of the given file path.
-	pub fn (mut worker SearchWorker[W]) search_path(mut path string) !SearchResult {
+	pub fn (mut worker SearchWorker[W]) search_path(path &string) !SearchResult {
 		return match worker.matcher.kind {
 			.rust_regex {
-				worker.search_path_with_regex_matcher(worker.matcher.regex.clone(),
-					printer.PrinterMatcher.rust_regex(worker.matcher.regex.clone()), path)
+				worker.search_path_with_regex_matcher(&worker.matcher.regex,
+					printer.PrinterMatcher.rust_regex(&worker.matcher.regex), path.clone())
 			}
 			.pcre2 {
 				worker.search_path_with_pcre2_matcher(&worker.matcher.pcre2,
-					printer.PrinterMatcher.pcre2(worker.matcher.pcre2.clone()), path)
+					printer.PrinterMatcher.pcre2(&worker.matcher.pcre2), path.clone())
 			}
 		}
 	}
@@ -567,23 +568,23 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 	pub fn (mut worker SearchWorker[W]) search_reader(path string, mut rdr io.Reader) !SearchResult {
 		return match worker.matcher.kind {
 			.rust_regex {
-				worker.search_reader_with_regex_matcher(worker.matcher.regex.clone(),
-					printer.PrinterMatcher.rust_regex(worker.matcher.regex.clone()), path.clone(), mut rdr)
+				worker.search_reader_with_regex_matcher(&worker.matcher.regex,
+					printer.PrinterMatcher.rust_regex(&worker.matcher.regex), path.clone(), mut rdr)
 			}
 			.pcre2 {
 				worker.search_reader_with_pcre2_matcher(&worker.matcher.pcre2,
-					printer.PrinterMatcher.pcre2(worker.matcher.pcre2.clone()), path.clone(), mut rdr)
+					printer.PrinterMatcher.pcre2(&worker.matcher.pcre2), path.clone(), mut rdr)
 			}
 		}
 	}
 
 	/// Search the contents of the given file path using the given matcher,
 	/// searcher and printer.
-	fn (mut worker SearchWorker[W]) search_path_with_regex_matcher(matcher_ regex.RegexMatcher, printer_matcher printer.PrinterMatcher, mut path string) !SearchResult {
+	fn (mut worker SearchWorker[W]) search_path_with_regex_matcher(matcher_ &regex.RegexMatcher, printer_matcher printer.PrinterMatcher, mut path string) !SearchResult {
 		defer {
 			unsafe { path.free() }
 		}
-		matcher_ref := regex.RegexMatcherRef.new(&matcher_)
+		matcher_ref := regex.RegexMatcherRef.new(matcher_)
 		return match worker.printer.kind {
 			.standard {
 				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
@@ -647,8 +648,8 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 
 	/// Search the contents of the given reader using the given matcher, searcher
 	/// and printer.
-	fn (mut worker SearchWorker[W]) search_reader_with_regex_matcher(matcher_ regex.RegexMatcher, printer_matcher printer.PrinterMatcher, path string, mut rdr io.Reader) !SearchResult {
-		matcher_ref := regex.RegexMatcherRef.new(&matcher_)
+	fn (mut worker SearchWorker[W]) search_reader_with_regex_matcher(matcher_ &regex.RegexMatcher, printer_matcher printer.PrinterMatcher, path string, mut rdr io.Reader) !SearchResult {
+		matcher_ref := regex.RegexMatcherRef.new(matcher_)
 		return match worker.printer.kind {
 			.standard {
 				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)

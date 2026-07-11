@@ -1,2950 +1,2976 @@
 module meta
 
 // Generated from regex-syntax 0.8.8 Unicode 16.0.0 CASE_FOLDING_SIMPLE.
+struct UnicodeSimpleCase {
+	one rune
+	two rune
+	three rune
+	len u8
+}
+
+@[inline]
+fn unicode_simple_case(value rune) UnicodeSimpleCase {
+	match u32(value) {
+		0x41 { return UnicodeSimpleCase{one: 0x61, len: 1} }
+		0x42 { return UnicodeSimpleCase{one: 0x62, len: 1} }
+		0x43 { return UnicodeSimpleCase{one: 0x63, len: 1} }
+		0x44 { return UnicodeSimpleCase{one: 0x64, len: 1} }
+		0x45 { return UnicodeSimpleCase{one: 0x65, len: 1} }
+		0x46 { return UnicodeSimpleCase{one: 0x66, len: 1} }
+		0x47 { return UnicodeSimpleCase{one: 0x67, len: 1} }
+		0x48 { return UnicodeSimpleCase{one: 0x68, len: 1} }
+		0x49 { return UnicodeSimpleCase{one: 0x69, len: 1} }
+		0x4a { return UnicodeSimpleCase{one: 0x6a, len: 1} }
+		0x4b { return UnicodeSimpleCase{one: 0x6b, two: 0x212a, len: 2} }
+		0x4c { return UnicodeSimpleCase{one: 0x6c, len: 1} }
+		0x4d { return UnicodeSimpleCase{one: 0x6d, len: 1} }
+		0x4e { return UnicodeSimpleCase{one: 0x6e, len: 1} }
+		0x4f { return UnicodeSimpleCase{one: 0x6f, len: 1} }
+		0x50 { return UnicodeSimpleCase{one: 0x70, len: 1} }
+		0x51 { return UnicodeSimpleCase{one: 0x71, len: 1} }
+		0x52 { return UnicodeSimpleCase{one: 0x72, len: 1} }
+		0x53 { return UnicodeSimpleCase{one: 0x73, two: 0x17f, len: 2} }
+		0x54 { return UnicodeSimpleCase{one: 0x74, len: 1} }
+		0x55 { return UnicodeSimpleCase{one: 0x75, len: 1} }
+		0x56 { return UnicodeSimpleCase{one: 0x76, len: 1} }
+		0x57 { return UnicodeSimpleCase{one: 0x77, len: 1} }
+		0x58 { return UnicodeSimpleCase{one: 0x78, len: 1} }
+		0x59 { return UnicodeSimpleCase{one: 0x79, len: 1} }
+		0x5a { return UnicodeSimpleCase{one: 0x7a, len: 1} }
+		0x61 { return UnicodeSimpleCase{one: 0x41, len: 1} }
+		0x62 { return UnicodeSimpleCase{one: 0x42, len: 1} }
+		0x63 { return UnicodeSimpleCase{one: 0x43, len: 1} }
+		0x64 { return UnicodeSimpleCase{one: 0x44, len: 1} }
+		0x65 { return UnicodeSimpleCase{one: 0x45, len: 1} }
+		0x66 { return UnicodeSimpleCase{one: 0x46, len: 1} }
+		0x67 { return UnicodeSimpleCase{one: 0x47, len: 1} }
+		0x68 { return UnicodeSimpleCase{one: 0x48, len: 1} }
+		0x69 { return UnicodeSimpleCase{one: 0x49, len: 1} }
+		0x6a { return UnicodeSimpleCase{one: 0x4a, len: 1} }
+		0x6b { return UnicodeSimpleCase{one: 0x4b, two: 0x212a, len: 2} }
+		0x6c { return UnicodeSimpleCase{one: 0x4c, len: 1} }
+		0x6d { return UnicodeSimpleCase{one: 0x4d, len: 1} }
+		0x6e { return UnicodeSimpleCase{one: 0x4e, len: 1} }
+		0x6f { return UnicodeSimpleCase{one: 0x4f, len: 1} }
+		0x70 { return UnicodeSimpleCase{one: 0x50, len: 1} }
+		0x71 { return UnicodeSimpleCase{one: 0x51, len: 1} }
+		0x72 { return UnicodeSimpleCase{one: 0x52, len: 1} }
+		0x73 { return UnicodeSimpleCase{one: 0x53, two: 0x17f, len: 2} }
+		0x74 { return UnicodeSimpleCase{one: 0x54, len: 1} }
+		0x75 { return UnicodeSimpleCase{one: 0x55, len: 1} }
+		0x76 { return UnicodeSimpleCase{one: 0x56, len: 1} }
+		0x77 { return UnicodeSimpleCase{one: 0x57, len: 1} }
+		0x78 { return UnicodeSimpleCase{one: 0x58, len: 1} }
+		0x79 { return UnicodeSimpleCase{one: 0x59, len: 1} }
+		0x7a { return UnicodeSimpleCase{one: 0x5a, len: 1} }
+		0xb5 { return UnicodeSimpleCase{one: 0x39c, two: 0x3bc, len: 2} }
+		0xc0 { return UnicodeSimpleCase{one: 0xe0, len: 1} }
+		0xc1 { return UnicodeSimpleCase{one: 0xe1, len: 1} }
+		0xc2 { return UnicodeSimpleCase{one: 0xe2, len: 1} }
+		0xc3 { return UnicodeSimpleCase{one: 0xe3, len: 1} }
+		0xc4 { return UnicodeSimpleCase{one: 0xe4, len: 1} }
+		0xc5 { return UnicodeSimpleCase{one: 0xe5, two: 0x212b, len: 2} }
+		0xc6 { return UnicodeSimpleCase{one: 0xe6, len: 1} }
+		0xc7 { return UnicodeSimpleCase{one: 0xe7, len: 1} }
+		0xc8 { return UnicodeSimpleCase{one: 0xe8, len: 1} }
+		0xc9 { return UnicodeSimpleCase{one: 0xe9, len: 1} }
+		0xca { return UnicodeSimpleCase{one: 0xea, len: 1} }
+		0xcb { return UnicodeSimpleCase{one: 0xeb, len: 1} }
+		0xcc { return UnicodeSimpleCase{one: 0xec, len: 1} }
+		0xcd { return UnicodeSimpleCase{one: 0xed, len: 1} }
+		0xce { return UnicodeSimpleCase{one: 0xee, len: 1} }
+		0xcf { return UnicodeSimpleCase{one: 0xef, len: 1} }
+		0xd0 { return UnicodeSimpleCase{one: 0xf0, len: 1} }
+		0xd1 { return UnicodeSimpleCase{one: 0xf1, len: 1} }
+		0xd2 { return UnicodeSimpleCase{one: 0xf2, len: 1} }
+		0xd3 { return UnicodeSimpleCase{one: 0xf3, len: 1} }
+		0xd4 { return UnicodeSimpleCase{one: 0xf4, len: 1} }
+		0xd5 { return UnicodeSimpleCase{one: 0xf5, len: 1} }
+		0xd6 { return UnicodeSimpleCase{one: 0xf6, len: 1} }
+		0xd8 { return UnicodeSimpleCase{one: 0xf8, len: 1} }
+		0xd9 { return UnicodeSimpleCase{one: 0xf9, len: 1} }
+		0xda { return UnicodeSimpleCase{one: 0xfa, len: 1} }
+		0xdb { return UnicodeSimpleCase{one: 0xfb, len: 1} }
+		0xdc { return UnicodeSimpleCase{one: 0xfc, len: 1} }
+		0xdd { return UnicodeSimpleCase{one: 0xfd, len: 1} }
+		0xde { return UnicodeSimpleCase{one: 0xfe, len: 1} }
+		0xdf { return UnicodeSimpleCase{one: 0x1e9e, len: 1} }
+		0xe0 { return UnicodeSimpleCase{one: 0xc0, len: 1} }
+		0xe1 { return UnicodeSimpleCase{one: 0xc1, len: 1} }
+		0xe2 { return UnicodeSimpleCase{one: 0xc2, len: 1} }
+		0xe3 { return UnicodeSimpleCase{one: 0xc3, len: 1} }
+		0xe4 { return UnicodeSimpleCase{one: 0xc4, len: 1} }
+		0xe5 { return UnicodeSimpleCase{one: 0xc5, two: 0x212b, len: 2} }
+		0xe6 { return UnicodeSimpleCase{one: 0xc6, len: 1} }
+		0xe7 { return UnicodeSimpleCase{one: 0xc7, len: 1} }
+		0xe8 { return UnicodeSimpleCase{one: 0xc8, len: 1} }
+		0xe9 { return UnicodeSimpleCase{one: 0xc9, len: 1} }
+		0xea { return UnicodeSimpleCase{one: 0xca, len: 1} }
+		0xeb { return UnicodeSimpleCase{one: 0xcb, len: 1} }
+		0xec { return UnicodeSimpleCase{one: 0xcc, len: 1} }
+		0xed { return UnicodeSimpleCase{one: 0xcd, len: 1} }
+		0xee { return UnicodeSimpleCase{one: 0xce, len: 1} }
+		0xef { return UnicodeSimpleCase{one: 0xcf, len: 1} }
+		0xf0 { return UnicodeSimpleCase{one: 0xd0, len: 1} }
+		0xf1 { return UnicodeSimpleCase{one: 0xd1, len: 1} }
+		0xf2 { return UnicodeSimpleCase{one: 0xd2, len: 1} }
+		0xf3 { return UnicodeSimpleCase{one: 0xd3, len: 1} }
+		0xf4 { return UnicodeSimpleCase{one: 0xd4, len: 1} }
+		0xf5 { return UnicodeSimpleCase{one: 0xd5, len: 1} }
+		0xf6 { return UnicodeSimpleCase{one: 0xd6, len: 1} }
+		0xf8 { return UnicodeSimpleCase{one: 0xd8, len: 1} }
+		0xf9 { return UnicodeSimpleCase{one: 0xd9, len: 1} }
+		0xfa { return UnicodeSimpleCase{one: 0xda, len: 1} }
+		0xfb { return UnicodeSimpleCase{one: 0xdb, len: 1} }
+		0xfc { return UnicodeSimpleCase{one: 0xdc, len: 1} }
+		0xfd { return UnicodeSimpleCase{one: 0xdd, len: 1} }
+		0xfe { return UnicodeSimpleCase{one: 0xde, len: 1} }
+		0xff { return UnicodeSimpleCase{one: 0x178, len: 1} }
+		0x100 { return UnicodeSimpleCase{one: 0x101, len: 1} }
+		0x101 { return UnicodeSimpleCase{one: 0x100, len: 1} }
+		0x102 { return UnicodeSimpleCase{one: 0x103, len: 1} }
+		0x103 { return UnicodeSimpleCase{one: 0x102, len: 1} }
+		0x104 { return UnicodeSimpleCase{one: 0x105, len: 1} }
+		0x105 { return UnicodeSimpleCase{one: 0x104, len: 1} }
+		0x106 { return UnicodeSimpleCase{one: 0x107, len: 1} }
+		0x107 { return UnicodeSimpleCase{one: 0x106, len: 1} }
+		0x108 { return UnicodeSimpleCase{one: 0x109, len: 1} }
+		0x109 { return UnicodeSimpleCase{one: 0x108, len: 1} }
+		0x10a { return UnicodeSimpleCase{one: 0x10b, len: 1} }
+		0x10b { return UnicodeSimpleCase{one: 0x10a, len: 1} }
+		0x10c { return UnicodeSimpleCase{one: 0x10d, len: 1} }
+		0x10d { return UnicodeSimpleCase{one: 0x10c, len: 1} }
+		0x10e { return UnicodeSimpleCase{one: 0x10f, len: 1} }
+		0x10f { return UnicodeSimpleCase{one: 0x10e, len: 1} }
+		0x110 { return UnicodeSimpleCase{one: 0x111, len: 1} }
+		0x111 { return UnicodeSimpleCase{one: 0x110, len: 1} }
+		0x112 { return UnicodeSimpleCase{one: 0x113, len: 1} }
+		0x113 { return UnicodeSimpleCase{one: 0x112, len: 1} }
+		0x114 { return UnicodeSimpleCase{one: 0x115, len: 1} }
+		0x115 { return UnicodeSimpleCase{one: 0x114, len: 1} }
+		0x116 { return UnicodeSimpleCase{one: 0x117, len: 1} }
+		0x117 { return UnicodeSimpleCase{one: 0x116, len: 1} }
+		0x118 { return UnicodeSimpleCase{one: 0x119, len: 1} }
+		0x119 { return UnicodeSimpleCase{one: 0x118, len: 1} }
+		0x11a { return UnicodeSimpleCase{one: 0x11b, len: 1} }
+		0x11b { return UnicodeSimpleCase{one: 0x11a, len: 1} }
+		0x11c { return UnicodeSimpleCase{one: 0x11d, len: 1} }
+		0x11d { return UnicodeSimpleCase{one: 0x11c, len: 1} }
+		0x11e { return UnicodeSimpleCase{one: 0x11f, len: 1} }
+		0x11f { return UnicodeSimpleCase{one: 0x11e, len: 1} }
+		0x120 { return UnicodeSimpleCase{one: 0x121, len: 1} }
+		0x121 { return UnicodeSimpleCase{one: 0x120, len: 1} }
+		0x122 { return UnicodeSimpleCase{one: 0x123, len: 1} }
+		0x123 { return UnicodeSimpleCase{one: 0x122, len: 1} }
+		0x124 { return UnicodeSimpleCase{one: 0x125, len: 1} }
+		0x125 { return UnicodeSimpleCase{one: 0x124, len: 1} }
+		0x126 { return UnicodeSimpleCase{one: 0x127, len: 1} }
+		0x127 { return UnicodeSimpleCase{one: 0x126, len: 1} }
+		0x128 { return UnicodeSimpleCase{one: 0x129, len: 1} }
+		0x129 { return UnicodeSimpleCase{one: 0x128, len: 1} }
+		0x12a { return UnicodeSimpleCase{one: 0x12b, len: 1} }
+		0x12b { return UnicodeSimpleCase{one: 0x12a, len: 1} }
+		0x12c { return UnicodeSimpleCase{one: 0x12d, len: 1} }
+		0x12d { return UnicodeSimpleCase{one: 0x12c, len: 1} }
+		0x12e { return UnicodeSimpleCase{one: 0x12f, len: 1} }
+		0x12f { return UnicodeSimpleCase{one: 0x12e, len: 1} }
+		0x132 { return UnicodeSimpleCase{one: 0x133, len: 1} }
+		0x133 { return UnicodeSimpleCase{one: 0x132, len: 1} }
+		0x134 { return UnicodeSimpleCase{one: 0x135, len: 1} }
+		0x135 { return UnicodeSimpleCase{one: 0x134, len: 1} }
+		0x136 { return UnicodeSimpleCase{one: 0x137, len: 1} }
+		0x137 { return UnicodeSimpleCase{one: 0x136, len: 1} }
+		0x139 { return UnicodeSimpleCase{one: 0x13a, len: 1} }
+		0x13a { return UnicodeSimpleCase{one: 0x139, len: 1} }
+		0x13b { return UnicodeSimpleCase{one: 0x13c, len: 1} }
+		0x13c { return UnicodeSimpleCase{one: 0x13b, len: 1} }
+		0x13d { return UnicodeSimpleCase{one: 0x13e, len: 1} }
+		0x13e { return UnicodeSimpleCase{one: 0x13d, len: 1} }
+		0x13f { return UnicodeSimpleCase{one: 0x140, len: 1} }
+		0x140 { return UnicodeSimpleCase{one: 0x13f, len: 1} }
+		0x141 { return UnicodeSimpleCase{one: 0x142, len: 1} }
+		0x142 { return UnicodeSimpleCase{one: 0x141, len: 1} }
+		0x143 { return UnicodeSimpleCase{one: 0x144, len: 1} }
+		0x144 { return UnicodeSimpleCase{one: 0x143, len: 1} }
+		0x145 { return UnicodeSimpleCase{one: 0x146, len: 1} }
+		0x146 { return UnicodeSimpleCase{one: 0x145, len: 1} }
+		0x147 { return UnicodeSimpleCase{one: 0x148, len: 1} }
+		0x148 { return UnicodeSimpleCase{one: 0x147, len: 1} }
+		0x14a { return UnicodeSimpleCase{one: 0x14b, len: 1} }
+		0x14b { return UnicodeSimpleCase{one: 0x14a, len: 1} }
+		0x14c { return UnicodeSimpleCase{one: 0x14d, len: 1} }
+		0x14d { return UnicodeSimpleCase{one: 0x14c, len: 1} }
+		0x14e { return UnicodeSimpleCase{one: 0x14f, len: 1} }
+		0x14f { return UnicodeSimpleCase{one: 0x14e, len: 1} }
+		0x150 { return UnicodeSimpleCase{one: 0x151, len: 1} }
+		0x151 { return UnicodeSimpleCase{one: 0x150, len: 1} }
+		0x152 { return UnicodeSimpleCase{one: 0x153, len: 1} }
+		0x153 { return UnicodeSimpleCase{one: 0x152, len: 1} }
+		0x154 { return UnicodeSimpleCase{one: 0x155, len: 1} }
+		0x155 { return UnicodeSimpleCase{one: 0x154, len: 1} }
+		0x156 { return UnicodeSimpleCase{one: 0x157, len: 1} }
+		0x157 { return UnicodeSimpleCase{one: 0x156, len: 1} }
+		0x158 { return UnicodeSimpleCase{one: 0x159, len: 1} }
+		0x159 { return UnicodeSimpleCase{one: 0x158, len: 1} }
+		0x15a { return UnicodeSimpleCase{one: 0x15b, len: 1} }
+		0x15b { return UnicodeSimpleCase{one: 0x15a, len: 1} }
+		0x15c { return UnicodeSimpleCase{one: 0x15d, len: 1} }
+		0x15d { return UnicodeSimpleCase{one: 0x15c, len: 1} }
+		0x15e { return UnicodeSimpleCase{one: 0x15f, len: 1} }
+		0x15f { return UnicodeSimpleCase{one: 0x15e, len: 1} }
+		0x160 { return UnicodeSimpleCase{one: 0x161, len: 1} }
+		0x161 { return UnicodeSimpleCase{one: 0x160, len: 1} }
+		0x162 { return UnicodeSimpleCase{one: 0x163, len: 1} }
+		0x163 { return UnicodeSimpleCase{one: 0x162, len: 1} }
+		0x164 { return UnicodeSimpleCase{one: 0x165, len: 1} }
+		0x165 { return UnicodeSimpleCase{one: 0x164, len: 1} }
+		0x166 { return UnicodeSimpleCase{one: 0x167, len: 1} }
+		0x167 { return UnicodeSimpleCase{one: 0x166, len: 1} }
+		0x168 { return UnicodeSimpleCase{one: 0x169, len: 1} }
+		0x169 { return UnicodeSimpleCase{one: 0x168, len: 1} }
+		0x16a { return UnicodeSimpleCase{one: 0x16b, len: 1} }
+		0x16b { return UnicodeSimpleCase{one: 0x16a, len: 1} }
+		0x16c { return UnicodeSimpleCase{one: 0x16d, len: 1} }
+		0x16d { return UnicodeSimpleCase{one: 0x16c, len: 1} }
+		0x16e { return UnicodeSimpleCase{one: 0x16f, len: 1} }
+		0x16f { return UnicodeSimpleCase{one: 0x16e, len: 1} }
+		0x170 { return UnicodeSimpleCase{one: 0x171, len: 1} }
+		0x171 { return UnicodeSimpleCase{one: 0x170, len: 1} }
+		0x172 { return UnicodeSimpleCase{one: 0x173, len: 1} }
+		0x173 { return UnicodeSimpleCase{one: 0x172, len: 1} }
+		0x174 { return UnicodeSimpleCase{one: 0x175, len: 1} }
+		0x175 { return UnicodeSimpleCase{one: 0x174, len: 1} }
+		0x176 { return UnicodeSimpleCase{one: 0x177, len: 1} }
+		0x177 { return UnicodeSimpleCase{one: 0x176, len: 1} }
+		0x178 { return UnicodeSimpleCase{one: 0xff, len: 1} }
+		0x179 { return UnicodeSimpleCase{one: 0x17a, len: 1} }
+		0x17a { return UnicodeSimpleCase{one: 0x179, len: 1} }
+		0x17b { return UnicodeSimpleCase{one: 0x17c, len: 1} }
+		0x17c { return UnicodeSimpleCase{one: 0x17b, len: 1} }
+		0x17d { return UnicodeSimpleCase{one: 0x17e, len: 1} }
+		0x17e { return UnicodeSimpleCase{one: 0x17d, len: 1} }
+		0x17f { return UnicodeSimpleCase{one: 0x53, two: 0x73, len: 2} }
+		0x180 { return UnicodeSimpleCase{one: 0x243, len: 1} }
+		0x181 { return UnicodeSimpleCase{one: 0x253, len: 1} }
+		0x182 { return UnicodeSimpleCase{one: 0x183, len: 1} }
+		0x183 { return UnicodeSimpleCase{one: 0x182, len: 1} }
+		0x184 { return UnicodeSimpleCase{one: 0x185, len: 1} }
+		0x185 { return UnicodeSimpleCase{one: 0x184, len: 1} }
+		0x186 { return UnicodeSimpleCase{one: 0x254, len: 1} }
+		0x187 { return UnicodeSimpleCase{one: 0x188, len: 1} }
+		0x188 { return UnicodeSimpleCase{one: 0x187, len: 1} }
+		0x189 { return UnicodeSimpleCase{one: 0x256, len: 1} }
+		0x18a { return UnicodeSimpleCase{one: 0x257, len: 1} }
+		0x18b { return UnicodeSimpleCase{one: 0x18c, len: 1} }
+		0x18c { return UnicodeSimpleCase{one: 0x18b, len: 1} }
+		0x18e { return UnicodeSimpleCase{one: 0x1dd, len: 1} }
+		0x18f { return UnicodeSimpleCase{one: 0x259, len: 1} }
+		0x190 { return UnicodeSimpleCase{one: 0x25b, len: 1} }
+		0x191 { return UnicodeSimpleCase{one: 0x192, len: 1} }
+		0x192 { return UnicodeSimpleCase{one: 0x191, len: 1} }
+		0x193 { return UnicodeSimpleCase{one: 0x260, len: 1} }
+		0x194 { return UnicodeSimpleCase{one: 0x263, len: 1} }
+		0x195 { return UnicodeSimpleCase{one: 0x1f6, len: 1} }
+		0x196 { return UnicodeSimpleCase{one: 0x269, len: 1} }
+		0x197 { return UnicodeSimpleCase{one: 0x268, len: 1} }
+		0x198 { return UnicodeSimpleCase{one: 0x199, len: 1} }
+		0x199 { return UnicodeSimpleCase{one: 0x198, len: 1} }
+		0x19a { return UnicodeSimpleCase{one: 0x23d, len: 1} }
+		0x19b { return UnicodeSimpleCase{one: 0xa7dc, len: 1} }
+		0x19c { return UnicodeSimpleCase{one: 0x26f, len: 1} }
+		0x19d { return UnicodeSimpleCase{one: 0x272, len: 1} }
+		0x19e { return UnicodeSimpleCase{one: 0x220, len: 1} }
+		0x19f { return UnicodeSimpleCase{one: 0x275, len: 1} }
+		0x1a0 { return UnicodeSimpleCase{one: 0x1a1, len: 1} }
+		0x1a1 { return UnicodeSimpleCase{one: 0x1a0, len: 1} }
+		0x1a2 { return UnicodeSimpleCase{one: 0x1a3, len: 1} }
+		0x1a3 { return UnicodeSimpleCase{one: 0x1a2, len: 1} }
+		0x1a4 { return UnicodeSimpleCase{one: 0x1a5, len: 1} }
+		0x1a5 { return UnicodeSimpleCase{one: 0x1a4, len: 1} }
+		0x1a6 { return UnicodeSimpleCase{one: 0x280, len: 1} }
+		0x1a7 { return UnicodeSimpleCase{one: 0x1a8, len: 1} }
+		0x1a8 { return UnicodeSimpleCase{one: 0x1a7, len: 1} }
+		0x1a9 { return UnicodeSimpleCase{one: 0x283, len: 1} }
+		0x1ac { return UnicodeSimpleCase{one: 0x1ad, len: 1} }
+		0x1ad { return UnicodeSimpleCase{one: 0x1ac, len: 1} }
+		0x1ae { return UnicodeSimpleCase{one: 0x288, len: 1} }
+		0x1af { return UnicodeSimpleCase{one: 0x1b0, len: 1} }
+		0x1b0 { return UnicodeSimpleCase{one: 0x1af, len: 1} }
+		0x1b1 { return UnicodeSimpleCase{one: 0x28a, len: 1} }
+		0x1b2 { return UnicodeSimpleCase{one: 0x28b, len: 1} }
+		0x1b3 { return UnicodeSimpleCase{one: 0x1b4, len: 1} }
+		0x1b4 { return UnicodeSimpleCase{one: 0x1b3, len: 1} }
+		0x1b5 { return UnicodeSimpleCase{one: 0x1b6, len: 1} }
+		0x1b6 { return UnicodeSimpleCase{one: 0x1b5, len: 1} }
+		0x1b7 { return UnicodeSimpleCase{one: 0x292, len: 1} }
+		0x1b8 { return UnicodeSimpleCase{one: 0x1b9, len: 1} }
+		0x1b9 { return UnicodeSimpleCase{one: 0x1b8, len: 1} }
+		0x1bc { return UnicodeSimpleCase{one: 0x1bd, len: 1} }
+		0x1bd { return UnicodeSimpleCase{one: 0x1bc, len: 1} }
+		0x1bf { return UnicodeSimpleCase{one: 0x1f7, len: 1} }
+		0x1c4 { return UnicodeSimpleCase{one: 0x1c5, two: 0x1c6, len: 2} }
+		0x1c5 { return UnicodeSimpleCase{one: 0x1c4, two: 0x1c6, len: 2} }
+		0x1c6 { return UnicodeSimpleCase{one: 0x1c4, two: 0x1c5, len: 2} }
+		0x1c7 { return UnicodeSimpleCase{one: 0x1c8, two: 0x1c9, len: 2} }
+		0x1c8 { return UnicodeSimpleCase{one: 0x1c7, two: 0x1c9, len: 2} }
+		0x1c9 { return UnicodeSimpleCase{one: 0x1c7, two: 0x1c8, len: 2} }
+		0x1ca { return UnicodeSimpleCase{one: 0x1cb, two: 0x1cc, len: 2} }
+		0x1cb { return UnicodeSimpleCase{one: 0x1ca, two: 0x1cc, len: 2} }
+		0x1cc { return UnicodeSimpleCase{one: 0x1ca, two: 0x1cb, len: 2} }
+		0x1cd { return UnicodeSimpleCase{one: 0x1ce, len: 1} }
+		0x1ce { return UnicodeSimpleCase{one: 0x1cd, len: 1} }
+		0x1cf { return UnicodeSimpleCase{one: 0x1d0, len: 1} }
+		0x1d0 { return UnicodeSimpleCase{one: 0x1cf, len: 1} }
+		0x1d1 { return UnicodeSimpleCase{one: 0x1d2, len: 1} }
+		0x1d2 { return UnicodeSimpleCase{one: 0x1d1, len: 1} }
+		0x1d3 { return UnicodeSimpleCase{one: 0x1d4, len: 1} }
+		0x1d4 { return UnicodeSimpleCase{one: 0x1d3, len: 1} }
+		0x1d5 { return UnicodeSimpleCase{one: 0x1d6, len: 1} }
+		0x1d6 { return UnicodeSimpleCase{one: 0x1d5, len: 1} }
+		0x1d7 { return UnicodeSimpleCase{one: 0x1d8, len: 1} }
+		0x1d8 { return UnicodeSimpleCase{one: 0x1d7, len: 1} }
+		0x1d9 { return UnicodeSimpleCase{one: 0x1da, len: 1} }
+		0x1da { return UnicodeSimpleCase{one: 0x1d9, len: 1} }
+		0x1db { return UnicodeSimpleCase{one: 0x1dc, len: 1} }
+		0x1dc { return UnicodeSimpleCase{one: 0x1db, len: 1} }
+		0x1dd { return UnicodeSimpleCase{one: 0x18e, len: 1} }
+		0x1de { return UnicodeSimpleCase{one: 0x1df, len: 1} }
+		0x1df { return UnicodeSimpleCase{one: 0x1de, len: 1} }
+		0x1e0 { return UnicodeSimpleCase{one: 0x1e1, len: 1} }
+		0x1e1 { return UnicodeSimpleCase{one: 0x1e0, len: 1} }
+		0x1e2 { return UnicodeSimpleCase{one: 0x1e3, len: 1} }
+		0x1e3 { return UnicodeSimpleCase{one: 0x1e2, len: 1} }
+		0x1e4 { return UnicodeSimpleCase{one: 0x1e5, len: 1} }
+		0x1e5 { return UnicodeSimpleCase{one: 0x1e4, len: 1} }
+		0x1e6 { return UnicodeSimpleCase{one: 0x1e7, len: 1} }
+		0x1e7 { return UnicodeSimpleCase{one: 0x1e6, len: 1} }
+		0x1e8 { return UnicodeSimpleCase{one: 0x1e9, len: 1} }
+		0x1e9 { return UnicodeSimpleCase{one: 0x1e8, len: 1} }
+		0x1ea { return UnicodeSimpleCase{one: 0x1eb, len: 1} }
+		0x1eb { return UnicodeSimpleCase{one: 0x1ea, len: 1} }
+		0x1ec { return UnicodeSimpleCase{one: 0x1ed, len: 1} }
+		0x1ed { return UnicodeSimpleCase{one: 0x1ec, len: 1} }
+		0x1ee { return UnicodeSimpleCase{one: 0x1ef, len: 1} }
+		0x1ef { return UnicodeSimpleCase{one: 0x1ee, len: 1} }
+		0x1f1 { return UnicodeSimpleCase{one: 0x1f2, two: 0x1f3, len: 2} }
+		0x1f2 { return UnicodeSimpleCase{one: 0x1f1, two: 0x1f3, len: 2} }
+		0x1f3 { return UnicodeSimpleCase{one: 0x1f1, two: 0x1f2, len: 2} }
+		0x1f4 { return UnicodeSimpleCase{one: 0x1f5, len: 1} }
+		0x1f5 { return UnicodeSimpleCase{one: 0x1f4, len: 1} }
+		0x1f6 { return UnicodeSimpleCase{one: 0x195, len: 1} }
+		0x1f7 { return UnicodeSimpleCase{one: 0x1bf, len: 1} }
+		0x1f8 { return UnicodeSimpleCase{one: 0x1f9, len: 1} }
+		0x1f9 { return UnicodeSimpleCase{one: 0x1f8, len: 1} }
+		0x1fa { return UnicodeSimpleCase{one: 0x1fb, len: 1} }
+		0x1fb { return UnicodeSimpleCase{one: 0x1fa, len: 1} }
+		0x1fc { return UnicodeSimpleCase{one: 0x1fd, len: 1} }
+		0x1fd { return UnicodeSimpleCase{one: 0x1fc, len: 1} }
+		0x1fe { return UnicodeSimpleCase{one: 0x1ff, len: 1} }
+		0x1ff { return UnicodeSimpleCase{one: 0x1fe, len: 1} }
+		0x200 { return UnicodeSimpleCase{one: 0x201, len: 1} }
+		0x201 { return UnicodeSimpleCase{one: 0x200, len: 1} }
+		0x202 { return UnicodeSimpleCase{one: 0x203, len: 1} }
+		0x203 { return UnicodeSimpleCase{one: 0x202, len: 1} }
+		0x204 { return UnicodeSimpleCase{one: 0x205, len: 1} }
+		0x205 { return UnicodeSimpleCase{one: 0x204, len: 1} }
+		0x206 { return UnicodeSimpleCase{one: 0x207, len: 1} }
+		0x207 { return UnicodeSimpleCase{one: 0x206, len: 1} }
+		0x208 { return UnicodeSimpleCase{one: 0x209, len: 1} }
+		0x209 { return UnicodeSimpleCase{one: 0x208, len: 1} }
+		0x20a { return UnicodeSimpleCase{one: 0x20b, len: 1} }
+		0x20b { return UnicodeSimpleCase{one: 0x20a, len: 1} }
+		0x20c { return UnicodeSimpleCase{one: 0x20d, len: 1} }
+		0x20d { return UnicodeSimpleCase{one: 0x20c, len: 1} }
+		0x20e { return UnicodeSimpleCase{one: 0x20f, len: 1} }
+		0x20f { return UnicodeSimpleCase{one: 0x20e, len: 1} }
+		0x210 { return UnicodeSimpleCase{one: 0x211, len: 1} }
+		0x211 { return UnicodeSimpleCase{one: 0x210, len: 1} }
+		0x212 { return UnicodeSimpleCase{one: 0x213, len: 1} }
+		0x213 { return UnicodeSimpleCase{one: 0x212, len: 1} }
+		0x214 { return UnicodeSimpleCase{one: 0x215, len: 1} }
+		0x215 { return UnicodeSimpleCase{one: 0x214, len: 1} }
+		0x216 { return UnicodeSimpleCase{one: 0x217, len: 1} }
+		0x217 { return UnicodeSimpleCase{one: 0x216, len: 1} }
+		0x218 { return UnicodeSimpleCase{one: 0x219, len: 1} }
+		0x219 { return UnicodeSimpleCase{one: 0x218, len: 1} }
+		0x21a { return UnicodeSimpleCase{one: 0x21b, len: 1} }
+		0x21b { return UnicodeSimpleCase{one: 0x21a, len: 1} }
+		0x21c { return UnicodeSimpleCase{one: 0x21d, len: 1} }
+		0x21d { return UnicodeSimpleCase{one: 0x21c, len: 1} }
+		0x21e { return UnicodeSimpleCase{one: 0x21f, len: 1} }
+		0x21f { return UnicodeSimpleCase{one: 0x21e, len: 1} }
+		0x220 { return UnicodeSimpleCase{one: 0x19e, len: 1} }
+		0x222 { return UnicodeSimpleCase{one: 0x223, len: 1} }
+		0x223 { return UnicodeSimpleCase{one: 0x222, len: 1} }
+		0x224 { return UnicodeSimpleCase{one: 0x225, len: 1} }
+		0x225 { return UnicodeSimpleCase{one: 0x224, len: 1} }
+		0x226 { return UnicodeSimpleCase{one: 0x227, len: 1} }
+		0x227 { return UnicodeSimpleCase{one: 0x226, len: 1} }
+		0x228 { return UnicodeSimpleCase{one: 0x229, len: 1} }
+		0x229 { return UnicodeSimpleCase{one: 0x228, len: 1} }
+		0x22a { return UnicodeSimpleCase{one: 0x22b, len: 1} }
+		0x22b { return UnicodeSimpleCase{one: 0x22a, len: 1} }
+		0x22c { return UnicodeSimpleCase{one: 0x22d, len: 1} }
+		0x22d { return UnicodeSimpleCase{one: 0x22c, len: 1} }
+		0x22e { return UnicodeSimpleCase{one: 0x22f, len: 1} }
+		0x22f { return UnicodeSimpleCase{one: 0x22e, len: 1} }
+		0x230 { return UnicodeSimpleCase{one: 0x231, len: 1} }
+		0x231 { return UnicodeSimpleCase{one: 0x230, len: 1} }
+		0x232 { return UnicodeSimpleCase{one: 0x233, len: 1} }
+		0x233 { return UnicodeSimpleCase{one: 0x232, len: 1} }
+		0x23a { return UnicodeSimpleCase{one: 0x2c65, len: 1} }
+		0x23b { return UnicodeSimpleCase{one: 0x23c, len: 1} }
+		0x23c { return UnicodeSimpleCase{one: 0x23b, len: 1} }
+		0x23d { return UnicodeSimpleCase{one: 0x19a, len: 1} }
+		0x23e { return UnicodeSimpleCase{one: 0x2c66, len: 1} }
+		0x23f { return UnicodeSimpleCase{one: 0x2c7e, len: 1} }
+		0x240 { return UnicodeSimpleCase{one: 0x2c7f, len: 1} }
+		0x241 { return UnicodeSimpleCase{one: 0x242, len: 1} }
+		0x242 { return UnicodeSimpleCase{one: 0x241, len: 1} }
+		0x243 { return UnicodeSimpleCase{one: 0x180, len: 1} }
+		0x244 { return UnicodeSimpleCase{one: 0x289, len: 1} }
+		0x245 { return UnicodeSimpleCase{one: 0x28c, len: 1} }
+		0x246 { return UnicodeSimpleCase{one: 0x247, len: 1} }
+		0x247 { return UnicodeSimpleCase{one: 0x246, len: 1} }
+		0x248 { return UnicodeSimpleCase{one: 0x249, len: 1} }
+		0x249 { return UnicodeSimpleCase{one: 0x248, len: 1} }
+		0x24a { return UnicodeSimpleCase{one: 0x24b, len: 1} }
+		0x24b { return UnicodeSimpleCase{one: 0x24a, len: 1} }
+		0x24c { return UnicodeSimpleCase{one: 0x24d, len: 1} }
+		0x24d { return UnicodeSimpleCase{one: 0x24c, len: 1} }
+		0x24e { return UnicodeSimpleCase{one: 0x24f, len: 1} }
+		0x24f { return UnicodeSimpleCase{one: 0x24e, len: 1} }
+		0x250 { return UnicodeSimpleCase{one: 0x2c6f, len: 1} }
+		0x251 { return UnicodeSimpleCase{one: 0x2c6d, len: 1} }
+		0x252 { return UnicodeSimpleCase{one: 0x2c70, len: 1} }
+		0x253 { return UnicodeSimpleCase{one: 0x181, len: 1} }
+		0x254 { return UnicodeSimpleCase{one: 0x186, len: 1} }
+		0x256 { return UnicodeSimpleCase{one: 0x189, len: 1} }
+		0x257 { return UnicodeSimpleCase{one: 0x18a, len: 1} }
+		0x259 { return UnicodeSimpleCase{one: 0x18f, len: 1} }
+		0x25b { return UnicodeSimpleCase{one: 0x190, len: 1} }
+		0x25c { return UnicodeSimpleCase{one: 0xa7ab, len: 1} }
+		0x260 { return UnicodeSimpleCase{one: 0x193, len: 1} }
+		0x261 { return UnicodeSimpleCase{one: 0xa7ac, len: 1} }
+		0x263 { return UnicodeSimpleCase{one: 0x194, len: 1} }
+		0x264 { return UnicodeSimpleCase{one: 0xa7cb, len: 1} }
+		0x265 { return UnicodeSimpleCase{one: 0xa78d, len: 1} }
+		0x266 { return UnicodeSimpleCase{one: 0xa7aa, len: 1} }
+		0x268 { return UnicodeSimpleCase{one: 0x197, len: 1} }
+		0x269 { return UnicodeSimpleCase{one: 0x196, len: 1} }
+		0x26a { return UnicodeSimpleCase{one: 0xa7ae, len: 1} }
+		0x26b { return UnicodeSimpleCase{one: 0x2c62, len: 1} }
+		0x26c { return UnicodeSimpleCase{one: 0xa7ad, len: 1} }
+		0x26f { return UnicodeSimpleCase{one: 0x19c, len: 1} }
+		0x271 { return UnicodeSimpleCase{one: 0x2c6e, len: 1} }
+		0x272 { return UnicodeSimpleCase{one: 0x19d, len: 1} }
+		0x275 { return UnicodeSimpleCase{one: 0x19f, len: 1} }
+		0x27d { return UnicodeSimpleCase{one: 0x2c64, len: 1} }
+		0x280 { return UnicodeSimpleCase{one: 0x1a6, len: 1} }
+		0x282 { return UnicodeSimpleCase{one: 0xa7c5, len: 1} }
+		0x283 { return UnicodeSimpleCase{one: 0x1a9, len: 1} }
+		0x287 { return UnicodeSimpleCase{one: 0xa7b1, len: 1} }
+		0x288 { return UnicodeSimpleCase{one: 0x1ae, len: 1} }
+		0x289 { return UnicodeSimpleCase{one: 0x244, len: 1} }
+		0x28a { return UnicodeSimpleCase{one: 0x1b1, len: 1} }
+		0x28b { return UnicodeSimpleCase{one: 0x1b2, len: 1} }
+		0x28c { return UnicodeSimpleCase{one: 0x245, len: 1} }
+		0x292 { return UnicodeSimpleCase{one: 0x1b7, len: 1} }
+		0x29d { return UnicodeSimpleCase{one: 0xa7b2, len: 1} }
+		0x29e { return UnicodeSimpleCase{one: 0xa7b0, len: 1} }
+		0x345 { return UnicodeSimpleCase{one: 0x399, two: 0x3b9, three: 0x1fbe, len: 3} }
+		0x370 { return UnicodeSimpleCase{one: 0x371, len: 1} }
+		0x371 { return UnicodeSimpleCase{one: 0x370, len: 1} }
+		0x372 { return UnicodeSimpleCase{one: 0x373, len: 1} }
+		0x373 { return UnicodeSimpleCase{one: 0x372, len: 1} }
+		0x376 { return UnicodeSimpleCase{one: 0x377, len: 1} }
+		0x377 { return UnicodeSimpleCase{one: 0x376, len: 1} }
+		0x37b { return UnicodeSimpleCase{one: 0x3fd, len: 1} }
+		0x37c { return UnicodeSimpleCase{one: 0x3fe, len: 1} }
+		0x37d { return UnicodeSimpleCase{one: 0x3ff, len: 1} }
+		0x37f { return UnicodeSimpleCase{one: 0x3f3, len: 1} }
+		0x386 { return UnicodeSimpleCase{one: 0x3ac, len: 1} }
+		0x388 { return UnicodeSimpleCase{one: 0x3ad, len: 1} }
+		0x389 { return UnicodeSimpleCase{one: 0x3ae, len: 1} }
+		0x38a { return UnicodeSimpleCase{one: 0x3af, len: 1} }
+		0x38c { return UnicodeSimpleCase{one: 0x3cc, len: 1} }
+		0x38e { return UnicodeSimpleCase{one: 0x3cd, len: 1} }
+		0x38f { return UnicodeSimpleCase{one: 0x3ce, len: 1} }
+		0x390 { return UnicodeSimpleCase{one: 0x1fd3, len: 1} }
+		0x391 { return UnicodeSimpleCase{one: 0x3b1, len: 1} }
+		0x392 { return UnicodeSimpleCase{one: 0x3b2, two: 0x3d0, len: 2} }
+		0x393 { return UnicodeSimpleCase{one: 0x3b3, len: 1} }
+		0x394 { return UnicodeSimpleCase{one: 0x3b4, len: 1} }
+		0x395 { return UnicodeSimpleCase{one: 0x3b5, two: 0x3f5, len: 2} }
+		0x396 { return UnicodeSimpleCase{one: 0x3b6, len: 1} }
+		0x397 { return UnicodeSimpleCase{one: 0x3b7, len: 1} }
+		0x398 { return UnicodeSimpleCase{one: 0x3b8, two: 0x3d1, three: 0x3f4, len: 3} }
+		0x399 { return UnicodeSimpleCase{one: 0x345, two: 0x3b9, three: 0x1fbe, len: 3} }
+		0x39a { return UnicodeSimpleCase{one: 0x3ba, two: 0x3f0, len: 2} }
+		0x39b { return UnicodeSimpleCase{one: 0x3bb, len: 1} }
+		0x39c { return UnicodeSimpleCase{one: 0xb5, two: 0x3bc, len: 2} }
+		0x39d { return UnicodeSimpleCase{one: 0x3bd, len: 1} }
+		0x39e { return UnicodeSimpleCase{one: 0x3be, len: 1} }
+		0x39f { return UnicodeSimpleCase{one: 0x3bf, len: 1} }
+		0x3a0 { return UnicodeSimpleCase{one: 0x3c0, two: 0x3d6, len: 2} }
+		0x3a1 { return UnicodeSimpleCase{one: 0x3c1, two: 0x3f1, len: 2} }
+		0x3a3 { return UnicodeSimpleCase{one: 0x3c2, two: 0x3c3, len: 2} }
+		0x3a4 { return UnicodeSimpleCase{one: 0x3c4, len: 1} }
+		0x3a5 { return UnicodeSimpleCase{one: 0x3c5, len: 1} }
+		0x3a6 { return UnicodeSimpleCase{one: 0x3c6, two: 0x3d5, len: 2} }
+		0x3a7 { return UnicodeSimpleCase{one: 0x3c7, len: 1} }
+		0x3a8 { return UnicodeSimpleCase{one: 0x3c8, len: 1} }
+		0x3a9 { return UnicodeSimpleCase{one: 0x3c9, two: 0x2126, len: 2} }
+		0x3aa { return UnicodeSimpleCase{one: 0x3ca, len: 1} }
+		0x3ab { return UnicodeSimpleCase{one: 0x3cb, len: 1} }
+		0x3ac { return UnicodeSimpleCase{one: 0x386, len: 1} }
+		0x3ad { return UnicodeSimpleCase{one: 0x388, len: 1} }
+		0x3ae { return UnicodeSimpleCase{one: 0x389, len: 1} }
+		0x3af { return UnicodeSimpleCase{one: 0x38a, len: 1} }
+		0x3b0 { return UnicodeSimpleCase{one: 0x1fe3, len: 1} }
+		0x3b1 { return UnicodeSimpleCase{one: 0x391, len: 1} }
+		0x3b2 { return UnicodeSimpleCase{one: 0x392, two: 0x3d0, len: 2} }
+		0x3b3 { return UnicodeSimpleCase{one: 0x393, len: 1} }
+		0x3b4 { return UnicodeSimpleCase{one: 0x394, len: 1} }
+		0x3b5 { return UnicodeSimpleCase{one: 0x395, two: 0x3f5, len: 2} }
+		0x3b6 { return UnicodeSimpleCase{one: 0x396, len: 1} }
+		0x3b7 { return UnicodeSimpleCase{one: 0x397, len: 1} }
+		0x3b8 { return UnicodeSimpleCase{one: 0x398, two: 0x3d1, three: 0x3f4, len: 3} }
+		0x3b9 { return UnicodeSimpleCase{one: 0x345, two: 0x399, three: 0x1fbe, len: 3} }
+		0x3ba { return UnicodeSimpleCase{one: 0x39a, two: 0x3f0, len: 2} }
+		0x3bb { return UnicodeSimpleCase{one: 0x39b, len: 1} }
+		0x3bc { return UnicodeSimpleCase{one: 0xb5, two: 0x39c, len: 2} }
+		0x3bd { return UnicodeSimpleCase{one: 0x39d, len: 1} }
+		0x3be { return UnicodeSimpleCase{one: 0x39e, len: 1} }
+		0x3bf { return UnicodeSimpleCase{one: 0x39f, len: 1} }
+		0x3c0 { return UnicodeSimpleCase{one: 0x3a0, two: 0x3d6, len: 2} }
+		0x3c1 { return UnicodeSimpleCase{one: 0x3a1, two: 0x3f1, len: 2} }
+		0x3c2 { return UnicodeSimpleCase{one: 0x3a3, two: 0x3c3, len: 2} }
+		0x3c3 { return UnicodeSimpleCase{one: 0x3a3, two: 0x3c2, len: 2} }
+		0x3c4 { return UnicodeSimpleCase{one: 0x3a4, len: 1} }
+		0x3c5 { return UnicodeSimpleCase{one: 0x3a5, len: 1} }
+		0x3c6 { return UnicodeSimpleCase{one: 0x3a6, two: 0x3d5, len: 2} }
+		0x3c7 { return UnicodeSimpleCase{one: 0x3a7, len: 1} }
+		0x3c8 { return UnicodeSimpleCase{one: 0x3a8, len: 1} }
+		0x3c9 { return UnicodeSimpleCase{one: 0x3a9, two: 0x2126, len: 2} }
+		0x3ca { return UnicodeSimpleCase{one: 0x3aa, len: 1} }
+		0x3cb { return UnicodeSimpleCase{one: 0x3ab, len: 1} }
+		0x3cc { return UnicodeSimpleCase{one: 0x38c, len: 1} }
+		0x3cd { return UnicodeSimpleCase{one: 0x38e, len: 1} }
+		0x3ce { return UnicodeSimpleCase{one: 0x38f, len: 1} }
+		0x3cf { return UnicodeSimpleCase{one: 0x3d7, len: 1} }
+		0x3d0 { return UnicodeSimpleCase{one: 0x392, two: 0x3b2, len: 2} }
+		0x3d1 { return UnicodeSimpleCase{one: 0x398, two: 0x3b8, three: 0x3f4, len: 3} }
+		0x3d5 { return UnicodeSimpleCase{one: 0x3a6, two: 0x3c6, len: 2} }
+		0x3d6 { return UnicodeSimpleCase{one: 0x3a0, two: 0x3c0, len: 2} }
+		0x3d7 { return UnicodeSimpleCase{one: 0x3cf, len: 1} }
+		0x3d8 { return UnicodeSimpleCase{one: 0x3d9, len: 1} }
+		0x3d9 { return UnicodeSimpleCase{one: 0x3d8, len: 1} }
+		0x3da { return UnicodeSimpleCase{one: 0x3db, len: 1} }
+		0x3db { return UnicodeSimpleCase{one: 0x3da, len: 1} }
+		0x3dc { return UnicodeSimpleCase{one: 0x3dd, len: 1} }
+		0x3dd { return UnicodeSimpleCase{one: 0x3dc, len: 1} }
+		0x3de { return UnicodeSimpleCase{one: 0x3df, len: 1} }
+		0x3df { return UnicodeSimpleCase{one: 0x3de, len: 1} }
+		0x3e0 { return UnicodeSimpleCase{one: 0x3e1, len: 1} }
+		0x3e1 { return UnicodeSimpleCase{one: 0x3e0, len: 1} }
+		0x3e2 { return UnicodeSimpleCase{one: 0x3e3, len: 1} }
+		0x3e3 { return UnicodeSimpleCase{one: 0x3e2, len: 1} }
+		0x3e4 { return UnicodeSimpleCase{one: 0x3e5, len: 1} }
+		0x3e5 { return UnicodeSimpleCase{one: 0x3e4, len: 1} }
+		0x3e6 { return UnicodeSimpleCase{one: 0x3e7, len: 1} }
+		0x3e7 { return UnicodeSimpleCase{one: 0x3e6, len: 1} }
+		0x3e8 { return UnicodeSimpleCase{one: 0x3e9, len: 1} }
+		0x3e9 { return UnicodeSimpleCase{one: 0x3e8, len: 1} }
+		0x3ea { return UnicodeSimpleCase{one: 0x3eb, len: 1} }
+		0x3eb { return UnicodeSimpleCase{one: 0x3ea, len: 1} }
+		0x3ec { return UnicodeSimpleCase{one: 0x3ed, len: 1} }
+		0x3ed { return UnicodeSimpleCase{one: 0x3ec, len: 1} }
+		0x3ee { return UnicodeSimpleCase{one: 0x3ef, len: 1} }
+		0x3ef { return UnicodeSimpleCase{one: 0x3ee, len: 1} }
+		0x3f0 { return UnicodeSimpleCase{one: 0x39a, two: 0x3ba, len: 2} }
+		0x3f1 { return UnicodeSimpleCase{one: 0x3a1, two: 0x3c1, len: 2} }
+		0x3f2 { return UnicodeSimpleCase{one: 0x3f9, len: 1} }
+		0x3f3 { return UnicodeSimpleCase{one: 0x37f, len: 1} }
+		0x3f4 { return UnicodeSimpleCase{one: 0x398, two: 0x3b8, three: 0x3d1, len: 3} }
+		0x3f5 { return UnicodeSimpleCase{one: 0x395, two: 0x3b5, len: 2} }
+		0x3f7 { return UnicodeSimpleCase{one: 0x3f8, len: 1} }
+		0x3f8 { return UnicodeSimpleCase{one: 0x3f7, len: 1} }
+		0x3f9 { return UnicodeSimpleCase{one: 0x3f2, len: 1} }
+		0x3fa { return UnicodeSimpleCase{one: 0x3fb, len: 1} }
+		0x3fb { return UnicodeSimpleCase{one: 0x3fa, len: 1} }
+		0x3fd { return UnicodeSimpleCase{one: 0x37b, len: 1} }
+		0x3fe { return UnicodeSimpleCase{one: 0x37c, len: 1} }
+		0x3ff { return UnicodeSimpleCase{one: 0x37d, len: 1} }
+		0x400 { return UnicodeSimpleCase{one: 0x450, len: 1} }
+		0x401 { return UnicodeSimpleCase{one: 0x451, len: 1} }
+		0x402 { return UnicodeSimpleCase{one: 0x452, len: 1} }
+		0x403 { return UnicodeSimpleCase{one: 0x453, len: 1} }
+		0x404 { return UnicodeSimpleCase{one: 0x454, len: 1} }
+		0x405 { return UnicodeSimpleCase{one: 0x455, len: 1} }
+		0x406 { return UnicodeSimpleCase{one: 0x456, len: 1} }
+		0x407 { return UnicodeSimpleCase{one: 0x457, len: 1} }
+		0x408 { return UnicodeSimpleCase{one: 0x458, len: 1} }
+		0x409 { return UnicodeSimpleCase{one: 0x459, len: 1} }
+		0x40a { return UnicodeSimpleCase{one: 0x45a, len: 1} }
+		0x40b { return UnicodeSimpleCase{one: 0x45b, len: 1} }
+		0x40c { return UnicodeSimpleCase{one: 0x45c, len: 1} }
+		0x40d { return UnicodeSimpleCase{one: 0x45d, len: 1} }
+		0x40e { return UnicodeSimpleCase{one: 0x45e, len: 1} }
+		0x40f { return UnicodeSimpleCase{one: 0x45f, len: 1} }
+		0x410 { return UnicodeSimpleCase{one: 0x430, len: 1} }
+		0x411 { return UnicodeSimpleCase{one: 0x431, len: 1} }
+		0x412 { return UnicodeSimpleCase{one: 0x432, two: 0x1c80, len: 2} }
+		0x413 { return UnicodeSimpleCase{one: 0x433, len: 1} }
+		0x414 { return UnicodeSimpleCase{one: 0x434, two: 0x1c81, len: 2} }
+		0x415 { return UnicodeSimpleCase{one: 0x435, len: 1} }
+		0x416 { return UnicodeSimpleCase{one: 0x436, len: 1} }
+		0x417 { return UnicodeSimpleCase{one: 0x437, len: 1} }
+		0x418 { return UnicodeSimpleCase{one: 0x438, len: 1} }
+		0x419 { return UnicodeSimpleCase{one: 0x439, len: 1} }
+		0x41a { return UnicodeSimpleCase{one: 0x43a, len: 1} }
+		0x41b { return UnicodeSimpleCase{one: 0x43b, len: 1} }
+		0x41c { return UnicodeSimpleCase{one: 0x43c, len: 1} }
+		0x41d { return UnicodeSimpleCase{one: 0x43d, len: 1} }
+		0x41e { return UnicodeSimpleCase{one: 0x43e, two: 0x1c82, len: 2} }
+		0x41f { return UnicodeSimpleCase{one: 0x43f, len: 1} }
+		0x420 { return UnicodeSimpleCase{one: 0x440, len: 1} }
+		0x421 { return UnicodeSimpleCase{one: 0x441, two: 0x1c83, len: 2} }
+		0x422 { return UnicodeSimpleCase{one: 0x442, two: 0x1c84, three: 0x1c85, len: 3} }
+		0x423 { return UnicodeSimpleCase{one: 0x443, len: 1} }
+		0x424 { return UnicodeSimpleCase{one: 0x444, len: 1} }
+		0x425 { return UnicodeSimpleCase{one: 0x445, len: 1} }
+		0x426 { return UnicodeSimpleCase{one: 0x446, len: 1} }
+		0x427 { return UnicodeSimpleCase{one: 0x447, len: 1} }
+		0x428 { return UnicodeSimpleCase{one: 0x448, len: 1} }
+		0x429 { return UnicodeSimpleCase{one: 0x449, len: 1} }
+		0x42a { return UnicodeSimpleCase{one: 0x44a, two: 0x1c86, len: 2} }
+		0x42b { return UnicodeSimpleCase{one: 0x44b, len: 1} }
+		0x42c { return UnicodeSimpleCase{one: 0x44c, len: 1} }
+		0x42d { return UnicodeSimpleCase{one: 0x44d, len: 1} }
+		0x42e { return UnicodeSimpleCase{one: 0x44e, len: 1} }
+		0x42f { return UnicodeSimpleCase{one: 0x44f, len: 1} }
+		0x430 { return UnicodeSimpleCase{one: 0x410, len: 1} }
+		0x431 { return UnicodeSimpleCase{one: 0x411, len: 1} }
+		0x432 { return UnicodeSimpleCase{one: 0x412, two: 0x1c80, len: 2} }
+		0x433 { return UnicodeSimpleCase{one: 0x413, len: 1} }
+		0x434 { return UnicodeSimpleCase{one: 0x414, two: 0x1c81, len: 2} }
+		0x435 { return UnicodeSimpleCase{one: 0x415, len: 1} }
+		0x436 { return UnicodeSimpleCase{one: 0x416, len: 1} }
+		0x437 { return UnicodeSimpleCase{one: 0x417, len: 1} }
+		0x438 { return UnicodeSimpleCase{one: 0x418, len: 1} }
+		0x439 { return UnicodeSimpleCase{one: 0x419, len: 1} }
+		0x43a { return UnicodeSimpleCase{one: 0x41a, len: 1} }
+		0x43b { return UnicodeSimpleCase{one: 0x41b, len: 1} }
+		0x43c { return UnicodeSimpleCase{one: 0x41c, len: 1} }
+		0x43d { return UnicodeSimpleCase{one: 0x41d, len: 1} }
+		0x43e { return UnicodeSimpleCase{one: 0x41e, two: 0x1c82, len: 2} }
+		0x43f { return UnicodeSimpleCase{one: 0x41f, len: 1} }
+		0x440 { return UnicodeSimpleCase{one: 0x420, len: 1} }
+		0x441 { return UnicodeSimpleCase{one: 0x421, two: 0x1c83, len: 2} }
+		0x442 { return UnicodeSimpleCase{one: 0x422, two: 0x1c84, three: 0x1c85, len: 3} }
+		0x443 { return UnicodeSimpleCase{one: 0x423, len: 1} }
+		0x444 { return UnicodeSimpleCase{one: 0x424, len: 1} }
+		0x445 { return UnicodeSimpleCase{one: 0x425, len: 1} }
+		0x446 { return UnicodeSimpleCase{one: 0x426, len: 1} }
+		0x447 { return UnicodeSimpleCase{one: 0x427, len: 1} }
+		0x448 { return UnicodeSimpleCase{one: 0x428, len: 1} }
+		0x449 { return UnicodeSimpleCase{one: 0x429, len: 1} }
+		0x44a { return UnicodeSimpleCase{one: 0x42a, two: 0x1c86, len: 2} }
+		0x44b { return UnicodeSimpleCase{one: 0x42b, len: 1} }
+		0x44c { return UnicodeSimpleCase{one: 0x42c, len: 1} }
+		0x44d { return UnicodeSimpleCase{one: 0x42d, len: 1} }
+		0x44e { return UnicodeSimpleCase{one: 0x42e, len: 1} }
+		0x44f { return UnicodeSimpleCase{one: 0x42f, len: 1} }
+		0x450 { return UnicodeSimpleCase{one: 0x400, len: 1} }
+		0x451 { return UnicodeSimpleCase{one: 0x401, len: 1} }
+		0x452 { return UnicodeSimpleCase{one: 0x402, len: 1} }
+		0x453 { return UnicodeSimpleCase{one: 0x403, len: 1} }
+		0x454 { return UnicodeSimpleCase{one: 0x404, len: 1} }
+		0x455 { return UnicodeSimpleCase{one: 0x405, len: 1} }
+		0x456 { return UnicodeSimpleCase{one: 0x406, len: 1} }
+		0x457 { return UnicodeSimpleCase{one: 0x407, len: 1} }
+		0x458 { return UnicodeSimpleCase{one: 0x408, len: 1} }
+		0x459 { return UnicodeSimpleCase{one: 0x409, len: 1} }
+		0x45a { return UnicodeSimpleCase{one: 0x40a, len: 1} }
+		0x45b { return UnicodeSimpleCase{one: 0x40b, len: 1} }
+		0x45c { return UnicodeSimpleCase{one: 0x40c, len: 1} }
+		0x45d { return UnicodeSimpleCase{one: 0x40d, len: 1} }
+		0x45e { return UnicodeSimpleCase{one: 0x40e, len: 1} }
+		0x45f { return UnicodeSimpleCase{one: 0x40f, len: 1} }
+		0x460 { return UnicodeSimpleCase{one: 0x461, len: 1} }
+		0x461 { return UnicodeSimpleCase{one: 0x460, len: 1} }
+		0x462 { return UnicodeSimpleCase{one: 0x463, two: 0x1c87, len: 2} }
+		0x463 { return UnicodeSimpleCase{one: 0x462, two: 0x1c87, len: 2} }
+		0x464 { return UnicodeSimpleCase{one: 0x465, len: 1} }
+		0x465 { return UnicodeSimpleCase{one: 0x464, len: 1} }
+		0x466 { return UnicodeSimpleCase{one: 0x467, len: 1} }
+		0x467 { return UnicodeSimpleCase{one: 0x466, len: 1} }
+		0x468 { return UnicodeSimpleCase{one: 0x469, len: 1} }
+		0x469 { return UnicodeSimpleCase{one: 0x468, len: 1} }
+		0x46a { return UnicodeSimpleCase{one: 0x46b, len: 1} }
+		0x46b { return UnicodeSimpleCase{one: 0x46a, len: 1} }
+		0x46c { return UnicodeSimpleCase{one: 0x46d, len: 1} }
+		0x46d { return UnicodeSimpleCase{one: 0x46c, len: 1} }
+		0x46e { return UnicodeSimpleCase{one: 0x46f, len: 1} }
+		0x46f { return UnicodeSimpleCase{one: 0x46e, len: 1} }
+		0x470 { return UnicodeSimpleCase{one: 0x471, len: 1} }
+		0x471 { return UnicodeSimpleCase{one: 0x470, len: 1} }
+		0x472 { return UnicodeSimpleCase{one: 0x473, len: 1} }
+		0x473 { return UnicodeSimpleCase{one: 0x472, len: 1} }
+		0x474 { return UnicodeSimpleCase{one: 0x475, len: 1} }
+		0x475 { return UnicodeSimpleCase{one: 0x474, len: 1} }
+		0x476 { return UnicodeSimpleCase{one: 0x477, len: 1} }
+		0x477 { return UnicodeSimpleCase{one: 0x476, len: 1} }
+		0x478 { return UnicodeSimpleCase{one: 0x479, len: 1} }
+		0x479 { return UnicodeSimpleCase{one: 0x478, len: 1} }
+		0x47a { return UnicodeSimpleCase{one: 0x47b, len: 1} }
+		0x47b { return UnicodeSimpleCase{one: 0x47a, len: 1} }
+		0x47c { return UnicodeSimpleCase{one: 0x47d, len: 1} }
+		0x47d { return UnicodeSimpleCase{one: 0x47c, len: 1} }
+		0x47e { return UnicodeSimpleCase{one: 0x47f, len: 1} }
+		0x47f { return UnicodeSimpleCase{one: 0x47e, len: 1} }
+		0x480 { return UnicodeSimpleCase{one: 0x481, len: 1} }
+		0x481 { return UnicodeSimpleCase{one: 0x480, len: 1} }
+		0x48a { return UnicodeSimpleCase{one: 0x48b, len: 1} }
+		0x48b { return UnicodeSimpleCase{one: 0x48a, len: 1} }
+		0x48c { return UnicodeSimpleCase{one: 0x48d, len: 1} }
+		0x48d { return UnicodeSimpleCase{one: 0x48c, len: 1} }
+		0x48e { return UnicodeSimpleCase{one: 0x48f, len: 1} }
+		0x48f { return UnicodeSimpleCase{one: 0x48e, len: 1} }
+		0x490 { return UnicodeSimpleCase{one: 0x491, len: 1} }
+		0x491 { return UnicodeSimpleCase{one: 0x490, len: 1} }
+		0x492 { return UnicodeSimpleCase{one: 0x493, len: 1} }
+		0x493 { return UnicodeSimpleCase{one: 0x492, len: 1} }
+		0x494 { return UnicodeSimpleCase{one: 0x495, len: 1} }
+		0x495 { return UnicodeSimpleCase{one: 0x494, len: 1} }
+		0x496 { return UnicodeSimpleCase{one: 0x497, len: 1} }
+		0x497 { return UnicodeSimpleCase{one: 0x496, len: 1} }
+		0x498 { return UnicodeSimpleCase{one: 0x499, len: 1} }
+		0x499 { return UnicodeSimpleCase{one: 0x498, len: 1} }
+		0x49a { return UnicodeSimpleCase{one: 0x49b, len: 1} }
+		0x49b { return UnicodeSimpleCase{one: 0x49a, len: 1} }
+		0x49c { return UnicodeSimpleCase{one: 0x49d, len: 1} }
+		0x49d { return UnicodeSimpleCase{one: 0x49c, len: 1} }
+		0x49e { return UnicodeSimpleCase{one: 0x49f, len: 1} }
+		0x49f { return UnicodeSimpleCase{one: 0x49e, len: 1} }
+		0x4a0 { return UnicodeSimpleCase{one: 0x4a1, len: 1} }
+		0x4a1 { return UnicodeSimpleCase{one: 0x4a0, len: 1} }
+		0x4a2 { return UnicodeSimpleCase{one: 0x4a3, len: 1} }
+		0x4a3 { return UnicodeSimpleCase{one: 0x4a2, len: 1} }
+		0x4a4 { return UnicodeSimpleCase{one: 0x4a5, len: 1} }
+		0x4a5 { return UnicodeSimpleCase{one: 0x4a4, len: 1} }
+		0x4a6 { return UnicodeSimpleCase{one: 0x4a7, len: 1} }
+		0x4a7 { return UnicodeSimpleCase{one: 0x4a6, len: 1} }
+		0x4a8 { return UnicodeSimpleCase{one: 0x4a9, len: 1} }
+		0x4a9 { return UnicodeSimpleCase{one: 0x4a8, len: 1} }
+		0x4aa { return UnicodeSimpleCase{one: 0x4ab, len: 1} }
+		0x4ab { return UnicodeSimpleCase{one: 0x4aa, len: 1} }
+		0x4ac { return UnicodeSimpleCase{one: 0x4ad, len: 1} }
+		0x4ad { return UnicodeSimpleCase{one: 0x4ac, len: 1} }
+		0x4ae { return UnicodeSimpleCase{one: 0x4af, len: 1} }
+		0x4af { return UnicodeSimpleCase{one: 0x4ae, len: 1} }
+		0x4b0 { return UnicodeSimpleCase{one: 0x4b1, len: 1} }
+		0x4b1 { return UnicodeSimpleCase{one: 0x4b0, len: 1} }
+		0x4b2 { return UnicodeSimpleCase{one: 0x4b3, len: 1} }
+		0x4b3 { return UnicodeSimpleCase{one: 0x4b2, len: 1} }
+		0x4b4 { return UnicodeSimpleCase{one: 0x4b5, len: 1} }
+		0x4b5 { return UnicodeSimpleCase{one: 0x4b4, len: 1} }
+		0x4b6 { return UnicodeSimpleCase{one: 0x4b7, len: 1} }
+		0x4b7 { return UnicodeSimpleCase{one: 0x4b6, len: 1} }
+		0x4b8 { return UnicodeSimpleCase{one: 0x4b9, len: 1} }
+		0x4b9 { return UnicodeSimpleCase{one: 0x4b8, len: 1} }
+		0x4ba { return UnicodeSimpleCase{one: 0x4bb, len: 1} }
+		0x4bb { return UnicodeSimpleCase{one: 0x4ba, len: 1} }
+		0x4bc { return UnicodeSimpleCase{one: 0x4bd, len: 1} }
+		0x4bd { return UnicodeSimpleCase{one: 0x4bc, len: 1} }
+		0x4be { return UnicodeSimpleCase{one: 0x4bf, len: 1} }
+		0x4bf { return UnicodeSimpleCase{one: 0x4be, len: 1} }
+		0x4c0 { return UnicodeSimpleCase{one: 0x4cf, len: 1} }
+		0x4c1 { return UnicodeSimpleCase{one: 0x4c2, len: 1} }
+		0x4c2 { return UnicodeSimpleCase{one: 0x4c1, len: 1} }
+		0x4c3 { return UnicodeSimpleCase{one: 0x4c4, len: 1} }
+		0x4c4 { return UnicodeSimpleCase{one: 0x4c3, len: 1} }
+		0x4c5 { return UnicodeSimpleCase{one: 0x4c6, len: 1} }
+		0x4c6 { return UnicodeSimpleCase{one: 0x4c5, len: 1} }
+		0x4c7 { return UnicodeSimpleCase{one: 0x4c8, len: 1} }
+		0x4c8 { return UnicodeSimpleCase{one: 0x4c7, len: 1} }
+		0x4c9 { return UnicodeSimpleCase{one: 0x4ca, len: 1} }
+		0x4ca { return UnicodeSimpleCase{one: 0x4c9, len: 1} }
+		0x4cb { return UnicodeSimpleCase{one: 0x4cc, len: 1} }
+		0x4cc { return UnicodeSimpleCase{one: 0x4cb, len: 1} }
+		0x4cd { return UnicodeSimpleCase{one: 0x4ce, len: 1} }
+		0x4ce { return UnicodeSimpleCase{one: 0x4cd, len: 1} }
+		0x4cf { return UnicodeSimpleCase{one: 0x4c0, len: 1} }
+		0x4d0 { return UnicodeSimpleCase{one: 0x4d1, len: 1} }
+		0x4d1 { return UnicodeSimpleCase{one: 0x4d0, len: 1} }
+		0x4d2 { return UnicodeSimpleCase{one: 0x4d3, len: 1} }
+		0x4d3 { return UnicodeSimpleCase{one: 0x4d2, len: 1} }
+		0x4d4 { return UnicodeSimpleCase{one: 0x4d5, len: 1} }
+		0x4d5 { return UnicodeSimpleCase{one: 0x4d4, len: 1} }
+		0x4d6 { return UnicodeSimpleCase{one: 0x4d7, len: 1} }
+		0x4d7 { return UnicodeSimpleCase{one: 0x4d6, len: 1} }
+		0x4d8 { return UnicodeSimpleCase{one: 0x4d9, len: 1} }
+		0x4d9 { return UnicodeSimpleCase{one: 0x4d8, len: 1} }
+		0x4da { return UnicodeSimpleCase{one: 0x4db, len: 1} }
+		0x4db { return UnicodeSimpleCase{one: 0x4da, len: 1} }
+		0x4dc { return UnicodeSimpleCase{one: 0x4dd, len: 1} }
+		0x4dd { return UnicodeSimpleCase{one: 0x4dc, len: 1} }
+		0x4de { return UnicodeSimpleCase{one: 0x4df, len: 1} }
+		0x4df { return UnicodeSimpleCase{one: 0x4de, len: 1} }
+		0x4e0 { return UnicodeSimpleCase{one: 0x4e1, len: 1} }
+		0x4e1 { return UnicodeSimpleCase{one: 0x4e0, len: 1} }
+		0x4e2 { return UnicodeSimpleCase{one: 0x4e3, len: 1} }
+		0x4e3 { return UnicodeSimpleCase{one: 0x4e2, len: 1} }
+		0x4e4 { return UnicodeSimpleCase{one: 0x4e5, len: 1} }
+		0x4e5 { return UnicodeSimpleCase{one: 0x4e4, len: 1} }
+		0x4e6 { return UnicodeSimpleCase{one: 0x4e7, len: 1} }
+		0x4e7 { return UnicodeSimpleCase{one: 0x4e6, len: 1} }
+		0x4e8 { return UnicodeSimpleCase{one: 0x4e9, len: 1} }
+		0x4e9 { return UnicodeSimpleCase{one: 0x4e8, len: 1} }
+		0x4ea { return UnicodeSimpleCase{one: 0x4eb, len: 1} }
+		0x4eb { return UnicodeSimpleCase{one: 0x4ea, len: 1} }
+		0x4ec { return UnicodeSimpleCase{one: 0x4ed, len: 1} }
+		0x4ed { return UnicodeSimpleCase{one: 0x4ec, len: 1} }
+		0x4ee { return UnicodeSimpleCase{one: 0x4ef, len: 1} }
+		0x4ef { return UnicodeSimpleCase{one: 0x4ee, len: 1} }
+		0x4f0 { return UnicodeSimpleCase{one: 0x4f1, len: 1} }
+		0x4f1 { return UnicodeSimpleCase{one: 0x4f0, len: 1} }
+		0x4f2 { return UnicodeSimpleCase{one: 0x4f3, len: 1} }
+		0x4f3 { return UnicodeSimpleCase{one: 0x4f2, len: 1} }
+		0x4f4 { return UnicodeSimpleCase{one: 0x4f5, len: 1} }
+		0x4f5 { return UnicodeSimpleCase{one: 0x4f4, len: 1} }
+		0x4f6 { return UnicodeSimpleCase{one: 0x4f7, len: 1} }
+		0x4f7 { return UnicodeSimpleCase{one: 0x4f6, len: 1} }
+		0x4f8 { return UnicodeSimpleCase{one: 0x4f9, len: 1} }
+		0x4f9 { return UnicodeSimpleCase{one: 0x4f8, len: 1} }
+		0x4fa { return UnicodeSimpleCase{one: 0x4fb, len: 1} }
+		0x4fb { return UnicodeSimpleCase{one: 0x4fa, len: 1} }
+		0x4fc { return UnicodeSimpleCase{one: 0x4fd, len: 1} }
+		0x4fd { return UnicodeSimpleCase{one: 0x4fc, len: 1} }
+		0x4fe { return UnicodeSimpleCase{one: 0x4ff, len: 1} }
+		0x4ff { return UnicodeSimpleCase{one: 0x4fe, len: 1} }
+		0x500 { return UnicodeSimpleCase{one: 0x501, len: 1} }
+		0x501 { return UnicodeSimpleCase{one: 0x500, len: 1} }
+		0x502 { return UnicodeSimpleCase{one: 0x503, len: 1} }
+		0x503 { return UnicodeSimpleCase{one: 0x502, len: 1} }
+		0x504 { return UnicodeSimpleCase{one: 0x505, len: 1} }
+		0x505 { return UnicodeSimpleCase{one: 0x504, len: 1} }
+		0x506 { return UnicodeSimpleCase{one: 0x507, len: 1} }
+		0x507 { return UnicodeSimpleCase{one: 0x506, len: 1} }
+		0x508 { return UnicodeSimpleCase{one: 0x509, len: 1} }
+		0x509 { return UnicodeSimpleCase{one: 0x508, len: 1} }
+		0x50a { return UnicodeSimpleCase{one: 0x50b, len: 1} }
+		0x50b { return UnicodeSimpleCase{one: 0x50a, len: 1} }
+		0x50c { return UnicodeSimpleCase{one: 0x50d, len: 1} }
+		0x50d { return UnicodeSimpleCase{one: 0x50c, len: 1} }
+		0x50e { return UnicodeSimpleCase{one: 0x50f, len: 1} }
+		0x50f { return UnicodeSimpleCase{one: 0x50e, len: 1} }
+		0x510 { return UnicodeSimpleCase{one: 0x511, len: 1} }
+		0x511 { return UnicodeSimpleCase{one: 0x510, len: 1} }
+		0x512 { return UnicodeSimpleCase{one: 0x513, len: 1} }
+		0x513 { return UnicodeSimpleCase{one: 0x512, len: 1} }
+		0x514 { return UnicodeSimpleCase{one: 0x515, len: 1} }
+		0x515 { return UnicodeSimpleCase{one: 0x514, len: 1} }
+		0x516 { return UnicodeSimpleCase{one: 0x517, len: 1} }
+		0x517 { return UnicodeSimpleCase{one: 0x516, len: 1} }
+		0x518 { return UnicodeSimpleCase{one: 0x519, len: 1} }
+		0x519 { return UnicodeSimpleCase{one: 0x518, len: 1} }
+		0x51a { return UnicodeSimpleCase{one: 0x51b, len: 1} }
+		0x51b { return UnicodeSimpleCase{one: 0x51a, len: 1} }
+		0x51c { return UnicodeSimpleCase{one: 0x51d, len: 1} }
+		0x51d { return UnicodeSimpleCase{one: 0x51c, len: 1} }
+		0x51e { return UnicodeSimpleCase{one: 0x51f, len: 1} }
+		0x51f { return UnicodeSimpleCase{one: 0x51e, len: 1} }
+		0x520 { return UnicodeSimpleCase{one: 0x521, len: 1} }
+		0x521 { return UnicodeSimpleCase{one: 0x520, len: 1} }
+		0x522 { return UnicodeSimpleCase{one: 0x523, len: 1} }
+		0x523 { return UnicodeSimpleCase{one: 0x522, len: 1} }
+		0x524 { return UnicodeSimpleCase{one: 0x525, len: 1} }
+		0x525 { return UnicodeSimpleCase{one: 0x524, len: 1} }
+		0x526 { return UnicodeSimpleCase{one: 0x527, len: 1} }
+		0x527 { return UnicodeSimpleCase{one: 0x526, len: 1} }
+		0x528 { return UnicodeSimpleCase{one: 0x529, len: 1} }
+		0x529 { return UnicodeSimpleCase{one: 0x528, len: 1} }
+		0x52a { return UnicodeSimpleCase{one: 0x52b, len: 1} }
+		0x52b { return UnicodeSimpleCase{one: 0x52a, len: 1} }
+		0x52c { return UnicodeSimpleCase{one: 0x52d, len: 1} }
+		0x52d { return UnicodeSimpleCase{one: 0x52c, len: 1} }
+		0x52e { return UnicodeSimpleCase{one: 0x52f, len: 1} }
+		0x52f { return UnicodeSimpleCase{one: 0x52e, len: 1} }
+		0x531 { return UnicodeSimpleCase{one: 0x561, len: 1} }
+		0x532 { return UnicodeSimpleCase{one: 0x562, len: 1} }
+		0x533 { return UnicodeSimpleCase{one: 0x563, len: 1} }
+		0x534 { return UnicodeSimpleCase{one: 0x564, len: 1} }
+		0x535 { return UnicodeSimpleCase{one: 0x565, len: 1} }
+		0x536 { return UnicodeSimpleCase{one: 0x566, len: 1} }
+		0x537 { return UnicodeSimpleCase{one: 0x567, len: 1} }
+		0x538 { return UnicodeSimpleCase{one: 0x568, len: 1} }
+		0x539 { return UnicodeSimpleCase{one: 0x569, len: 1} }
+		0x53a { return UnicodeSimpleCase{one: 0x56a, len: 1} }
+		0x53b { return UnicodeSimpleCase{one: 0x56b, len: 1} }
+		0x53c { return UnicodeSimpleCase{one: 0x56c, len: 1} }
+		0x53d { return UnicodeSimpleCase{one: 0x56d, len: 1} }
+		0x53e { return UnicodeSimpleCase{one: 0x56e, len: 1} }
+		0x53f { return UnicodeSimpleCase{one: 0x56f, len: 1} }
+		0x540 { return UnicodeSimpleCase{one: 0x570, len: 1} }
+		0x541 { return UnicodeSimpleCase{one: 0x571, len: 1} }
+		0x542 { return UnicodeSimpleCase{one: 0x572, len: 1} }
+		0x543 { return UnicodeSimpleCase{one: 0x573, len: 1} }
+		0x544 { return UnicodeSimpleCase{one: 0x574, len: 1} }
+		0x545 { return UnicodeSimpleCase{one: 0x575, len: 1} }
+		0x546 { return UnicodeSimpleCase{one: 0x576, len: 1} }
+		0x547 { return UnicodeSimpleCase{one: 0x577, len: 1} }
+		0x548 { return UnicodeSimpleCase{one: 0x578, len: 1} }
+		0x549 { return UnicodeSimpleCase{one: 0x579, len: 1} }
+		0x54a { return UnicodeSimpleCase{one: 0x57a, len: 1} }
+		0x54b { return UnicodeSimpleCase{one: 0x57b, len: 1} }
+		0x54c { return UnicodeSimpleCase{one: 0x57c, len: 1} }
+		0x54d { return UnicodeSimpleCase{one: 0x57d, len: 1} }
+		0x54e { return UnicodeSimpleCase{one: 0x57e, len: 1} }
+		0x54f { return UnicodeSimpleCase{one: 0x57f, len: 1} }
+		0x550 { return UnicodeSimpleCase{one: 0x580, len: 1} }
+		0x551 { return UnicodeSimpleCase{one: 0x581, len: 1} }
+		0x552 { return UnicodeSimpleCase{one: 0x582, len: 1} }
+		0x553 { return UnicodeSimpleCase{one: 0x583, len: 1} }
+		0x554 { return UnicodeSimpleCase{one: 0x584, len: 1} }
+		0x555 { return UnicodeSimpleCase{one: 0x585, len: 1} }
+		0x556 { return UnicodeSimpleCase{one: 0x586, len: 1} }
+		0x561 { return UnicodeSimpleCase{one: 0x531, len: 1} }
+		0x562 { return UnicodeSimpleCase{one: 0x532, len: 1} }
+		0x563 { return UnicodeSimpleCase{one: 0x533, len: 1} }
+		0x564 { return UnicodeSimpleCase{one: 0x534, len: 1} }
+		0x565 { return UnicodeSimpleCase{one: 0x535, len: 1} }
+		0x566 { return UnicodeSimpleCase{one: 0x536, len: 1} }
+		0x567 { return UnicodeSimpleCase{one: 0x537, len: 1} }
+		0x568 { return UnicodeSimpleCase{one: 0x538, len: 1} }
+		0x569 { return UnicodeSimpleCase{one: 0x539, len: 1} }
+		0x56a { return UnicodeSimpleCase{one: 0x53a, len: 1} }
+		0x56b { return UnicodeSimpleCase{one: 0x53b, len: 1} }
+		0x56c { return UnicodeSimpleCase{one: 0x53c, len: 1} }
+		0x56d { return UnicodeSimpleCase{one: 0x53d, len: 1} }
+		0x56e { return UnicodeSimpleCase{one: 0x53e, len: 1} }
+		0x56f { return UnicodeSimpleCase{one: 0x53f, len: 1} }
+		0x570 { return UnicodeSimpleCase{one: 0x540, len: 1} }
+		0x571 { return UnicodeSimpleCase{one: 0x541, len: 1} }
+		0x572 { return UnicodeSimpleCase{one: 0x542, len: 1} }
+		0x573 { return UnicodeSimpleCase{one: 0x543, len: 1} }
+		0x574 { return UnicodeSimpleCase{one: 0x544, len: 1} }
+		0x575 { return UnicodeSimpleCase{one: 0x545, len: 1} }
+		0x576 { return UnicodeSimpleCase{one: 0x546, len: 1} }
+		0x577 { return UnicodeSimpleCase{one: 0x547, len: 1} }
+		0x578 { return UnicodeSimpleCase{one: 0x548, len: 1} }
+		0x579 { return UnicodeSimpleCase{one: 0x549, len: 1} }
+		0x57a { return UnicodeSimpleCase{one: 0x54a, len: 1} }
+		0x57b { return UnicodeSimpleCase{one: 0x54b, len: 1} }
+		0x57c { return UnicodeSimpleCase{one: 0x54c, len: 1} }
+		0x57d { return UnicodeSimpleCase{one: 0x54d, len: 1} }
+		0x57e { return UnicodeSimpleCase{one: 0x54e, len: 1} }
+		0x57f { return UnicodeSimpleCase{one: 0x54f, len: 1} }
+		0x580 { return UnicodeSimpleCase{one: 0x550, len: 1} }
+		0x581 { return UnicodeSimpleCase{one: 0x551, len: 1} }
+		0x582 { return UnicodeSimpleCase{one: 0x552, len: 1} }
+		0x583 { return UnicodeSimpleCase{one: 0x553, len: 1} }
+		0x584 { return UnicodeSimpleCase{one: 0x554, len: 1} }
+		0x585 { return UnicodeSimpleCase{one: 0x555, len: 1} }
+		0x586 { return UnicodeSimpleCase{one: 0x556, len: 1} }
+		0x10a0 { return UnicodeSimpleCase{one: 0x2d00, len: 1} }
+		0x10a1 { return UnicodeSimpleCase{one: 0x2d01, len: 1} }
+		0x10a2 { return UnicodeSimpleCase{one: 0x2d02, len: 1} }
+		0x10a3 { return UnicodeSimpleCase{one: 0x2d03, len: 1} }
+		0x10a4 { return UnicodeSimpleCase{one: 0x2d04, len: 1} }
+		0x10a5 { return UnicodeSimpleCase{one: 0x2d05, len: 1} }
+		0x10a6 { return UnicodeSimpleCase{one: 0x2d06, len: 1} }
+		0x10a7 { return UnicodeSimpleCase{one: 0x2d07, len: 1} }
+		0x10a8 { return UnicodeSimpleCase{one: 0x2d08, len: 1} }
+		0x10a9 { return UnicodeSimpleCase{one: 0x2d09, len: 1} }
+		0x10aa { return UnicodeSimpleCase{one: 0x2d0a, len: 1} }
+		0x10ab { return UnicodeSimpleCase{one: 0x2d0b, len: 1} }
+		0x10ac { return UnicodeSimpleCase{one: 0x2d0c, len: 1} }
+		0x10ad { return UnicodeSimpleCase{one: 0x2d0d, len: 1} }
+		0x10ae { return UnicodeSimpleCase{one: 0x2d0e, len: 1} }
+		0x10af { return UnicodeSimpleCase{one: 0x2d0f, len: 1} }
+		0x10b0 { return UnicodeSimpleCase{one: 0x2d10, len: 1} }
+		0x10b1 { return UnicodeSimpleCase{one: 0x2d11, len: 1} }
+		0x10b2 { return UnicodeSimpleCase{one: 0x2d12, len: 1} }
+		0x10b3 { return UnicodeSimpleCase{one: 0x2d13, len: 1} }
+		0x10b4 { return UnicodeSimpleCase{one: 0x2d14, len: 1} }
+		0x10b5 { return UnicodeSimpleCase{one: 0x2d15, len: 1} }
+		0x10b6 { return UnicodeSimpleCase{one: 0x2d16, len: 1} }
+		0x10b7 { return UnicodeSimpleCase{one: 0x2d17, len: 1} }
+		0x10b8 { return UnicodeSimpleCase{one: 0x2d18, len: 1} }
+		0x10b9 { return UnicodeSimpleCase{one: 0x2d19, len: 1} }
+		0x10ba { return UnicodeSimpleCase{one: 0x2d1a, len: 1} }
+		0x10bb { return UnicodeSimpleCase{one: 0x2d1b, len: 1} }
+		0x10bc { return UnicodeSimpleCase{one: 0x2d1c, len: 1} }
+		0x10bd { return UnicodeSimpleCase{one: 0x2d1d, len: 1} }
+		0x10be { return UnicodeSimpleCase{one: 0x2d1e, len: 1} }
+		0x10bf { return UnicodeSimpleCase{one: 0x2d1f, len: 1} }
+		0x10c0 { return UnicodeSimpleCase{one: 0x2d20, len: 1} }
+		0x10c1 { return UnicodeSimpleCase{one: 0x2d21, len: 1} }
+		0x10c2 { return UnicodeSimpleCase{one: 0x2d22, len: 1} }
+		0x10c3 { return UnicodeSimpleCase{one: 0x2d23, len: 1} }
+		0x10c4 { return UnicodeSimpleCase{one: 0x2d24, len: 1} }
+		0x10c5 { return UnicodeSimpleCase{one: 0x2d25, len: 1} }
+		0x10c7 { return UnicodeSimpleCase{one: 0x2d27, len: 1} }
+		0x10cd { return UnicodeSimpleCase{one: 0x2d2d, len: 1} }
+		0x10d0 { return UnicodeSimpleCase{one: 0x1c90, len: 1} }
+		0x10d1 { return UnicodeSimpleCase{one: 0x1c91, len: 1} }
+		0x10d2 { return UnicodeSimpleCase{one: 0x1c92, len: 1} }
+		0x10d3 { return UnicodeSimpleCase{one: 0x1c93, len: 1} }
+		0x10d4 { return UnicodeSimpleCase{one: 0x1c94, len: 1} }
+		0x10d5 { return UnicodeSimpleCase{one: 0x1c95, len: 1} }
+		0x10d6 { return UnicodeSimpleCase{one: 0x1c96, len: 1} }
+		0x10d7 { return UnicodeSimpleCase{one: 0x1c97, len: 1} }
+		0x10d8 { return UnicodeSimpleCase{one: 0x1c98, len: 1} }
+		0x10d9 { return UnicodeSimpleCase{one: 0x1c99, len: 1} }
+		0x10da { return UnicodeSimpleCase{one: 0x1c9a, len: 1} }
+		0x10db { return UnicodeSimpleCase{one: 0x1c9b, len: 1} }
+		0x10dc { return UnicodeSimpleCase{one: 0x1c9c, len: 1} }
+		0x10dd { return UnicodeSimpleCase{one: 0x1c9d, len: 1} }
+		0x10de { return UnicodeSimpleCase{one: 0x1c9e, len: 1} }
+		0x10df { return UnicodeSimpleCase{one: 0x1c9f, len: 1} }
+		0x10e0 { return UnicodeSimpleCase{one: 0x1ca0, len: 1} }
+		0x10e1 { return UnicodeSimpleCase{one: 0x1ca1, len: 1} }
+		0x10e2 { return UnicodeSimpleCase{one: 0x1ca2, len: 1} }
+		0x10e3 { return UnicodeSimpleCase{one: 0x1ca3, len: 1} }
+		0x10e4 { return UnicodeSimpleCase{one: 0x1ca4, len: 1} }
+		0x10e5 { return UnicodeSimpleCase{one: 0x1ca5, len: 1} }
+		0x10e6 { return UnicodeSimpleCase{one: 0x1ca6, len: 1} }
+		0x10e7 { return UnicodeSimpleCase{one: 0x1ca7, len: 1} }
+		0x10e8 { return UnicodeSimpleCase{one: 0x1ca8, len: 1} }
+		0x10e9 { return UnicodeSimpleCase{one: 0x1ca9, len: 1} }
+		0x10ea { return UnicodeSimpleCase{one: 0x1caa, len: 1} }
+		0x10eb { return UnicodeSimpleCase{one: 0x1cab, len: 1} }
+		0x10ec { return UnicodeSimpleCase{one: 0x1cac, len: 1} }
+		0x10ed { return UnicodeSimpleCase{one: 0x1cad, len: 1} }
+		0x10ee { return UnicodeSimpleCase{one: 0x1cae, len: 1} }
+		0x10ef { return UnicodeSimpleCase{one: 0x1caf, len: 1} }
+		0x10f0 { return UnicodeSimpleCase{one: 0x1cb0, len: 1} }
+		0x10f1 { return UnicodeSimpleCase{one: 0x1cb1, len: 1} }
+		0x10f2 { return UnicodeSimpleCase{one: 0x1cb2, len: 1} }
+		0x10f3 { return UnicodeSimpleCase{one: 0x1cb3, len: 1} }
+		0x10f4 { return UnicodeSimpleCase{one: 0x1cb4, len: 1} }
+		0x10f5 { return UnicodeSimpleCase{one: 0x1cb5, len: 1} }
+		0x10f6 { return UnicodeSimpleCase{one: 0x1cb6, len: 1} }
+		0x10f7 { return UnicodeSimpleCase{one: 0x1cb7, len: 1} }
+		0x10f8 { return UnicodeSimpleCase{one: 0x1cb8, len: 1} }
+		0x10f9 { return UnicodeSimpleCase{one: 0x1cb9, len: 1} }
+		0x10fa { return UnicodeSimpleCase{one: 0x1cba, len: 1} }
+		0x10fd { return UnicodeSimpleCase{one: 0x1cbd, len: 1} }
+		0x10fe { return UnicodeSimpleCase{one: 0x1cbe, len: 1} }
+		0x10ff { return UnicodeSimpleCase{one: 0x1cbf, len: 1} }
+		0x13a0 { return UnicodeSimpleCase{one: 0xab70, len: 1} }
+		0x13a1 { return UnicodeSimpleCase{one: 0xab71, len: 1} }
+		0x13a2 { return UnicodeSimpleCase{one: 0xab72, len: 1} }
+		0x13a3 { return UnicodeSimpleCase{one: 0xab73, len: 1} }
+		0x13a4 { return UnicodeSimpleCase{one: 0xab74, len: 1} }
+		0x13a5 { return UnicodeSimpleCase{one: 0xab75, len: 1} }
+		0x13a6 { return UnicodeSimpleCase{one: 0xab76, len: 1} }
+		0x13a7 { return UnicodeSimpleCase{one: 0xab77, len: 1} }
+		0x13a8 { return UnicodeSimpleCase{one: 0xab78, len: 1} }
+		0x13a9 { return UnicodeSimpleCase{one: 0xab79, len: 1} }
+		0x13aa { return UnicodeSimpleCase{one: 0xab7a, len: 1} }
+		0x13ab { return UnicodeSimpleCase{one: 0xab7b, len: 1} }
+		0x13ac { return UnicodeSimpleCase{one: 0xab7c, len: 1} }
+		0x13ad { return UnicodeSimpleCase{one: 0xab7d, len: 1} }
+		0x13ae { return UnicodeSimpleCase{one: 0xab7e, len: 1} }
+		0x13af { return UnicodeSimpleCase{one: 0xab7f, len: 1} }
+		0x13b0 { return UnicodeSimpleCase{one: 0xab80, len: 1} }
+		0x13b1 { return UnicodeSimpleCase{one: 0xab81, len: 1} }
+		0x13b2 { return UnicodeSimpleCase{one: 0xab82, len: 1} }
+		0x13b3 { return UnicodeSimpleCase{one: 0xab83, len: 1} }
+		0x13b4 { return UnicodeSimpleCase{one: 0xab84, len: 1} }
+		0x13b5 { return UnicodeSimpleCase{one: 0xab85, len: 1} }
+		0x13b6 { return UnicodeSimpleCase{one: 0xab86, len: 1} }
+		0x13b7 { return UnicodeSimpleCase{one: 0xab87, len: 1} }
+		0x13b8 { return UnicodeSimpleCase{one: 0xab88, len: 1} }
+		0x13b9 { return UnicodeSimpleCase{one: 0xab89, len: 1} }
+		0x13ba { return UnicodeSimpleCase{one: 0xab8a, len: 1} }
+		0x13bb { return UnicodeSimpleCase{one: 0xab8b, len: 1} }
+		0x13bc { return UnicodeSimpleCase{one: 0xab8c, len: 1} }
+		0x13bd { return UnicodeSimpleCase{one: 0xab8d, len: 1} }
+		0x13be { return UnicodeSimpleCase{one: 0xab8e, len: 1} }
+		0x13bf { return UnicodeSimpleCase{one: 0xab8f, len: 1} }
+		0x13c0 { return UnicodeSimpleCase{one: 0xab90, len: 1} }
+		0x13c1 { return UnicodeSimpleCase{one: 0xab91, len: 1} }
+		0x13c2 { return UnicodeSimpleCase{one: 0xab92, len: 1} }
+		0x13c3 { return UnicodeSimpleCase{one: 0xab93, len: 1} }
+		0x13c4 { return UnicodeSimpleCase{one: 0xab94, len: 1} }
+		0x13c5 { return UnicodeSimpleCase{one: 0xab95, len: 1} }
+		0x13c6 { return UnicodeSimpleCase{one: 0xab96, len: 1} }
+		0x13c7 { return UnicodeSimpleCase{one: 0xab97, len: 1} }
+		0x13c8 { return UnicodeSimpleCase{one: 0xab98, len: 1} }
+		0x13c9 { return UnicodeSimpleCase{one: 0xab99, len: 1} }
+		0x13ca { return UnicodeSimpleCase{one: 0xab9a, len: 1} }
+		0x13cb { return UnicodeSimpleCase{one: 0xab9b, len: 1} }
+		0x13cc { return UnicodeSimpleCase{one: 0xab9c, len: 1} }
+		0x13cd { return UnicodeSimpleCase{one: 0xab9d, len: 1} }
+		0x13ce { return UnicodeSimpleCase{one: 0xab9e, len: 1} }
+		0x13cf { return UnicodeSimpleCase{one: 0xab9f, len: 1} }
+		0x13d0 { return UnicodeSimpleCase{one: 0xaba0, len: 1} }
+		0x13d1 { return UnicodeSimpleCase{one: 0xaba1, len: 1} }
+		0x13d2 { return UnicodeSimpleCase{one: 0xaba2, len: 1} }
+		0x13d3 { return UnicodeSimpleCase{one: 0xaba3, len: 1} }
+		0x13d4 { return UnicodeSimpleCase{one: 0xaba4, len: 1} }
+		0x13d5 { return UnicodeSimpleCase{one: 0xaba5, len: 1} }
+		0x13d6 { return UnicodeSimpleCase{one: 0xaba6, len: 1} }
+		0x13d7 { return UnicodeSimpleCase{one: 0xaba7, len: 1} }
+		0x13d8 { return UnicodeSimpleCase{one: 0xaba8, len: 1} }
+		0x13d9 { return UnicodeSimpleCase{one: 0xaba9, len: 1} }
+		0x13da { return UnicodeSimpleCase{one: 0xabaa, len: 1} }
+		0x13db { return UnicodeSimpleCase{one: 0xabab, len: 1} }
+		0x13dc { return UnicodeSimpleCase{one: 0xabac, len: 1} }
+		0x13dd { return UnicodeSimpleCase{one: 0xabad, len: 1} }
+		0x13de { return UnicodeSimpleCase{one: 0xabae, len: 1} }
+		0x13df { return UnicodeSimpleCase{one: 0xabaf, len: 1} }
+		0x13e0 { return UnicodeSimpleCase{one: 0xabb0, len: 1} }
+		0x13e1 { return UnicodeSimpleCase{one: 0xabb1, len: 1} }
+		0x13e2 { return UnicodeSimpleCase{one: 0xabb2, len: 1} }
+		0x13e3 { return UnicodeSimpleCase{one: 0xabb3, len: 1} }
+		0x13e4 { return UnicodeSimpleCase{one: 0xabb4, len: 1} }
+		0x13e5 { return UnicodeSimpleCase{one: 0xabb5, len: 1} }
+		0x13e6 { return UnicodeSimpleCase{one: 0xabb6, len: 1} }
+		0x13e7 { return UnicodeSimpleCase{one: 0xabb7, len: 1} }
+		0x13e8 { return UnicodeSimpleCase{one: 0xabb8, len: 1} }
+		0x13e9 { return UnicodeSimpleCase{one: 0xabb9, len: 1} }
+		0x13ea { return UnicodeSimpleCase{one: 0xabba, len: 1} }
+		0x13eb { return UnicodeSimpleCase{one: 0xabbb, len: 1} }
+		0x13ec { return UnicodeSimpleCase{one: 0xabbc, len: 1} }
+		0x13ed { return UnicodeSimpleCase{one: 0xabbd, len: 1} }
+		0x13ee { return UnicodeSimpleCase{one: 0xabbe, len: 1} }
+		0x13ef { return UnicodeSimpleCase{one: 0xabbf, len: 1} }
+		0x13f0 { return UnicodeSimpleCase{one: 0x13f8, len: 1} }
+		0x13f1 { return UnicodeSimpleCase{one: 0x13f9, len: 1} }
+		0x13f2 { return UnicodeSimpleCase{one: 0x13fa, len: 1} }
+		0x13f3 { return UnicodeSimpleCase{one: 0x13fb, len: 1} }
+		0x13f4 { return UnicodeSimpleCase{one: 0x13fc, len: 1} }
+		0x13f5 { return UnicodeSimpleCase{one: 0x13fd, len: 1} }
+		0x13f8 { return UnicodeSimpleCase{one: 0x13f0, len: 1} }
+		0x13f9 { return UnicodeSimpleCase{one: 0x13f1, len: 1} }
+		0x13fa { return UnicodeSimpleCase{one: 0x13f2, len: 1} }
+		0x13fb { return UnicodeSimpleCase{one: 0x13f3, len: 1} }
+		0x13fc { return UnicodeSimpleCase{one: 0x13f4, len: 1} }
+		0x13fd { return UnicodeSimpleCase{one: 0x13f5, len: 1} }
+		0x1c80 { return UnicodeSimpleCase{one: 0x412, two: 0x432, len: 2} }
+		0x1c81 { return UnicodeSimpleCase{one: 0x414, two: 0x434, len: 2} }
+		0x1c82 { return UnicodeSimpleCase{one: 0x41e, two: 0x43e, len: 2} }
+		0x1c83 { return UnicodeSimpleCase{one: 0x421, two: 0x441, len: 2} }
+		0x1c84 { return UnicodeSimpleCase{one: 0x422, two: 0x442, three: 0x1c85, len: 3} }
+		0x1c85 { return UnicodeSimpleCase{one: 0x422, two: 0x442, three: 0x1c84, len: 3} }
+		0x1c86 { return UnicodeSimpleCase{one: 0x42a, two: 0x44a, len: 2} }
+		0x1c87 { return UnicodeSimpleCase{one: 0x462, two: 0x463, len: 2} }
+		0x1c88 { return UnicodeSimpleCase{one: 0xa64a, two: 0xa64b, len: 2} }
+		0x1c89 { return UnicodeSimpleCase{one: 0x1c8a, len: 1} }
+		0x1c8a { return UnicodeSimpleCase{one: 0x1c89, len: 1} }
+		0x1c90 { return UnicodeSimpleCase{one: 0x10d0, len: 1} }
+		0x1c91 { return UnicodeSimpleCase{one: 0x10d1, len: 1} }
+		0x1c92 { return UnicodeSimpleCase{one: 0x10d2, len: 1} }
+		0x1c93 { return UnicodeSimpleCase{one: 0x10d3, len: 1} }
+		0x1c94 { return UnicodeSimpleCase{one: 0x10d4, len: 1} }
+		0x1c95 { return UnicodeSimpleCase{one: 0x10d5, len: 1} }
+		0x1c96 { return UnicodeSimpleCase{one: 0x10d6, len: 1} }
+		0x1c97 { return UnicodeSimpleCase{one: 0x10d7, len: 1} }
+		0x1c98 { return UnicodeSimpleCase{one: 0x10d8, len: 1} }
+		0x1c99 { return UnicodeSimpleCase{one: 0x10d9, len: 1} }
+		0x1c9a { return UnicodeSimpleCase{one: 0x10da, len: 1} }
+		0x1c9b { return UnicodeSimpleCase{one: 0x10db, len: 1} }
+		0x1c9c { return UnicodeSimpleCase{one: 0x10dc, len: 1} }
+		0x1c9d { return UnicodeSimpleCase{one: 0x10dd, len: 1} }
+		0x1c9e { return UnicodeSimpleCase{one: 0x10de, len: 1} }
+		0x1c9f { return UnicodeSimpleCase{one: 0x10df, len: 1} }
+		0x1ca0 { return UnicodeSimpleCase{one: 0x10e0, len: 1} }
+		0x1ca1 { return UnicodeSimpleCase{one: 0x10e1, len: 1} }
+		0x1ca2 { return UnicodeSimpleCase{one: 0x10e2, len: 1} }
+		0x1ca3 { return UnicodeSimpleCase{one: 0x10e3, len: 1} }
+		0x1ca4 { return UnicodeSimpleCase{one: 0x10e4, len: 1} }
+		0x1ca5 { return UnicodeSimpleCase{one: 0x10e5, len: 1} }
+		0x1ca6 { return UnicodeSimpleCase{one: 0x10e6, len: 1} }
+		0x1ca7 { return UnicodeSimpleCase{one: 0x10e7, len: 1} }
+		0x1ca8 { return UnicodeSimpleCase{one: 0x10e8, len: 1} }
+		0x1ca9 { return UnicodeSimpleCase{one: 0x10e9, len: 1} }
+		0x1caa { return UnicodeSimpleCase{one: 0x10ea, len: 1} }
+		0x1cab { return UnicodeSimpleCase{one: 0x10eb, len: 1} }
+		0x1cac { return UnicodeSimpleCase{one: 0x10ec, len: 1} }
+		0x1cad { return UnicodeSimpleCase{one: 0x10ed, len: 1} }
+		0x1cae { return UnicodeSimpleCase{one: 0x10ee, len: 1} }
+		0x1caf { return UnicodeSimpleCase{one: 0x10ef, len: 1} }
+		0x1cb0 { return UnicodeSimpleCase{one: 0x10f0, len: 1} }
+		0x1cb1 { return UnicodeSimpleCase{one: 0x10f1, len: 1} }
+		0x1cb2 { return UnicodeSimpleCase{one: 0x10f2, len: 1} }
+		0x1cb3 { return UnicodeSimpleCase{one: 0x10f3, len: 1} }
+		0x1cb4 { return UnicodeSimpleCase{one: 0x10f4, len: 1} }
+		0x1cb5 { return UnicodeSimpleCase{one: 0x10f5, len: 1} }
+		0x1cb6 { return UnicodeSimpleCase{one: 0x10f6, len: 1} }
+		0x1cb7 { return UnicodeSimpleCase{one: 0x10f7, len: 1} }
+		0x1cb8 { return UnicodeSimpleCase{one: 0x10f8, len: 1} }
+		0x1cb9 { return UnicodeSimpleCase{one: 0x10f9, len: 1} }
+		0x1cba { return UnicodeSimpleCase{one: 0x10fa, len: 1} }
+		0x1cbd { return UnicodeSimpleCase{one: 0x10fd, len: 1} }
+		0x1cbe { return UnicodeSimpleCase{one: 0x10fe, len: 1} }
+		0x1cbf { return UnicodeSimpleCase{one: 0x10ff, len: 1} }
+		0x1d79 { return UnicodeSimpleCase{one: 0xa77d, len: 1} }
+		0x1d7d { return UnicodeSimpleCase{one: 0x2c63, len: 1} }
+		0x1d8e { return UnicodeSimpleCase{one: 0xa7c6, len: 1} }
+		0x1e00 { return UnicodeSimpleCase{one: 0x1e01, len: 1} }
+		0x1e01 { return UnicodeSimpleCase{one: 0x1e00, len: 1} }
+		0x1e02 { return UnicodeSimpleCase{one: 0x1e03, len: 1} }
+		0x1e03 { return UnicodeSimpleCase{one: 0x1e02, len: 1} }
+		0x1e04 { return UnicodeSimpleCase{one: 0x1e05, len: 1} }
+		0x1e05 { return UnicodeSimpleCase{one: 0x1e04, len: 1} }
+		0x1e06 { return UnicodeSimpleCase{one: 0x1e07, len: 1} }
+		0x1e07 { return UnicodeSimpleCase{one: 0x1e06, len: 1} }
+		0x1e08 { return UnicodeSimpleCase{one: 0x1e09, len: 1} }
+		0x1e09 { return UnicodeSimpleCase{one: 0x1e08, len: 1} }
+		0x1e0a { return UnicodeSimpleCase{one: 0x1e0b, len: 1} }
+		0x1e0b { return UnicodeSimpleCase{one: 0x1e0a, len: 1} }
+		0x1e0c { return UnicodeSimpleCase{one: 0x1e0d, len: 1} }
+		0x1e0d { return UnicodeSimpleCase{one: 0x1e0c, len: 1} }
+		0x1e0e { return UnicodeSimpleCase{one: 0x1e0f, len: 1} }
+		0x1e0f { return UnicodeSimpleCase{one: 0x1e0e, len: 1} }
+		0x1e10 { return UnicodeSimpleCase{one: 0x1e11, len: 1} }
+		0x1e11 { return UnicodeSimpleCase{one: 0x1e10, len: 1} }
+		0x1e12 { return UnicodeSimpleCase{one: 0x1e13, len: 1} }
+		0x1e13 { return UnicodeSimpleCase{one: 0x1e12, len: 1} }
+		0x1e14 { return UnicodeSimpleCase{one: 0x1e15, len: 1} }
+		0x1e15 { return UnicodeSimpleCase{one: 0x1e14, len: 1} }
+		0x1e16 { return UnicodeSimpleCase{one: 0x1e17, len: 1} }
+		0x1e17 { return UnicodeSimpleCase{one: 0x1e16, len: 1} }
+		0x1e18 { return UnicodeSimpleCase{one: 0x1e19, len: 1} }
+		0x1e19 { return UnicodeSimpleCase{one: 0x1e18, len: 1} }
+		0x1e1a { return UnicodeSimpleCase{one: 0x1e1b, len: 1} }
+		0x1e1b { return UnicodeSimpleCase{one: 0x1e1a, len: 1} }
+		0x1e1c { return UnicodeSimpleCase{one: 0x1e1d, len: 1} }
+		0x1e1d { return UnicodeSimpleCase{one: 0x1e1c, len: 1} }
+		0x1e1e { return UnicodeSimpleCase{one: 0x1e1f, len: 1} }
+		0x1e1f { return UnicodeSimpleCase{one: 0x1e1e, len: 1} }
+		0x1e20 { return UnicodeSimpleCase{one: 0x1e21, len: 1} }
+		0x1e21 { return UnicodeSimpleCase{one: 0x1e20, len: 1} }
+		0x1e22 { return UnicodeSimpleCase{one: 0x1e23, len: 1} }
+		0x1e23 { return UnicodeSimpleCase{one: 0x1e22, len: 1} }
+		0x1e24 { return UnicodeSimpleCase{one: 0x1e25, len: 1} }
+		0x1e25 { return UnicodeSimpleCase{one: 0x1e24, len: 1} }
+		0x1e26 { return UnicodeSimpleCase{one: 0x1e27, len: 1} }
+		0x1e27 { return UnicodeSimpleCase{one: 0x1e26, len: 1} }
+		0x1e28 { return UnicodeSimpleCase{one: 0x1e29, len: 1} }
+		0x1e29 { return UnicodeSimpleCase{one: 0x1e28, len: 1} }
+		0x1e2a { return UnicodeSimpleCase{one: 0x1e2b, len: 1} }
+		0x1e2b { return UnicodeSimpleCase{one: 0x1e2a, len: 1} }
+		0x1e2c { return UnicodeSimpleCase{one: 0x1e2d, len: 1} }
+		0x1e2d { return UnicodeSimpleCase{one: 0x1e2c, len: 1} }
+		0x1e2e { return UnicodeSimpleCase{one: 0x1e2f, len: 1} }
+		0x1e2f { return UnicodeSimpleCase{one: 0x1e2e, len: 1} }
+		0x1e30 { return UnicodeSimpleCase{one: 0x1e31, len: 1} }
+		0x1e31 { return UnicodeSimpleCase{one: 0x1e30, len: 1} }
+		0x1e32 { return UnicodeSimpleCase{one: 0x1e33, len: 1} }
+		0x1e33 { return UnicodeSimpleCase{one: 0x1e32, len: 1} }
+		0x1e34 { return UnicodeSimpleCase{one: 0x1e35, len: 1} }
+		0x1e35 { return UnicodeSimpleCase{one: 0x1e34, len: 1} }
+		0x1e36 { return UnicodeSimpleCase{one: 0x1e37, len: 1} }
+		0x1e37 { return UnicodeSimpleCase{one: 0x1e36, len: 1} }
+		0x1e38 { return UnicodeSimpleCase{one: 0x1e39, len: 1} }
+		0x1e39 { return UnicodeSimpleCase{one: 0x1e38, len: 1} }
+		0x1e3a { return UnicodeSimpleCase{one: 0x1e3b, len: 1} }
+		0x1e3b { return UnicodeSimpleCase{one: 0x1e3a, len: 1} }
+		0x1e3c { return UnicodeSimpleCase{one: 0x1e3d, len: 1} }
+		0x1e3d { return UnicodeSimpleCase{one: 0x1e3c, len: 1} }
+		0x1e3e { return UnicodeSimpleCase{one: 0x1e3f, len: 1} }
+		0x1e3f { return UnicodeSimpleCase{one: 0x1e3e, len: 1} }
+		0x1e40 { return UnicodeSimpleCase{one: 0x1e41, len: 1} }
+		0x1e41 { return UnicodeSimpleCase{one: 0x1e40, len: 1} }
+		0x1e42 { return UnicodeSimpleCase{one: 0x1e43, len: 1} }
+		0x1e43 { return UnicodeSimpleCase{one: 0x1e42, len: 1} }
+		0x1e44 { return UnicodeSimpleCase{one: 0x1e45, len: 1} }
+		0x1e45 { return UnicodeSimpleCase{one: 0x1e44, len: 1} }
+		0x1e46 { return UnicodeSimpleCase{one: 0x1e47, len: 1} }
+		0x1e47 { return UnicodeSimpleCase{one: 0x1e46, len: 1} }
+		0x1e48 { return UnicodeSimpleCase{one: 0x1e49, len: 1} }
+		0x1e49 { return UnicodeSimpleCase{one: 0x1e48, len: 1} }
+		0x1e4a { return UnicodeSimpleCase{one: 0x1e4b, len: 1} }
+		0x1e4b { return UnicodeSimpleCase{one: 0x1e4a, len: 1} }
+		0x1e4c { return UnicodeSimpleCase{one: 0x1e4d, len: 1} }
+		0x1e4d { return UnicodeSimpleCase{one: 0x1e4c, len: 1} }
+		0x1e4e { return UnicodeSimpleCase{one: 0x1e4f, len: 1} }
+		0x1e4f { return UnicodeSimpleCase{one: 0x1e4e, len: 1} }
+		0x1e50 { return UnicodeSimpleCase{one: 0x1e51, len: 1} }
+		0x1e51 { return UnicodeSimpleCase{one: 0x1e50, len: 1} }
+		0x1e52 { return UnicodeSimpleCase{one: 0x1e53, len: 1} }
+		0x1e53 { return UnicodeSimpleCase{one: 0x1e52, len: 1} }
+		0x1e54 { return UnicodeSimpleCase{one: 0x1e55, len: 1} }
+		0x1e55 { return UnicodeSimpleCase{one: 0x1e54, len: 1} }
+		0x1e56 { return UnicodeSimpleCase{one: 0x1e57, len: 1} }
+		0x1e57 { return UnicodeSimpleCase{one: 0x1e56, len: 1} }
+		0x1e58 { return UnicodeSimpleCase{one: 0x1e59, len: 1} }
+		0x1e59 { return UnicodeSimpleCase{one: 0x1e58, len: 1} }
+		0x1e5a { return UnicodeSimpleCase{one: 0x1e5b, len: 1} }
+		0x1e5b { return UnicodeSimpleCase{one: 0x1e5a, len: 1} }
+		0x1e5c { return UnicodeSimpleCase{one: 0x1e5d, len: 1} }
+		0x1e5d { return UnicodeSimpleCase{one: 0x1e5c, len: 1} }
+		0x1e5e { return UnicodeSimpleCase{one: 0x1e5f, len: 1} }
+		0x1e5f { return UnicodeSimpleCase{one: 0x1e5e, len: 1} }
+		0x1e60 { return UnicodeSimpleCase{one: 0x1e61, two: 0x1e9b, len: 2} }
+		0x1e61 { return UnicodeSimpleCase{one: 0x1e60, two: 0x1e9b, len: 2} }
+		0x1e62 { return UnicodeSimpleCase{one: 0x1e63, len: 1} }
+		0x1e63 { return UnicodeSimpleCase{one: 0x1e62, len: 1} }
+		0x1e64 { return UnicodeSimpleCase{one: 0x1e65, len: 1} }
+		0x1e65 { return UnicodeSimpleCase{one: 0x1e64, len: 1} }
+		0x1e66 { return UnicodeSimpleCase{one: 0x1e67, len: 1} }
+		0x1e67 { return UnicodeSimpleCase{one: 0x1e66, len: 1} }
+		0x1e68 { return UnicodeSimpleCase{one: 0x1e69, len: 1} }
+		0x1e69 { return UnicodeSimpleCase{one: 0x1e68, len: 1} }
+		0x1e6a { return UnicodeSimpleCase{one: 0x1e6b, len: 1} }
+		0x1e6b { return UnicodeSimpleCase{one: 0x1e6a, len: 1} }
+		0x1e6c { return UnicodeSimpleCase{one: 0x1e6d, len: 1} }
+		0x1e6d { return UnicodeSimpleCase{one: 0x1e6c, len: 1} }
+		0x1e6e { return UnicodeSimpleCase{one: 0x1e6f, len: 1} }
+		0x1e6f { return UnicodeSimpleCase{one: 0x1e6e, len: 1} }
+		0x1e70 { return UnicodeSimpleCase{one: 0x1e71, len: 1} }
+		0x1e71 { return UnicodeSimpleCase{one: 0x1e70, len: 1} }
+		0x1e72 { return UnicodeSimpleCase{one: 0x1e73, len: 1} }
+		0x1e73 { return UnicodeSimpleCase{one: 0x1e72, len: 1} }
+		0x1e74 { return UnicodeSimpleCase{one: 0x1e75, len: 1} }
+		0x1e75 { return UnicodeSimpleCase{one: 0x1e74, len: 1} }
+		0x1e76 { return UnicodeSimpleCase{one: 0x1e77, len: 1} }
+		0x1e77 { return UnicodeSimpleCase{one: 0x1e76, len: 1} }
+		0x1e78 { return UnicodeSimpleCase{one: 0x1e79, len: 1} }
+		0x1e79 { return UnicodeSimpleCase{one: 0x1e78, len: 1} }
+		0x1e7a { return UnicodeSimpleCase{one: 0x1e7b, len: 1} }
+		0x1e7b { return UnicodeSimpleCase{one: 0x1e7a, len: 1} }
+		0x1e7c { return UnicodeSimpleCase{one: 0x1e7d, len: 1} }
+		0x1e7d { return UnicodeSimpleCase{one: 0x1e7c, len: 1} }
+		0x1e7e { return UnicodeSimpleCase{one: 0x1e7f, len: 1} }
+		0x1e7f { return UnicodeSimpleCase{one: 0x1e7e, len: 1} }
+		0x1e80 { return UnicodeSimpleCase{one: 0x1e81, len: 1} }
+		0x1e81 { return UnicodeSimpleCase{one: 0x1e80, len: 1} }
+		0x1e82 { return UnicodeSimpleCase{one: 0x1e83, len: 1} }
+		0x1e83 { return UnicodeSimpleCase{one: 0x1e82, len: 1} }
+		0x1e84 { return UnicodeSimpleCase{one: 0x1e85, len: 1} }
+		0x1e85 { return UnicodeSimpleCase{one: 0x1e84, len: 1} }
+		0x1e86 { return UnicodeSimpleCase{one: 0x1e87, len: 1} }
+		0x1e87 { return UnicodeSimpleCase{one: 0x1e86, len: 1} }
+		0x1e88 { return UnicodeSimpleCase{one: 0x1e89, len: 1} }
+		0x1e89 { return UnicodeSimpleCase{one: 0x1e88, len: 1} }
+		0x1e8a { return UnicodeSimpleCase{one: 0x1e8b, len: 1} }
+		0x1e8b { return UnicodeSimpleCase{one: 0x1e8a, len: 1} }
+		0x1e8c { return UnicodeSimpleCase{one: 0x1e8d, len: 1} }
+		0x1e8d { return UnicodeSimpleCase{one: 0x1e8c, len: 1} }
+		0x1e8e { return UnicodeSimpleCase{one: 0x1e8f, len: 1} }
+		0x1e8f { return UnicodeSimpleCase{one: 0x1e8e, len: 1} }
+		0x1e90 { return UnicodeSimpleCase{one: 0x1e91, len: 1} }
+		0x1e91 { return UnicodeSimpleCase{one: 0x1e90, len: 1} }
+		0x1e92 { return UnicodeSimpleCase{one: 0x1e93, len: 1} }
+		0x1e93 { return UnicodeSimpleCase{one: 0x1e92, len: 1} }
+		0x1e94 { return UnicodeSimpleCase{one: 0x1e95, len: 1} }
+		0x1e95 { return UnicodeSimpleCase{one: 0x1e94, len: 1} }
+		0x1e9b { return UnicodeSimpleCase{one: 0x1e60, two: 0x1e61, len: 2} }
+		0x1e9e { return UnicodeSimpleCase{one: 0xdf, len: 1} }
+		0x1ea0 { return UnicodeSimpleCase{one: 0x1ea1, len: 1} }
+		0x1ea1 { return UnicodeSimpleCase{one: 0x1ea0, len: 1} }
+		0x1ea2 { return UnicodeSimpleCase{one: 0x1ea3, len: 1} }
+		0x1ea3 { return UnicodeSimpleCase{one: 0x1ea2, len: 1} }
+		0x1ea4 { return UnicodeSimpleCase{one: 0x1ea5, len: 1} }
+		0x1ea5 { return UnicodeSimpleCase{one: 0x1ea4, len: 1} }
+		0x1ea6 { return UnicodeSimpleCase{one: 0x1ea7, len: 1} }
+		0x1ea7 { return UnicodeSimpleCase{one: 0x1ea6, len: 1} }
+		0x1ea8 { return UnicodeSimpleCase{one: 0x1ea9, len: 1} }
+		0x1ea9 { return UnicodeSimpleCase{one: 0x1ea8, len: 1} }
+		0x1eaa { return UnicodeSimpleCase{one: 0x1eab, len: 1} }
+		0x1eab { return UnicodeSimpleCase{one: 0x1eaa, len: 1} }
+		0x1eac { return UnicodeSimpleCase{one: 0x1ead, len: 1} }
+		0x1ead { return UnicodeSimpleCase{one: 0x1eac, len: 1} }
+		0x1eae { return UnicodeSimpleCase{one: 0x1eaf, len: 1} }
+		0x1eaf { return UnicodeSimpleCase{one: 0x1eae, len: 1} }
+		0x1eb0 { return UnicodeSimpleCase{one: 0x1eb1, len: 1} }
+		0x1eb1 { return UnicodeSimpleCase{one: 0x1eb0, len: 1} }
+		0x1eb2 { return UnicodeSimpleCase{one: 0x1eb3, len: 1} }
+		0x1eb3 { return UnicodeSimpleCase{one: 0x1eb2, len: 1} }
+		0x1eb4 { return UnicodeSimpleCase{one: 0x1eb5, len: 1} }
+		0x1eb5 { return UnicodeSimpleCase{one: 0x1eb4, len: 1} }
+		0x1eb6 { return UnicodeSimpleCase{one: 0x1eb7, len: 1} }
+		0x1eb7 { return UnicodeSimpleCase{one: 0x1eb6, len: 1} }
+		0x1eb8 { return UnicodeSimpleCase{one: 0x1eb9, len: 1} }
+		0x1eb9 { return UnicodeSimpleCase{one: 0x1eb8, len: 1} }
+		0x1eba { return UnicodeSimpleCase{one: 0x1ebb, len: 1} }
+		0x1ebb { return UnicodeSimpleCase{one: 0x1eba, len: 1} }
+		0x1ebc { return UnicodeSimpleCase{one: 0x1ebd, len: 1} }
+		0x1ebd { return UnicodeSimpleCase{one: 0x1ebc, len: 1} }
+		0x1ebe { return UnicodeSimpleCase{one: 0x1ebf, len: 1} }
+		0x1ebf { return UnicodeSimpleCase{one: 0x1ebe, len: 1} }
+		0x1ec0 { return UnicodeSimpleCase{one: 0x1ec1, len: 1} }
+		0x1ec1 { return UnicodeSimpleCase{one: 0x1ec0, len: 1} }
+		0x1ec2 { return UnicodeSimpleCase{one: 0x1ec3, len: 1} }
+		0x1ec3 { return UnicodeSimpleCase{one: 0x1ec2, len: 1} }
+		0x1ec4 { return UnicodeSimpleCase{one: 0x1ec5, len: 1} }
+		0x1ec5 { return UnicodeSimpleCase{one: 0x1ec4, len: 1} }
+		0x1ec6 { return UnicodeSimpleCase{one: 0x1ec7, len: 1} }
+		0x1ec7 { return UnicodeSimpleCase{one: 0x1ec6, len: 1} }
+		0x1ec8 { return UnicodeSimpleCase{one: 0x1ec9, len: 1} }
+		0x1ec9 { return UnicodeSimpleCase{one: 0x1ec8, len: 1} }
+		0x1eca { return UnicodeSimpleCase{one: 0x1ecb, len: 1} }
+		0x1ecb { return UnicodeSimpleCase{one: 0x1eca, len: 1} }
+		0x1ecc { return UnicodeSimpleCase{one: 0x1ecd, len: 1} }
+		0x1ecd { return UnicodeSimpleCase{one: 0x1ecc, len: 1} }
+		0x1ece { return UnicodeSimpleCase{one: 0x1ecf, len: 1} }
+		0x1ecf { return UnicodeSimpleCase{one: 0x1ece, len: 1} }
+		0x1ed0 { return UnicodeSimpleCase{one: 0x1ed1, len: 1} }
+		0x1ed1 { return UnicodeSimpleCase{one: 0x1ed0, len: 1} }
+		0x1ed2 { return UnicodeSimpleCase{one: 0x1ed3, len: 1} }
+		0x1ed3 { return UnicodeSimpleCase{one: 0x1ed2, len: 1} }
+		0x1ed4 { return UnicodeSimpleCase{one: 0x1ed5, len: 1} }
+		0x1ed5 { return UnicodeSimpleCase{one: 0x1ed4, len: 1} }
+		0x1ed6 { return UnicodeSimpleCase{one: 0x1ed7, len: 1} }
+		0x1ed7 { return UnicodeSimpleCase{one: 0x1ed6, len: 1} }
+		0x1ed8 { return UnicodeSimpleCase{one: 0x1ed9, len: 1} }
+		0x1ed9 { return UnicodeSimpleCase{one: 0x1ed8, len: 1} }
+		0x1eda { return UnicodeSimpleCase{one: 0x1edb, len: 1} }
+		0x1edb { return UnicodeSimpleCase{one: 0x1eda, len: 1} }
+		0x1edc { return UnicodeSimpleCase{one: 0x1edd, len: 1} }
+		0x1edd { return UnicodeSimpleCase{one: 0x1edc, len: 1} }
+		0x1ede { return UnicodeSimpleCase{one: 0x1edf, len: 1} }
+		0x1edf { return UnicodeSimpleCase{one: 0x1ede, len: 1} }
+		0x1ee0 { return UnicodeSimpleCase{one: 0x1ee1, len: 1} }
+		0x1ee1 { return UnicodeSimpleCase{one: 0x1ee0, len: 1} }
+		0x1ee2 { return UnicodeSimpleCase{one: 0x1ee3, len: 1} }
+		0x1ee3 { return UnicodeSimpleCase{one: 0x1ee2, len: 1} }
+		0x1ee4 { return UnicodeSimpleCase{one: 0x1ee5, len: 1} }
+		0x1ee5 { return UnicodeSimpleCase{one: 0x1ee4, len: 1} }
+		0x1ee6 { return UnicodeSimpleCase{one: 0x1ee7, len: 1} }
+		0x1ee7 { return UnicodeSimpleCase{one: 0x1ee6, len: 1} }
+		0x1ee8 { return UnicodeSimpleCase{one: 0x1ee9, len: 1} }
+		0x1ee9 { return UnicodeSimpleCase{one: 0x1ee8, len: 1} }
+		0x1eea { return UnicodeSimpleCase{one: 0x1eeb, len: 1} }
+		0x1eeb { return UnicodeSimpleCase{one: 0x1eea, len: 1} }
+		0x1eec { return UnicodeSimpleCase{one: 0x1eed, len: 1} }
+		0x1eed { return UnicodeSimpleCase{one: 0x1eec, len: 1} }
+		0x1eee { return UnicodeSimpleCase{one: 0x1eef, len: 1} }
+		0x1eef { return UnicodeSimpleCase{one: 0x1eee, len: 1} }
+		0x1ef0 { return UnicodeSimpleCase{one: 0x1ef1, len: 1} }
+		0x1ef1 { return UnicodeSimpleCase{one: 0x1ef0, len: 1} }
+		0x1ef2 { return UnicodeSimpleCase{one: 0x1ef3, len: 1} }
+		0x1ef3 { return UnicodeSimpleCase{one: 0x1ef2, len: 1} }
+		0x1ef4 { return UnicodeSimpleCase{one: 0x1ef5, len: 1} }
+		0x1ef5 { return UnicodeSimpleCase{one: 0x1ef4, len: 1} }
+		0x1ef6 { return UnicodeSimpleCase{one: 0x1ef7, len: 1} }
+		0x1ef7 { return UnicodeSimpleCase{one: 0x1ef6, len: 1} }
+		0x1ef8 { return UnicodeSimpleCase{one: 0x1ef9, len: 1} }
+		0x1ef9 { return UnicodeSimpleCase{one: 0x1ef8, len: 1} }
+		0x1efa { return UnicodeSimpleCase{one: 0x1efb, len: 1} }
+		0x1efb { return UnicodeSimpleCase{one: 0x1efa, len: 1} }
+		0x1efc { return UnicodeSimpleCase{one: 0x1efd, len: 1} }
+		0x1efd { return UnicodeSimpleCase{one: 0x1efc, len: 1} }
+		0x1efe { return UnicodeSimpleCase{one: 0x1eff, len: 1} }
+		0x1eff { return UnicodeSimpleCase{one: 0x1efe, len: 1} }
+		0x1f00 { return UnicodeSimpleCase{one: 0x1f08, len: 1} }
+		0x1f01 { return UnicodeSimpleCase{one: 0x1f09, len: 1} }
+		0x1f02 { return UnicodeSimpleCase{one: 0x1f0a, len: 1} }
+		0x1f03 { return UnicodeSimpleCase{one: 0x1f0b, len: 1} }
+		0x1f04 { return UnicodeSimpleCase{one: 0x1f0c, len: 1} }
+		0x1f05 { return UnicodeSimpleCase{one: 0x1f0d, len: 1} }
+		0x1f06 { return UnicodeSimpleCase{one: 0x1f0e, len: 1} }
+		0x1f07 { return UnicodeSimpleCase{one: 0x1f0f, len: 1} }
+		0x1f08 { return UnicodeSimpleCase{one: 0x1f00, len: 1} }
+		0x1f09 { return UnicodeSimpleCase{one: 0x1f01, len: 1} }
+		0x1f0a { return UnicodeSimpleCase{one: 0x1f02, len: 1} }
+		0x1f0b { return UnicodeSimpleCase{one: 0x1f03, len: 1} }
+		0x1f0c { return UnicodeSimpleCase{one: 0x1f04, len: 1} }
+		0x1f0d { return UnicodeSimpleCase{one: 0x1f05, len: 1} }
+		0x1f0e { return UnicodeSimpleCase{one: 0x1f06, len: 1} }
+		0x1f0f { return UnicodeSimpleCase{one: 0x1f07, len: 1} }
+		0x1f10 { return UnicodeSimpleCase{one: 0x1f18, len: 1} }
+		0x1f11 { return UnicodeSimpleCase{one: 0x1f19, len: 1} }
+		0x1f12 { return UnicodeSimpleCase{one: 0x1f1a, len: 1} }
+		0x1f13 { return UnicodeSimpleCase{one: 0x1f1b, len: 1} }
+		0x1f14 { return UnicodeSimpleCase{one: 0x1f1c, len: 1} }
+		0x1f15 { return UnicodeSimpleCase{one: 0x1f1d, len: 1} }
+		0x1f18 { return UnicodeSimpleCase{one: 0x1f10, len: 1} }
+		0x1f19 { return UnicodeSimpleCase{one: 0x1f11, len: 1} }
+		0x1f1a { return UnicodeSimpleCase{one: 0x1f12, len: 1} }
+		0x1f1b { return UnicodeSimpleCase{one: 0x1f13, len: 1} }
+		0x1f1c { return UnicodeSimpleCase{one: 0x1f14, len: 1} }
+		0x1f1d { return UnicodeSimpleCase{one: 0x1f15, len: 1} }
+		0x1f20 { return UnicodeSimpleCase{one: 0x1f28, len: 1} }
+		0x1f21 { return UnicodeSimpleCase{one: 0x1f29, len: 1} }
+		0x1f22 { return UnicodeSimpleCase{one: 0x1f2a, len: 1} }
+		0x1f23 { return UnicodeSimpleCase{one: 0x1f2b, len: 1} }
+		0x1f24 { return UnicodeSimpleCase{one: 0x1f2c, len: 1} }
+		0x1f25 { return UnicodeSimpleCase{one: 0x1f2d, len: 1} }
+		0x1f26 { return UnicodeSimpleCase{one: 0x1f2e, len: 1} }
+		0x1f27 { return UnicodeSimpleCase{one: 0x1f2f, len: 1} }
+		0x1f28 { return UnicodeSimpleCase{one: 0x1f20, len: 1} }
+		0x1f29 { return UnicodeSimpleCase{one: 0x1f21, len: 1} }
+		0x1f2a { return UnicodeSimpleCase{one: 0x1f22, len: 1} }
+		0x1f2b { return UnicodeSimpleCase{one: 0x1f23, len: 1} }
+		0x1f2c { return UnicodeSimpleCase{one: 0x1f24, len: 1} }
+		0x1f2d { return UnicodeSimpleCase{one: 0x1f25, len: 1} }
+		0x1f2e { return UnicodeSimpleCase{one: 0x1f26, len: 1} }
+		0x1f2f { return UnicodeSimpleCase{one: 0x1f27, len: 1} }
+		0x1f30 { return UnicodeSimpleCase{one: 0x1f38, len: 1} }
+		0x1f31 { return UnicodeSimpleCase{one: 0x1f39, len: 1} }
+		0x1f32 { return UnicodeSimpleCase{one: 0x1f3a, len: 1} }
+		0x1f33 { return UnicodeSimpleCase{one: 0x1f3b, len: 1} }
+		0x1f34 { return UnicodeSimpleCase{one: 0x1f3c, len: 1} }
+		0x1f35 { return UnicodeSimpleCase{one: 0x1f3d, len: 1} }
+		0x1f36 { return UnicodeSimpleCase{one: 0x1f3e, len: 1} }
+		0x1f37 { return UnicodeSimpleCase{one: 0x1f3f, len: 1} }
+		0x1f38 { return UnicodeSimpleCase{one: 0x1f30, len: 1} }
+		0x1f39 { return UnicodeSimpleCase{one: 0x1f31, len: 1} }
+		0x1f3a { return UnicodeSimpleCase{one: 0x1f32, len: 1} }
+		0x1f3b { return UnicodeSimpleCase{one: 0x1f33, len: 1} }
+		0x1f3c { return UnicodeSimpleCase{one: 0x1f34, len: 1} }
+		0x1f3d { return UnicodeSimpleCase{one: 0x1f35, len: 1} }
+		0x1f3e { return UnicodeSimpleCase{one: 0x1f36, len: 1} }
+		0x1f3f { return UnicodeSimpleCase{one: 0x1f37, len: 1} }
+		0x1f40 { return UnicodeSimpleCase{one: 0x1f48, len: 1} }
+		0x1f41 { return UnicodeSimpleCase{one: 0x1f49, len: 1} }
+		0x1f42 { return UnicodeSimpleCase{one: 0x1f4a, len: 1} }
+		0x1f43 { return UnicodeSimpleCase{one: 0x1f4b, len: 1} }
+		0x1f44 { return UnicodeSimpleCase{one: 0x1f4c, len: 1} }
+		0x1f45 { return UnicodeSimpleCase{one: 0x1f4d, len: 1} }
+		0x1f48 { return UnicodeSimpleCase{one: 0x1f40, len: 1} }
+		0x1f49 { return UnicodeSimpleCase{one: 0x1f41, len: 1} }
+		0x1f4a { return UnicodeSimpleCase{one: 0x1f42, len: 1} }
+		0x1f4b { return UnicodeSimpleCase{one: 0x1f43, len: 1} }
+		0x1f4c { return UnicodeSimpleCase{one: 0x1f44, len: 1} }
+		0x1f4d { return UnicodeSimpleCase{one: 0x1f45, len: 1} }
+		0x1f51 { return UnicodeSimpleCase{one: 0x1f59, len: 1} }
+		0x1f53 { return UnicodeSimpleCase{one: 0x1f5b, len: 1} }
+		0x1f55 { return UnicodeSimpleCase{one: 0x1f5d, len: 1} }
+		0x1f57 { return UnicodeSimpleCase{one: 0x1f5f, len: 1} }
+		0x1f59 { return UnicodeSimpleCase{one: 0x1f51, len: 1} }
+		0x1f5b { return UnicodeSimpleCase{one: 0x1f53, len: 1} }
+		0x1f5d { return UnicodeSimpleCase{one: 0x1f55, len: 1} }
+		0x1f5f { return UnicodeSimpleCase{one: 0x1f57, len: 1} }
+		0x1f60 { return UnicodeSimpleCase{one: 0x1f68, len: 1} }
+		0x1f61 { return UnicodeSimpleCase{one: 0x1f69, len: 1} }
+		0x1f62 { return UnicodeSimpleCase{one: 0x1f6a, len: 1} }
+		0x1f63 { return UnicodeSimpleCase{one: 0x1f6b, len: 1} }
+		0x1f64 { return UnicodeSimpleCase{one: 0x1f6c, len: 1} }
+		0x1f65 { return UnicodeSimpleCase{one: 0x1f6d, len: 1} }
+		0x1f66 { return UnicodeSimpleCase{one: 0x1f6e, len: 1} }
+		0x1f67 { return UnicodeSimpleCase{one: 0x1f6f, len: 1} }
+		0x1f68 { return UnicodeSimpleCase{one: 0x1f60, len: 1} }
+		0x1f69 { return UnicodeSimpleCase{one: 0x1f61, len: 1} }
+		0x1f6a { return UnicodeSimpleCase{one: 0x1f62, len: 1} }
+		0x1f6b { return UnicodeSimpleCase{one: 0x1f63, len: 1} }
+		0x1f6c { return UnicodeSimpleCase{one: 0x1f64, len: 1} }
+		0x1f6d { return UnicodeSimpleCase{one: 0x1f65, len: 1} }
+		0x1f6e { return UnicodeSimpleCase{one: 0x1f66, len: 1} }
+		0x1f6f { return UnicodeSimpleCase{one: 0x1f67, len: 1} }
+		0x1f70 { return UnicodeSimpleCase{one: 0x1fba, len: 1} }
+		0x1f71 { return UnicodeSimpleCase{one: 0x1fbb, len: 1} }
+		0x1f72 { return UnicodeSimpleCase{one: 0x1fc8, len: 1} }
+		0x1f73 { return UnicodeSimpleCase{one: 0x1fc9, len: 1} }
+		0x1f74 { return UnicodeSimpleCase{one: 0x1fca, len: 1} }
+		0x1f75 { return UnicodeSimpleCase{one: 0x1fcb, len: 1} }
+		0x1f76 { return UnicodeSimpleCase{one: 0x1fda, len: 1} }
+		0x1f77 { return UnicodeSimpleCase{one: 0x1fdb, len: 1} }
+		0x1f78 { return UnicodeSimpleCase{one: 0x1ff8, len: 1} }
+		0x1f79 { return UnicodeSimpleCase{one: 0x1ff9, len: 1} }
+		0x1f7a { return UnicodeSimpleCase{one: 0x1fea, len: 1} }
+		0x1f7b { return UnicodeSimpleCase{one: 0x1feb, len: 1} }
+		0x1f7c { return UnicodeSimpleCase{one: 0x1ffa, len: 1} }
+		0x1f7d { return UnicodeSimpleCase{one: 0x1ffb, len: 1} }
+		0x1f80 { return UnicodeSimpleCase{one: 0x1f88, len: 1} }
+		0x1f81 { return UnicodeSimpleCase{one: 0x1f89, len: 1} }
+		0x1f82 { return UnicodeSimpleCase{one: 0x1f8a, len: 1} }
+		0x1f83 { return UnicodeSimpleCase{one: 0x1f8b, len: 1} }
+		0x1f84 { return UnicodeSimpleCase{one: 0x1f8c, len: 1} }
+		0x1f85 { return UnicodeSimpleCase{one: 0x1f8d, len: 1} }
+		0x1f86 { return UnicodeSimpleCase{one: 0x1f8e, len: 1} }
+		0x1f87 { return UnicodeSimpleCase{one: 0x1f8f, len: 1} }
+		0x1f88 { return UnicodeSimpleCase{one: 0x1f80, len: 1} }
+		0x1f89 { return UnicodeSimpleCase{one: 0x1f81, len: 1} }
+		0x1f8a { return UnicodeSimpleCase{one: 0x1f82, len: 1} }
+		0x1f8b { return UnicodeSimpleCase{one: 0x1f83, len: 1} }
+		0x1f8c { return UnicodeSimpleCase{one: 0x1f84, len: 1} }
+		0x1f8d { return UnicodeSimpleCase{one: 0x1f85, len: 1} }
+		0x1f8e { return UnicodeSimpleCase{one: 0x1f86, len: 1} }
+		0x1f8f { return UnicodeSimpleCase{one: 0x1f87, len: 1} }
+		0x1f90 { return UnicodeSimpleCase{one: 0x1f98, len: 1} }
+		0x1f91 { return UnicodeSimpleCase{one: 0x1f99, len: 1} }
+		0x1f92 { return UnicodeSimpleCase{one: 0x1f9a, len: 1} }
+		0x1f93 { return UnicodeSimpleCase{one: 0x1f9b, len: 1} }
+		0x1f94 { return UnicodeSimpleCase{one: 0x1f9c, len: 1} }
+		0x1f95 { return UnicodeSimpleCase{one: 0x1f9d, len: 1} }
+		0x1f96 { return UnicodeSimpleCase{one: 0x1f9e, len: 1} }
+		0x1f97 { return UnicodeSimpleCase{one: 0x1f9f, len: 1} }
+		0x1f98 { return UnicodeSimpleCase{one: 0x1f90, len: 1} }
+		0x1f99 { return UnicodeSimpleCase{one: 0x1f91, len: 1} }
+		0x1f9a { return UnicodeSimpleCase{one: 0x1f92, len: 1} }
+		0x1f9b { return UnicodeSimpleCase{one: 0x1f93, len: 1} }
+		0x1f9c { return UnicodeSimpleCase{one: 0x1f94, len: 1} }
+		0x1f9d { return UnicodeSimpleCase{one: 0x1f95, len: 1} }
+		0x1f9e { return UnicodeSimpleCase{one: 0x1f96, len: 1} }
+		0x1f9f { return UnicodeSimpleCase{one: 0x1f97, len: 1} }
+		0x1fa0 { return UnicodeSimpleCase{one: 0x1fa8, len: 1} }
+		0x1fa1 { return UnicodeSimpleCase{one: 0x1fa9, len: 1} }
+		0x1fa2 { return UnicodeSimpleCase{one: 0x1faa, len: 1} }
+		0x1fa3 { return UnicodeSimpleCase{one: 0x1fab, len: 1} }
+		0x1fa4 { return UnicodeSimpleCase{one: 0x1fac, len: 1} }
+		0x1fa5 { return UnicodeSimpleCase{one: 0x1fad, len: 1} }
+		0x1fa6 { return UnicodeSimpleCase{one: 0x1fae, len: 1} }
+		0x1fa7 { return UnicodeSimpleCase{one: 0x1faf, len: 1} }
+		0x1fa8 { return UnicodeSimpleCase{one: 0x1fa0, len: 1} }
+		0x1fa9 { return UnicodeSimpleCase{one: 0x1fa1, len: 1} }
+		0x1faa { return UnicodeSimpleCase{one: 0x1fa2, len: 1} }
+		0x1fab { return UnicodeSimpleCase{one: 0x1fa3, len: 1} }
+		0x1fac { return UnicodeSimpleCase{one: 0x1fa4, len: 1} }
+		0x1fad { return UnicodeSimpleCase{one: 0x1fa5, len: 1} }
+		0x1fae { return UnicodeSimpleCase{one: 0x1fa6, len: 1} }
+		0x1faf { return UnicodeSimpleCase{one: 0x1fa7, len: 1} }
+		0x1fb0 { return UnicodeSimpleCase{one: 0x1fb8, len: 1} }
+		0x1fb1 { return UnicodeSimpleCase{one: 0x1fb9, len: 1} }
+		0x1fb3 { return UnicodeSimpleCase{one: 0x1fbc, len: 1} }
+		0x1fb8 { return UnicodeSimpleCase{one: 0x1fb0, len: 1} }
+		0x1fb9 { return UnicodeSimpleCase{one: 0x1fb1, len: 1} }
+		0x1fba { return UnicodeSimpleCase{one: 0x1f70, len: 1} }
+		0x1fbb { return UnicodeSimpleCase{one: 0x1f71, len: 1} }
+		0x1fbc { return UnicodeSimpleCase{one: 0x1fb3, len: 1} }
+		0x1fbe { return UnicodeSimpleCase{one: 0x345, two: 0x399, three: 0x3b9, len: 3} }
+		0x1fc3 { return UnicodeSimpleCase{one: 0x1fcc, len: 1} }
+		0x1fc8 { return UnicodeSimpleCase{one: 0x1f72, len: 1} }
+		0x1fc9 { return UnicodeSimpleCase{one: 0x1f73, len: 1} }
+		0x1fca { return UnicodeSimpleCase{one: 0x1f74, len: 1} }
+		0x1fcb { return UnicodeSimpleCase{one: 0x1f75, len: 1} }
+		0x1fcc { return UnicodeSimpleCase{one: 0x1fc3, len: 1} }
+		0x1fd0 { return UnicodeSimpleCase{one: 0x1fd8, len: 1} }
+		0x1fd1 { return UnicodeSimpleCase{one: 0x1fd9, len: 1} }
+		0x1fd3 { return UnicodeSimpleCase{one: 0x390, len: 1} }
+		0x1fd8 { return UnicodeSimpleCase{one: 0x1fd0, len: 1} }
+		0x1fd9 { return UnicodeSimpleCase{one: 0x1fd1, len: 1} }
+		0x1fda { return UnicodeSimpleCase{one: 0x1f76, len: 1} }
+		0x1fdb { return UnicodeSimpleCase{one: 0x1f77, len: 1} }
+		0x1fe0 { return UnicodeSimpleCase{one: 0x1fe8, len: 1} }
+		0x1fe1 { return UnicodeSimpleCase{one: 0x1fe9, len: 1} }
+		0x1fe3 { return UnicodeSimpleCase{one: 0x3b0, len: 1} }
+		0x1fe5 { return UnicodeSimpleCase{one: 0x1fec, len: 1} }
+		0x1fe8 { return UnicodeSimpleCase{one: 0x1fe0, len: 1} }
+		0x1fe9 { return UnicodeSimpleCase{one: 0x1fe1, len: 1} }
+		0x1fea { return UnicodeSimpleCase{one: 0x1f7a, len: 1} }
+		0x1feb { return UnicodeSimpleCase{one: 0x1f7b, len: 1} }
+		0x1fec { return UnicodeSimpleCase{one: 0x1fe5, len: 1} }
+		0x1ff3 { return UnicodeSimpleCase{one: 0x1ffc, len: 1} }
+		0x1ff8 { return UnicodeSimpleCase{one: 0x1f78, len: 1} }
+		0x1ff9 { return UnicodeSimpleCase{one: 0x1f79, len: 1} }
+		0x1ffa { return UnicodeSimpleCase{one: 0x1f7c, len: 1} }
+		0x1ffb { return UnicodeSimpleCase{one: 0x1f7d, len: 1} }
+		0x1ffc { return UnicodeSimpleCase{one: 0x1ff3, len: 1} }
+		0x2126 { return UnicodeSimpleCase{one: 0x3a9, two: 0x3c9, len: 2} }
+		0x212a { return UnicodeSimpleCase{one: 0x4b, two: 0x6b, len: 2} }
+		0x212b { return UnicodeSimpleCase{one: 0xc5, two: 0xe5, len: 2} }
+		0x2132 { return UnicodeSimpleCase{one: 0x214e, len: 1} }
+		0x214e { return UnicodeSimpleCase{one: 0x2132, len: 1} }
+		0x2160 { return UnicodeSimpleCase{one: 0x2170, len: 1} }
+		0x2161 { return UnicodeSimpleCase{one: 0x2171, len: 1} }
+		0x2162 { return UnicodeSimpleCase{one: 0x2172, len: 1} }
+		0x2163 { return UnicodeSimpleCase{one: 0x2173, len: 1} }
+		0x2164 { return UnicodeSimpleCase{one: 0x2174, len: 1} }
+		0x2165 { return UnicodeSimpleCase{one: 0x2175, len: 1} }
+		0x2166 { return UnicodeSimpleCase{one: 0x2176, len: 1} }
+		0x2167 { return UnicodeSimpleCase{one: 0x2177, len: 1} }
+		0x2168 { return UnicodeSimpleCase{one: 0x2178, len: 1} }
+		0x2169 { return UnicodeSimpleCase{one: 0x2179, len: 1} }
+		0x216a { return UnicodeSimpleCase{one: 0x217a, len: 1} }
+		0x216b { return UnicodeSimpleCase{one: 0x217b, len: 1} }
+		0x216c { return UnicodeSimpleCase{one: 0x217c, len: 1} }
+		0x216d { return UnicodeSimpleCase{one: 0x217d, len: 1} }
+		0x216e { return UnicodeSimpleCase{one: 0x217e, len: 1} }
+		0x216f { return UnicodeSimpleCase{one: 0x217f, len: 1} }
+		0x2170 { return UnicodeSimpleCase{one: 0x2160, len: 1} }
+		0x2171 { return UnicodeSimpleCase{one: 0x2161, len: 1} }
+		0x2172 { return UnicodeSimpleCase{one: 0x2162, len: 1} }
+		0x2173 { return UnicodeSimpleCase{one: 0x2163, len: 1} }
+		0x2174 { return UnicodeSimpleCase{one: 0x2164, len: 1} }
+		0x2175 { return UnicodeSimpleCase{one: 0x2165, len: 1} }
+		0x2176 { return UnicodeSimpleCase{one: 0x2166, len: 1} }
+		0x2177 { return UnicodeSimpleCase{one: 0x2167, len: 1} }
+		0x2178 { return UnicodeSimpleCase{one: 0x2168, len: 1} }
+		0x2179 { return UnicodeSimpleCase{one: 0x2169, len: 1} }
+		0x217a { return UnicodeSimpleCase{one: 0x216a, len: 1} }
+		0x217b { return UnicodeSimpleCase{one: 0x216b, len: 1} }
+		0x217c { return UnicodeSimpleCase{one: 0x216c, len: 1} }
+		0x217d { return UnicodeSimpleCase{one: 0x216d, len: 1} }
+		0x217e { return UnicodeSimpleCase{one: 0x216e, len: 1} }
+		0x217f { return UnicodeSimpleCase{one: 0x216f, len: 1} }
+		0x2183 { return UnicodeSimpleCase{one: 0x2184, len: 1} }
+		0x2184 { return UnicodeSimpleCase{one: 0x2183, len: 1} }
+		0x24b6 { return UnicodeSimpleCase{one: 0x24d0, len: 1} }
+		0x24b7 { return UnicodeSimpleCase{one: 0x24d1, len: 1} }
+		0x24b8 { return UnicodeSimpleCase{one: 0x24d2, len: 1} }
+		0x24b9 { return UnicodeSimpleCase{one: 0x24d3, len: 1} }
+		0x24ba { return UnicodeSimpleCase{one: 0x24d4, len: 1} }
+		0x24bb { return UnicodeSimpleCase{one: 0x24d5, len: 1} }
+		0x24bc { return UnicodeSimpleCase{one: 0x24d6, len: 1} }
+		0x24bd { return UnicodeSimpleCase{one: 0x24d7, len: 1} }
+		0x24be { return UnicodeSimpleCase{one: 0x24d8, len: 1} }
+		0x24bf { return UnicodeSimpleCase{one: 0x24d9, len: 1} }
+		0x24c0 { return UnicodeSimpleCase{one: 0x24da, len: 1} }
+		0x24c1 { return UnicodeSimpleCase{one: 0x24db, len: 1} }
+		0x24c2 { return UnicodeSimpleCase{one: 0x24dc, len: 1} }
+		0x24c3 { return UnicodeSimpleCase{one: 0x24dd, len: 1} }
+		0x24c4 { return UnicodeSimpleCase{one: 0x24de, len: 1} }
+		0x24c5 { return UnicodeSimpleCase{one: 0x24df, len: 1} }
+		0x24c6 { return UnicodeSimpleCase{one: 0x24e0, len: 1} }
+		0x24c7 { return UnicodeSimpleCase{one: 0x24e1, len: 1} }
+		0x24c8 { return UnicodeSimpleCase{one: 0x24e2, len: 1} }
+		0x24c9 { return UnicodeSimpleCase{one: 0x24e3, len: 1} }
+		0x24ca { return UnicodeSimpleCase{one: 0x24e4, len: 1} }
+		0x24cb { return UnicodeSimpleCase{one: 0x24e5, len: 1} }
+		0x24cc { return UnicodeSimpleCase{one: 0x24e6, len: 1} }
+		0x24cd { return UnicodeSimpleCase{one: 0x24e7, len: 1} }
+		0x24ce { return UnicodeSimpleCase{one: 0x24e8, len: 1} }
+		0x24cf { return UnicodeSimpleCase{one: 0x24e9, len: 1} }
+		0x24d0 { return UnicodeSimpleCase{one: 0x24b6, len: 1} }
+		0x24d1 { return UnicodeSimpleCase{one: 0x24b7, len: 1} }
+		0x24d2 { return UnicodeSimpleCase{one: 0x24b8, len: 1} }
+		0x24d3 { return UnicodeSimpleCase{one: 0x24b9, len: 1} }
+		0x24d4 { return UnicodeSimpleCase{one: 0x24ba, len: 1} }
+		0x24d5 { return UnicodeSimpleCase{one: 0x24bb, len: 1} }
+		0x24d6 { return UnicodeSimpleCase{one: 0x24bc, len: 1} }
+		0x24d7 { return UnicodeSimpleCase{one: 0x24bd, len: 1} }
+		0x24d8 { return UnicodeSimpleCase{one: 0x24be, len: 1} }
+		0x24d9 { return UnicodeSimpleCase{one: 0x24bf, len: 1} }
+		0x24da { return UnicodeSimpleCase{one: 0x24c0, len: 1} }
+		0x24db { return UnicodeSimpleCase{one: 0x24c1, len: 1} }
+		0x24dc { return UnicodeSimpleCase{one: 0x24c2, len: 1} }
+		0x24dd { return UnicodeSimpleCase{one: 0x24c3, len: 1} }
+		0x24de { return UnicodeSimpleCase{one: 0x24c4, len: 1} }
+		0x24df { return UnicodeSimpleCase{one: 0x24c5, len: 1} }
+		0x24e0 { return UnicodeSimpleCase{one: 0x24c6, len: 1} }
+		0x24e1 { return UnicodeSimpleCase{one: 0x24c7, len: 1} }
+		0x24e2 { return UnicodeSimpleCase{one: 0x24c8, len: 1} }
+		0x24e3 { return UnicodeSimpleCase{one: 0x24c9, len: 1} }
+		0x24e4 { return UnicodeSimpleCase{one: 0x24ca, len: 1} }
+		0x24e5 { return UnicodeSimpleCase{one: 0x24cb, len: 1} }
+		0x24e6 { return UnicodeSimpleCase{one: 0x24cc, len: 1} }
+		0x24e7 { return UnicodeSimpleCase{one: 0x24cd, len: 1} }
+		0x24e8 { return UnicodeSimpleCase{one: 0x24ce, len: 1} }
+		0x24e9 { return UnicodeSimpleCase{one: 0x24cf, len: 1} }
+		0x2c00 { return UnicodeSimpleCase{one: 0x2c30, len: 1} }
+		0x2c01 { return UnicodeSimpleCase{one: 0x2c31, len: 1} }
+		0x2c02 { return UnicodeSimpleCase{one: 0x2c32, len: 1} }
+		0x2c03 { return UnicodeSimpleCase{one: 0x2c33, len: 1} }
+		0x2c04 { return UnicodeSimpleCase{one: 0x2c34, len: 1} }
+		0x2c05 { return UnicodeSimpleCase{one: 0x2c35, len: 1} }
+		0x2c06 { return UnicodeSimpleCase{one: 0x2c36, len: 1} }
+		0x2c07 { return UnicodeSimpleCase{one: 0x2c37, len: 1} }
+		0x2c08 { return UnicodeSimpleCase{one: 0x2c38, len: 1} }
+		0x2c09 { return UnicodeSimpleCase{one: 0x2c39, len: 1} }
+		0x2c0a { return UnicodeSimpleCase{one: 0x2c3a, len: 1} }
+		0x2c0b { return UnicodeSimpleCase{one: 0x2c3b, len: 1} }
+		0x2c0c { return UnicodeSimpleCase{one: 0x2c3c, len: 1} }
+		0x2c0d { return UnicodeSimpleCase{one: 0x2c3d, len: 1} }
+		0x2c0e { return UnicodeSimpleCase{one: 0x2c3e, len: 1} }
+		0x2c0f { return UnicodeSimpleCase{one: 0x2c3f, len: 1} }
+		0x2c10 { return UnicodeSimpleCase{one: 0x2c40, len: 1} }
+		0x2c11 { return UnicodeSimpleCase{one: 0x2c41, len: 1} }
+		0x2c12 { return UnicodeSimpleCase{one: 0x2c42, len: 1} }
+		0x2c13 { return UnicodeSimpleCase{one: 0x2c43, len: 1} }
+		0x2c14 { return UnicodeSimpleCase{one: 0x2c44, len: 1} }
+		0x2c15 { return UnicodeSimpleCase{one: 0x2c45, len: 1} }
+		0x2c16 { return UnicodeSimpleCase{one: 0x2c46, len: 1} }
+		0x2c17 { return UnicodeSimpleCase{one: 0x2c47, len: 1} }
+		0x2c18 { return UnicodeSimpleCase{one: 0x2c48, len: 1} }
+		0x2c19 { return UnicodeSimpleCase{one: 0x2c49, len: 1} }
+		0x2c1a { return UnicodeSimpleCase{one: 0x2c4a, len: 1} }
+		0x2c1b { return UnicodeSimpleCase{one: 0x2c4b, len: 1} }
+		0x2c1c { return UnicodeSimpleCase{one: 0x2c4c, len: 1} }
+		0x2c1d { return UnicodeSimpleCase{one: 0x2c4d, len: 1} }
+		0x2c1e { return UnicodeSimpleCase{one: 0x2c4e, len: 1} }
+		0x2c1f { return UnicodeSimpleCase{one: 0x2c4f, len: 1} }
+		0x2c20 { return UnicodeSimpleCase{one: 0x2c50, len: 1} }
+		0x2c21 { return UnicodeSimpleCase{one: 0x2c51, len: 1} }
+		0x2c22 { return UnicodeSimpleCase{one: 0x2c52, len: 1} }
+		0x2c23 { return UnicodeSimpleCase{one: 0x2c53, len: 1} }
+		0x2c24 { return UnicodeSimpleCase{one: 0x2c54, len: 1} }
+		0x2c25 { return UnicodeSimpleCase{one: 0x2c55, len: 1} }
+		0x2c26 { return UnicodeSimpleCase{one: 0x2c56, len: 1} }
+		0x2c27 { return UnicodeSimpleCase{one: 0x2c57, len: 1} }
+		0x2c28 { return UnicodeSimpleCase{one: 0x2c58, len: 1} }
+		0x2c29 { return UnicodeSimpleCase{one: 0x2c59, len: 1} }
+		0x2c2a { return UnicodeSimpleCase{one: 0x2c5a, len: 1} }
+		0x2c2b { return UnicodeSimpleCase{one: 0x2c5b, len: 1} }
+		0x2c2c { return UnicodeSimpleCase{one: 0x2c5c, len: 1} }
+		0x2c2d { return UnicodeSimpleCase{one: 0x2c5d, len: 1} }
+		0x2c2e { return UnicodeSimpleCase{one: 0x2c5e, len: 1} }
+		0x2c2f { return UnicodeSimpleCase{one: 0x2c5f, len: 1} }
+		0x2c30 { return UnicodeSimpleCase{one: 0x2c00, len: 1} }
+		0x2c31 { return UnicodeSimpleCase{one: 0x2c01, len: 1} }
+		0x2c32 { return UnicodeSimpleCase{one: 0x2c02, len: 1} }
+		0x2c33 { return UnicodeSimpleCase{one: 0x2c03, len: 1} }
+		0x2c34 { return UnicodeSimpleCase{one: 0x2c04, len: 1} }
+		0x2c35 { return UnicodeSimpleCase{one: 0x2c05, len: 1} }
+		0x2c36 { return UnicodeSimpleCase{one: 0x2c06, len: 1} }
+		0x2c37 { return UnicodeSimpleCase{one: 0x2c07, len: 1} }
+		0x2c38 { return UnicodeSimpleCase{one: 0x2c08, len: 1} }
+		0x2c39 { return UnicodeSimpleCase{one: 0x2c09, len: 1} }
+		0x2c3a { return UnicodeSimpleCase{one: 0x2c0a, len: 1} }
+		0x2c3b { return UnicodeSimpleCase{one: 0x2c0b, len: 1} }
+		0x2c3c { return UnicodeSimpleCase{one: 0x2c0c, len: 1} }
+		0x2c3d { return UnicodeSimpleCase{one: 0x2c0d, len: 1} }
+		0x2c3e { return UnicodeSimpleCase{one: 0x2c0e, len: 1} }
+		0x2c3f { return UnicodeSimpleCase{one: 0x2c0f, len: 1} }
+		0x2c40 { return UnicodeSimpleCase{one: 0x2c10, len: 1} }
+		0x2c41 { return UnicodeSimpleCase{one: 0x2c11, len: 1} }
+		0x2c42 { return UnicodeSimpleCase{one: 0x2c12, len: 1} }
+		0x2c43 { return UnicodeSimpleCase{one: 0x2c13, len: 1} }
+		0x2c44 { return UnicodeSimpleCase{one: 0x2c14, len: 1} }
+		0x2c45 { return UnicodeSimpleCase{one: 0x2c15, len: 1} }
+		0x2c46 { return UnicodeSimpleCase{one: 0x2c16, len: 1} }
+		0x2c47 { return UnicodeSimpleCase{one: 0x2c17, len: 1} }
+		0x2c48 { return UnicodeSimpleCase{one: 0x2c18, len: 1} }
+		0x2c49 { return UnicodeSimpleCase{one: 0x2c19, len: 1} }
+		0x2c4a { return UnicodeSimpleCase{one: 0x2c1a, len: 1} }
+		0x2c4b { return UnicodeSimpleCase{one: 0x2c1b, len: 1} }
+		0x2c4c { return UnicodeSimpleCase{one: 0x2c1c, len: 1} }
+		0x2c4d { return UnicodeSimpleCase{one: 0x2c1d, len: 1} }
+		0x2c4e { return UnicodeSimpleCase{one: 0x2c1e, len: 1} }
+		0x2c4f { return UnicodeSimpleCase{one: 0x2c1f, len: 1} }
+		0x2c50 { return UnicodeSimpleCase{one: 0x2c20, len: 1} }
+		0x2c51 { return UnicodeSimpleCase{one: 0x2c21, len: 1} }
+		0x2c52 { return UnicodeSimpleCase{one: 0x2c22, len: 1} }
+		0x2c53 { return UnicodeSimpleCase{one: 0x2c23, len: 1} }
+		0x2c54 { return UnicodeSimpleCase{one: 0x2c24, len: 1} }
+		0x2c55 { return UnicodeSimpleCase{one: 0x2c25, len: 1} }
+		0x2c56 { return UnicodeSimpleCase{one: 0x2c26, len: 1} }
+		0x2c57 { return UnicodeSimpleCase{one: 0x2c27, len: 1} }
+		0x2c58 { return UnicodeSimpleCase{one: 0x2c28, len: 1} }
+		0x2c59 { return UnicodeSimpleCase{one: 0x2c29, len: 1} }
+		0x2c5a { return UnicodeSimpleCase{one: 0x2c2a, len: 1} }
+		0x2c5b { return UnicodeSimpleCase{one: 0x2c2b, len: 1} }
+		0x2c5c { return UnicodeSimpleCase{one: 0x2c2c, len: 1} }
+		0x2c5d { return UnicodeSimpleCase{one: 0x2c2d, len: 1} }
+		0x2c5e { return UnicodeSimpleCase{one: 0x2c2e, len: 1} }
+		0x2c5f { return UnicodeSimpleCase{one: 0x2c2f, len: 1} }
+		0x2c60 { return UnicodeSimpleCase{one: 0x2c61, len: 1} }
+		0x2c61 { return UnicodeSimpleCase{one: 0x2c60, len: 1} }
+		0x2c62 { return UnicodeSimpleCase{one: 0x26b, len: 1} }
+		0x2c63 { return UnicodeSimpleCase{one: 0x1d7d, len: 1} }
+		0x2c64 { return UnicodeSimpleCase{one: 0x27d, len: 1} }
+		0x2c65 { return UnicodeSimpleCase{one: 0x23a, len: 1} }
+		0x2c66 { return UnicodeSimpleCase{one: 0x23e, len: 1} }
+		0x2c67 { return UnicodeSimpleCase{one: 0x2c68, len: 1} }
+		0x2c68 { return UnicodeSimpleCase{one: 0x2c67, len: 1} }
+		0x2c69 { return UnicodeSimpleCase{one: 0x2c6a, len: 1} }
+		0x2c6a { return UnicodeSimpleCase{one: 0x2c69, len: 1} }
+		0x2c6b { return UnicodeSimpleCase{one: 0x2c6c, len: 1} }
+		0x2c6c { return UnicodeSimpleCase{one: 0x2c6b, len: 1} }
+		0x2c6d { return UnicodeSimpleCase{one: 0x251, len: 1} }
+		0x2c6e { return UnicodeSimpleCase{one: 0x271, len: 1} }
+		0x2c6f { return UnicodeSimpleCase{one: 0x250, len: 1} }
+		0x2c70 { return UnicodeSimpleCase{one: 0x252, len: 1} }
+		0x2c72 { return UnicodeSimpleCase{one: 0x2c73, len: 1} }
+		0x2c73 { return UnicodeSimpleCase{one: 0x2c72, len: 1} }
+		0x2c75 { return UnicodeSimpleCase{one: 0x2c76, len: 1} }
+		0x2c76 { return UnicodeSimpleCase{one: 0x2c75, len: 1} }
+		0x2c7e { return UnicodeSimpleCase{one: 0x23f, len: 1} }
+		0x2c7f { return UnicodeSimpleCase{one: 0x240, len: 1} }
+		0x2c80 { return UnicodeSimpleCase{one: 0x2c81, len: 1} }
+		0x2c81 { return UnicodeSimpleCase{one: 0x2c80, len: 1} }
+		0x2c82 { return UnicodeSimpleCase{one: 0x2c83, len: 1} }
+		0x2c83 { return UnicodeSimpleCase{one: 0x2c82, len: 1} }
+		0x2c84 { return UnicodeSimpleCase{one: 0x2c85, len: 1} }
+		0x2c85 { return UnicodeSimpleCase{one: 0x2c84, len: 1} }
+		0x2c86 { return UnicodeSimpleCase{one: 0x2c87, len: 1} }
+		0x2c87 { return UnicodeSimpleCase{one: 0x2c86, len: 1} }
+		0x2c88 { return UnicodeSimpleCase{one: 0x2c89, len: 1} }
+		0x2c89 { return UnicodeSimpleCase{one: 0x2c88, len: 1} }
+		0x2c8a { return UnicodeSimpleCase{one: 0x2c8b, len: 1} }
+		0x2c8b { return UnicodeSimpleCase{one: 0x2c8a, len: 1} }
+		0x2c8c { return UnicodeSimpleCase{one: 0x2c8d, len: 1} }
+		0x2c8d { return UnicodeSimpleCase{one: 0x2c8c, len: 1} }
+		0x2c8e { return UnicodeSimpleCase{one: 0x2c8f, len: 1} }
+		0x2c8f { return UnicodeSimpleCase{one: 0x2c8e, len: 1} }
+		0x2c90 { return UnicodeSimpleCase{one: 0x2c91, len: 1} }
+		0x2c91 { return UnicodeSimpleCase{one: 0x2c90, len: 1} }
+		0x2c92 { return UnicodeSimpleCase{one: 0x2c93, len: 1} }
+		0x2c93 { return UnicodeSimpleCase{one: 0x2c92, len: 1} }
+		0x2c94 { return UnicodeSimpleCase{one: 0x2c95, len: 1} }
+		0x2c95 { return UnicodeSimpleCase{one: 0x2c94, len: 1} }
+		0x2c96 { return UnicodeSimpleCase{one: 0x2c97, len: 1} }
+		0x2c97 { return UnicodeSimpleCase{one: 0x2c96, len: 1} }
+		0x2c98 { return UnicodeSimpleCase{one: 0x2c99, len: 1} }
+		0x2c99 { return UnicodeSimpleCase{one: 0x2c98, len: 1} }
+		0x2c9a { return UnicodeSimpleCase{one: 0x2c9b, len: 1} }
+		0x2c9b { return UnicodeSimpleCase{one: 0x2c9a, len: 1} }
+		0x2c9c { return UnicodeSimpleCase{one: 0x2c9d, len: 1} }
+		0x2c9d { return UnicodeSimpleCase{one: 0x2c9c, len: 1} }
+		0x2c9e { return UnicodeSimpleCase{one: 0x2c9f, len: 1} }
+		0x2c9f { return UnicodeSimpleCase{one: 0x2c9e, len: 1} }
+		0x2ca0 { return UnicodeSimpleCase{one: 0x2ca1, len: 1} }
+		0x2ca1 { return UnicodeSimpleCase{one: 0x2ca0, len: 1} }
+		0x2ca2 { return UnicodeSimpleCase{one: 0x2ca3, len: 1} }
+		0x2ca3 { return UnicodeSimpleCase{one: 0x2ca2, len: 1} }
+		0x2ca4 { return UnicodeSimpleCase{one: 0x2ca5, len: 1} }
+		0x2ca5 { return UnicodeSimpleCase{one: 0x2ca4, len: 1} }
+		0x2ca6 { return UnicodeSimpleCase{one: 0x2ca7, len: 1} }
+		0x2ca7 { return UnicodeSimpleCase{one: 0x2ca6, len: 1} }
+		0x2ca8 { return UnicodeSimpleCase{one: 0x2ca9, len: 1} }
+		0x2ca9 { return UnicodeSimpleCase{one: 0x2ca8, len: 1} }
+		0x2caa { return UnicodeSimpleCase{one: 0x2cab, len: 1} }
+		0x2cab { return UnicodeSimpleCase{one: 0x2caa, len: 1} }
+		0x2cac { return UnicodeSimpleCase{one: 0x2cad, len: 1} }
+		0x2cad { return UnicodeSimpleCase{one: 0x2cac, len: 1} }
+		0x2cae { return UnicodeSimpleCase{one: 0x2caf, len: 1} }
+		0x2caf { return UnicodeSimpleCase{one: 0x2cae, len: 1} }
+		0x2cb0 { return UnicodeSimpleCase{one: 0x2cb1, len: 1} }
+		0x2cb1 { return UnicodeSimpleCase{one: 0x2cb0, len: 1} }
+		0x2cb2 { return UnicodeSimpleCase{one: 0x2cb3, len: 1} }
+		0x2cb3 { return UnicodeSimpleCase{one: 0x2cb2, len: 1} }
+		0x2cb4 { return UnicodeSimpleCase{one: 0x2cb5, len: 1} }
+		0x2cb5 { return UnicodeSimpleCase{one: 0x2cb4, len: 1} }
+		0x2cb6 { return UnicodeSimpleCase{one: 0x2cb7, len: 1} }
+		0x2cb7 { return UnicodeSimpleCase{one: 0x2cb6, len: 1} }
+		0x2cb8 { return UnicodeSimpleCase{one: 0x2cb9, len: 1} }
+		0x2cb9 { return UnicodeSimpleCase{one: 0x2cb8, len: 1} }
+		0x2cba { return UnicodeSimpleCase{one: 0x2cbb, len: 1} }
+		0x2cbb { return UnicodeSimpleCase{one: 0x2cba, len: 1} }
+		0x2cbc { return UnicodeSimpleCase{one: 0x2cbd, len: 1} }
+		0x2cbd { return UnicodeSimpleCase{one: 0x2cbc, len: 1} }
+		0x2cbe { return UnicodeSimpleCase{one: 0x2cbf, len: 1} }
+		0x2cbf { return UnicodeSimpleCase{one: 0x2cbe, len: 1} }
+		0x2cc0 { return UnicodeSimpleCase{one: 0x2cc1, len: 1} }
+		0x2cc1 { return UnicodeSimpleCase{one: 0x2cc0, len: 1} }
+		0x2cc2 { return UnicodeSimpleCase{one: 0x2cc3, len: 1} }
+		0x2cc3 { return UnicodeSimpleCase{one: 0x2cc2, len: 1} }
+		0x2cc4 { return UnicodeSimpleCase{one: 0x2cc5, len: 1} }
+		0x2cc5 { return UnicodeSimpleCase{one: 0x2cc4, len: 1} }
+		0x2cc6 { return UnicodeSimpleCase{one: 0x2cc7, len: 1} }
+		0x2cc7 { return UnicodeSimpleCase{one: 0x2cc6, len: 1} }
+		0x2cc8 { return UnicodeSimpleCase{one: 0x2cc9, len: 1} }
+		0x2cc9 { return UnicodeSimpleCase{one: 0x2cc8, len: 1} }
+		0x2cca { return UnicodeSimpleCase{one: 0x2ccb, len: 1} }
+		0x2ccb { return UnicodeSimpleCase{one: 0x2cca, len: 1} }
+		0x2ccc { return UnicodeSimpleCase{one: 0x2ccd, len: 1} }
+		0x2ccd { return UnicodeSimpleCase{one: 0x2ccc, len: 1} }
+		0x2cce { return UnicodeSimpleCase{one: 0x2ccf, len: 1} }
+		0x2ccf { return UnicodeSimpleCase{one: 0x2cce, len: 1} }
+		0x2cd0 { return UnicodeSimpleCase{one: 0x2cd1, len: 1} }
+		0x2cd1 { return UnicodeSimpleCase{one: 0x2cd0, len: 1} }
+		0x2cd2 { return UnicodeSimpleCase{one: 0x2cd3, len: 1} }
+		0x2cd3 { return UnicodeSimpleCase{one: 0x2cd2, len: 1} }
+		0x2cd4 { return UnicodeSimpleCase{one: 0x2cd5, len: 1} }
+		0x2cd5 { return UnicodeSimpleCase{one: 0x2cd4, len: 1} }
+		0x2cd6 { return UnicodeSimpleCase{one: 0x2cd7, len: 1} }
+		0x2cd7 { return UnicodeSimpleCase{one: 0x2cd6, len: 1} }
+		0x2cd8 { return UnicodeSimpleCase{one: 0x2cd9, len: 1} }
+		0x2cd9 { return UnicodeSimpleCase{one: 0x2cd8, len: 1} }
+		0x2cda { return UnicodeSimpleCase{one: 0x2cdb, len: 1} }
+		0x2cdb { return UnicodeSimpleCase{one: 0x2cda, len: 1} }
+		0x2cdc { return UnicodeSimpleCase{one: 0x2cdd, len: 1} }
+		0x2cdd { return UnicodeSimpleCase{one: 0x2cdc, len: 1} }
+		0x2cde { return UnicodeSimpleCase{one: 0x2cdf, len: 1} }
+		0x2cdf { return UnicodeSimpleCase{one: 0x2cde, len: 1} }
+		0x2ce0 { return UnicodeSimpleCase{one: 0x2ce1, len: 1} }
+		0x2ce1 { return UnicodeSimpleCase{one: 0x2ce0, len: 1} }
+		0x2ce2 { return UnicodeSimpleCase{one: 0x2ce3, len: 1} }
+		0x2ce3 { return UnicodeSimpleCase{one: 0x2ce2, len: 1} }
+		0x2ceb { return UnicodeSimpleCase{one: 0x2cec, len: 1} }
+		0x2cec { return UnicodeSimpleCase{one: 0x2ceb, len: 1} }
+		0x2ced { return UnicodeSimpleCase{one: 0x2cee, len: 1} }
+		0x2cee { return UnicodeSimpleCase{one: 0x2ced, len: 1} }
+		0x2cf2 { return UnicodeSimpleCase{one: 0x2cf3, len: 1} }
+		0x2cf3 { return UnicodeSimpleCase{one: 0x2cf2, len: 1} }
+		0x2d00 { return UnicodeSimpleCase{one: 0x10a0, len: 1} }
+		0x2d01 { return UnicodeSimpleCase{one: 0x10a1, len: 1} }
+		0x2d02 { return UnicodeSimpleCase{one: 0x10a2, len: 1} }
+		0x2d03 { return UnicodeSimpleCase{one: 0x10a3, len: 1} }
+		0x2d04 { return UnicodeSimpleCase{one: 0x10a4, len: 1} }
+		0x2d05 { return UnicodeSimpleCase{one: 0x10a5, len: 1} }
+		0x2d06 { return UnicodeSimpleCase{one: 0x10a6, len: 1} }
+		0x2d07 { return UnicodeSimpleCase{one: 0x10a7, len: 1} }
+		0x2d08 { return UnicodeSimpleCase{one: 0x10a8, len: 1} }
+		0x2d09 { return UnicodeSimpleCase{one: 0x10a9, len: 1} }
+		0x2d0a { return UnicodeSimpleCase{one: 0x10aa, len: 1} }
+		0x2d0b { return UnicodeSimpleCase{one: 0x10ab, len: 1} }
+		0x2d0c { return UnicodeSimpleCase{one: 0x10ac, len: 1} }
+		0x2d0d { return UnicodeSimpleCase{one: 0x10ad, len: 1} }
+		0x2d0e { return UnicodeSimpleCase{one: 0x10ae, len: 1} }
+		0x2d0f { return UnicodeSimpleCase{one: 0x10af, len: 1} }
+		0x2d10 { return UnicodeSimpleCase{one: 0x10b0, len: 1} }
+		0x2d11 { return UnicodeSimpleCase{one: 0x10b1, len: 1} }
+		0x2d12 { return UnicodeSimpleCase{one: 0x10b2, len: 1} }
+		0x2d13 { return UnicodeSimpleCase{one: 0x10b3, len: 1} }
+		0x2d14 { return UnicodeSimpleCase{one: 0x10b4, len: 1} }
+		0x2d15 { return UnicodeSimpleCase{one: 0x10b5, len: 1} }
+		0x2d16 { return UnicodeSimpleCase{one: 0x10b6, len: 1} }
+		0x2d17 { return UnicodeSimpleCase{one: 0x10b7, len: 1} }
+		0x2d18 { return UnicodeSimpleCase{one: 0x10b8, len: 1} }
+		0x2d19 { return UnicodeSimpleCase{one: 0x10b9, len: 1} }
+		0x2d1a { return UnicodeSimpleCase{one: 0x10ba, len: 1} }
+		0x2d1b { return UnicodeSimpleCase{one: 0x10bb, len: 1} }
+		0x2d1c { return UnicodeSimpleCase{one: 0x10bc, len: 1} }
+		0x2d1d { return UnicodeSimpleCase{one: 0x10bd, len: 1} }
+		0x2d1e { return UnicodeSimpleCase{one: 0x10be, len: 1} }
+		0x2d1f { return UnicodeSimpleCase{one: 0x10bf, len: 1} }
+		0x2d20 { return UnicodeSimpleCase{one: 0x10c0, len: 1} }
+		0x2d21 { return UnicodeSimpleCase{one: 0x10c1, len: 1} }
+		0x2d22 { return UnicodeSimpleCase{one: 0x10c2, len: 1} }
+		0x2d23 { return UnicodeSimpleCase{one: 0x10c3, len: 1} }
+		0x2d24 { return UnicodeSimpleCase{one: 0x10c4, len: 1} }
+		0x2d25 { return UnicodeSimpleCase{one: 0x10c5, len: 1} }
+		0x2d27 { return UnicodeSimpleCase{one: 0x10c7, len: 1} }
+		0x2d2d { return UnicodeSimpleCase{one: 0x10cd, len: 1} }
+		0xa640 { return UnicodeSimpleCase{one: 0xa641, len: 1} }
+		0xa641 { return UnicodeSimpleCase{one: 0xa640, len: 1} }
+		0xa642 { return UnicodeSimpleCase{one: 0xa643, len: 1} }
+		0xa643 { return UnicodeSimpleCase{one: 0xa642, len: 1} }
+		0xa644 { return UnicodeSimpleCase{one: 0xa645, len: 1} }
+		0xa645 { return UnicodeSimpleCase{one: 0xa644, len: 1} }
+		0xa646 { return UnicodeSimpleCase{one: 0xa647, len: 1} }
+		0xa647 { return UnicodeSimpleCase{one: 0xa646, len: 1} }
+		0xa648 { return UnicodeSimpleCase{one: 0xa649, len: 1} }
+		0xa649 { return UnicodeSimpleCase{one: 0xa648, len: 1} }
+		0xa64a { return UnicodeSimpleCase{one: 0x1c88, two: 0xa64b, len: 2} }
+		0xa64b { return UnicodeSimpleCase{one: 0x1c88, two: 0xa64a, len: 2} }
+		0xa64c { return UnicodeSimpleCase{one: 0xa64d, len: 1} }
+		0xa64d { return UnicodeSimpleCase{one: 0xa64c, len: 1} }
+		0xa64e { return UnicodeSimpleCase{one: 0xa64f, len: 1} }
+		0xa64f { return UnicodeSimpleCase{one: 0xa64e, len: 1} }
+		0xa650 { return UnicodeSimpleCase{one: 0xa651, len: 1} }
+		0xa651 { return UnicodeSimpleCase{one: 0xa650, len: 1} }
+		0xa652 { return UnicodeSimpleCase{one: 0xa653, len: 1} }
+		0xa653 { return UnicodeSimpleCase{one: 0xa652, len: 1} }
+		0xa654 { return UnicodeSimpleCase{one: 0xa655, len: 1} }
+		0xa655 { return UnicodeSimpleCase{one: 0xa654, len: 1} }
+		0xa656 { return UnicodeSimpleCase{one: 0xa657, len: 1} }
+		0xa657 { return UnicodeSimpleCase{one: 0xa656, len: 1} }
+		0xa658 { return UnicodeSimpleCase{one: 0xa659, len: 1} }
+		0xa659 { return UnicodeSimpleCase{one: 0xa658, len: 1} }
+		0xa65a { return UnicodeSimpleCase{one: 0xa65b, len: 1} }
+		0xa65b { return UnicodeSimpleCase{one: 0xa65a, len: 1} }
+		0xa65c { return UnicodeSimpleCase{one: 0xa65d, len: 1} }
+		0xa65d { return UnicodeSimpleCase{one: 0xa65c, len: 1} }
+		0xa65e { return UnicodeSimpleCase{one: 0xa65f, len: 1} }
+		0xa65f { return UnicodeSimpleCase{one: 0xa65e, len: 1} }
+		0xa660 { return UnicodeSimpleCase{one: 0xa661, len: 1} }
+		0xa661 { return UnicodeSimpleCase{one: 0xa660, len: 1} }
+		0xa662 { return UnicodeSimpleCase{one: 0xa663, len: 1} }
+		0xa663 { return UnicodeSimpleCase{one: 0xa662, len: 1} }
+		0xa664 { return UnicodeSimpleCase{one: 0xa665, len: 1} }
+		0xa665 { return UnicodeSimpleCase{one: 0xa664, len: 1} }
+		0xa666 { return UnicodeSimpleCase{one: 0xa667, len: 1} }
+		0xa667 { return UnicodeSimpleCase{one: 0xa666, len: 1} }
+		0xa668 { return UnicodeSimpleCase{one: 0xa669, len: 1} }
+		0xa669 { return UnicodeSimpleCase{one: 0xa668, len: 1} }
+		0xa66a { return UnicodeSimpleCase{one: 0xa66b, len: 1} }
+		0xa66b { return UnicodeSimpleCase{one: 0xa66a, len: 1} }
+		0xa66c { return UnicodeSimpleCase{one: 0xa66d, len: 1} }
+		0xa66d { return UnicodeSimpleCase{one: 0xa66c, len: 1} }
+		0xa680 { return UnicodeSimpleCase{one: 0xa681, len: 1} }
+		0xa681 { return UnicodeSimpleCase{one: 0xa680, len: 1} }
+		0xa682 { return UnicodeSimpleCase{one: 0xa683, len: 1} }
+		0xa683 { return UnicodeSimpleCase{one: 0xa682, len: 1} }
+		0xa684 { return UnicodeSimpleCase{one: 0xa685, len: 1} }
+		0xa685 { return UnicodeSimpleCase{one: 0xa684, len: 1} }
+		0xa686 { return UnicodeSimpleCase{one: 0xa687, len: 1} }
+		0xa687 { return UnicodeSimpleCase{one: 0xa686, len: 1} }
+		0xa688 { return UnicodeSimpleCase{one: 0xa689, len: 1} }
+		0xa689 { return UnicodeSimpleCase{one: 0xa688, len: 1} }
+		0xa68a { return UnicodeSimpleCase{one: 0xa68b, len: 1} }
+		0xa68b { return UnicodeSimpleCase{one: 0xa68a, len: 1} }
+		0xa68c { return UnicodeSimpleCase{one: 0xa68d, len: 1} }
+		0xa68d { return UnicodeSimpleCase{one: 0xa68c, len: 1} }
+		0xa68e { return UnicodeSimpleCase{one: 0xa68f, len: 1} }
+		0xa68f { return UnicodeSimpleCase{one: 0xa68e, len: 1} }
+		0xa690 { return UnicodeSimpleCase{one: 0xa691, len: 1} }
+		0xa691 { return UnicodeSimpleCase{one: 0xa690, len: 1} }
+		0xa692 { return UnicodeSimpleCase{one: 0xa693, len: 1} }
+		0xa693 { return UnicodeSimpleCase{one: 0xa692, len: 1} }
+		0xa694 { return UnicodeSimpleCase{one: 0xa695, len: 1} }
+		0xa695 { return UnicodeSimpleCase{one: 0xa694, len: 1} }
+		0xa696 { return UnicodeSimpleCase{one: 0xa697, len: 1} }
+		0xa697 { return UnicodeSimpleCase{one: 0xa696, len: 1} }
+		0xa698 { return UnicodeSimpleCase{one: 0xa699, len: 1} }
+		0xa699 { return UnicodeSimpleCase{one: 0xa698, len: 1} }
+		0xa69a { return UnicodeSimpleCase{one: 0xa69b, len: 1} }
+		0xa69b { return UnicodeSimpleCase{one: 0xa69a, len: 1} }
+		0xa722 { return UnicodeSimpleCase{one: 0xa723, len: 1} }
+		0xa723 { return UnicodeSimpleCase{one: 0xa722, len: 1} }
+		0xa724 { return UnicodeSimpleCase{one: 0xa725, len: 1} }
+		0xa725 { return UnicodeSimpleCase{one: 0xa724, len: 1} }
+		0xa726 { return UnicodeSimpleCase{one: 0xa727, len: 1} }
+		0xa727 { return UnicodeSimpleCase{one: 0xa726, len: 1} }
+		0xa728 { return UnicodeSimpleCase{one: 0xa729, len: 1} }
+		0xa729 { return UnicodeSimpleCase{one: 0xa728, len: 1} }
+		0xa72a { return UnicodeSimpleCase{one: 0xa72b, len: 1} }
+		0xa72b { return UnicodeSimpleCase{one: 0xa72a, len: 1} }
+		0xa72c { return UnicodeSimpleCase{one: 0xa72d, len: 1} }
+		0xa72d { return UnicodeSimpleCase{one: 0xa72c, len: 1} }
+		0xa72e { return UnicodeSimpleCase{one: 0xa72f, len: 1} }
+		0xa72f { return UnicodeSimpleCase{one: 0xa72e, len: 1} }
+		0xa732 { return UnicodeSimpleCase{one: 0xa733, len: 1} }
+		0xa733 { return UnicodeSimpleCase{one: 0xa732, len: 1} }
+		0xa734 { return UnicodeSimpleCase{one: 0xa735, len: 1} }
+		0xa735 { return UnicodeSimpleCase{one: 0xa734, len: 1} }
+		0xa736 { return UnicodeSimpleCase{one: 0xa737, len: 1} }
+		0xa737 { return UnicodeSimpleCase{one: 0xa736, len: 1} }
+		0xa738 { return UnicodeSimpleCase{one: 0xa739, len: 1} }
+		0xa739 { return UnicodeSimpleCase{one: 0xa738, len: 1} }
+		0xa73a { return UnicodeSimpleCase{one: 0xa73b, len: 1} }
+		0xa73b { return UnicodeSimpleCase{one: 0xa73a, len: 1} }
+		0xa73c { return UnicodeSimpleCase{one: 0xa73d, len: 1} }
+		0xa73d { return UnicodeSimpleCase{one: 0xa73c, len: 1} }
+		0xa73e { return UnicodeSimpleCase{one: 0xa73f, len: 1} }
+		0xa73f { return UnicodeSimpleCase{one: 0xa73e, len: 1} }
+		0xa740 { return UnicodeSimpleCase{one: 0xa741, len: 1} }
+		0xa741 { return UnicodeSimpleCase{one: 0xa740, len: 1} }
+		0xa742 { return UnicodeSimpleCase{one: 0xa743, len: 1} }
+		0xa743 { return UnicodeSimpleCase{one: 0xa742, len: 1} }
+		0xa744 { return UnicodeSimpleCase{one: 0xa745, len: 1} }
+		0xa745 { return UnicodeSimpleCase{one: 0xa744, len: 1} }
+		0xa746 { return UnicodeSimpleCase{one: 0xa747, len: 1} }
+		0xa747 { return UnicodeSimpleCase{one: 0xa746, len: 1} }
+		0xa748 { return UnicodeSimpleCase{one: 0xa749, len: 1} }
+		0xa749 { return UnicodeSimpleCase{one: 0xa748, len: 1} }
+		0xa74a { return UnicodeSimpleCase{one: 0xa74b, len: 1} }
+		0xa74b { return UnicodeSimpleCase{one: 0xa74a, len: 1} }
+		0xa74c { return UnicodeSimpleCase{one: 0xa74d, len: 1} }
+		0xa74d { return UnicodeSimpleCase{one: 0xa74c, len: 1} }
+		0xa74e { return UnicodeSimpleCase{one: 0xa74f, len: 1} }
+		0xa74f { return UnicodeSimpleCase{one: 0xa74e, len: 1} }
+		0xa750 { return UnicodeSimpleCase{one: 0xa751, len: 1} }
+		0xa751 { return UnicodeSimpleCase{one: 0xa750, len: 1} }
+		0xa752 { return UnicodeSimpleCase{one: 0xa753, len: 1} }
+		0xa753 { return UnicodeSimpleCase{one: 0xa752, len: 1} }
+		0xa754 { return UnicodeSimpleCase{one: 0xa755, len: 1} }
+		0xa755 { return UnicodeSimpleCase{one: 0xa754, len: 1} }
+		0xa756 { return UnicodeSimpleCase{one: 0xa757, len: 1} }
+		0xa757 { return UnicodeSimpleCase{one: 0xa756, len: 1} }
+		0xa758 { return UnicodeSimpleCase{one: 0xa759, len: 1} }
+		0xa759 { return UnicodeSimpleCase{one: 0xa758, len: 1} }
+		0xa75a { return UnicodeSimpleCase{one: 0xa75b, len: 1} }
+		0xa75b { return UnicodeSimpleCase{one: 0xa75a, len: 1} }
+		0xa75c { return UnicodeSimpleCase{one: 0xa75d, len: 1} }
+		0xa75d { return UnicodeSimpleCase{one: 0xa75c, len: 1} }
+		0xa75e { return UnicodeSimpleCase{one: 0xa75f, len: 1} }
+		0xa75f { return UnicodeSimpleCase{one: 0xa75e, len: 1} }
+		0xa760 { return UnicodeSimpleCase{one: 0xa761, len: 1} }
+		0xa761 { return UnicodeSimpleCase{one: 0xa760, len: 1} }
+		0xa762 { return UnicodeSimpleCase{one: 0xa763, len: 1} }
+		0xa763 { return UnicodeSimpleCase{one: 0xa762, len: 1} }
+		0xa764 { return UnicodeSimpleCase{one: 0xa765, len: 1} }
+		0xa765 { return UnicodeSimpleCase{one: 0xa764, len: 1} }
+		0xa766 { return UnicodeSimpleCase{one: 0xa767, len: 1} }
+		0xa767 { return UnicodeSimpleCase{one: 0xa766, len: 1} }
+		0xa768 { return UnicodeSimpleCase{one: 0xa769, len: 1} }
+		0xa769 { return UnicodeSimpleCase{one: 0xa768, len: 1} }
+		0xa76a { return UnicodeSimpleCase{one: 0xa76b, len: 1} }
+		0xa76b { return UnicodeSimpleCase{one: 0xa76a, len: 1} }
+		0xa76c { return UnicodeSimpleCase{one: 0xa76d, len: 1} }
+		0xa76d { return UnicodeSimpleCase{one: 0xa76c, len: 1} }
+		0xa76e { return UnicodeSimpleCase{one: 0xa76f, len: 1} }
+		0xa76f { return UnicodeSimpleCase{one: 0xa76e, len: 1} }
+		0xa779 { return UnicodeSimpleCase{one: 0xa77a, len: 1} }
+		0xa77a { return UnicodeSimpleCase{one: 0xa779, len: 1} }
+		0xa77b { return UnicodeSimpleCase{one: 0xa77c, len: 1} }
+		0xa77c { return UnicodeSimpleCase{one: 0xa77b, len: 1} }
+		0xa77d { return UnicodeSimpleCase{one: 0x1d79, len: 1} }
+		0xa77e { return UnicodeSimpleCase{one: 0xa77f, len: 1} }
+		0xa77f { return UnicodeSimpleCase{one: 0xa77e, len: 1} }
+		0xa780 { return UnicodeSimpleCase{one: 0xa781, len: 1} }
+		0xa781 { return UnicodeSimpleCase{one: 0xa780, len: 1} }
+		0xa782 { return UnicodeSimpleCase{one: 0xa783, len: 1} }
+		0xa783 { return UnicodeSimpleCase{one: 0xa782, len: 1} }
+		0xa784 { return UnicodeSimpleCase{one: 0xa785, len: 1} }
+		0xa785 { return UnicodeSimpleCase{one: 0xa784, len: 1} }
+		0xa786 { return UnicodeSimpleCase{one: 0xa787, len: 1} }
+		0xa787 { return UnicodeSimpleCase{one: 0xa786, len: 1} }
+		0xa78b { return UnicodeSimpleCase{one: 0xa78c, len: 1} }
+		0xa78c { return UnicodeSimpleCase{one: 0xa78b, len: 1} }
+		0xa78d { return UnicodeSimpleCase{one: 0x265, len: 1} }
+		0xa790 { return UnicodeSimpleCase{one: 0xa791, len: 1} }
+		0xa791 { return UnicodeSimpleCase{one: 0xa790, len: 1} }
+		0xa792 { return UnicodeSimpleCase{one: 0xa793, len: 1} }
+		0xa793 { return UnicodeSimpleCase{one: 0xa792, len: 1} }
+		0xa794 { return UnicodeSimpleCase{one: 0xa7c4, len: 1} }
+		0xa796 { return UnicodeSimpleCase{one: 0xa797, len: 1} }
+		0xa797 { return UnicodeSimpleCase{one: 0xa796, len: 1} }
+		0xa798 { return UnicodeSimpleCase{one: 0xa799, len: 1} }
+		0xa799 { return UnicodeSimpleCase{one: 0xa798, len: 1} }
+		0xa79a { return UnicodeSimpleCase{one: 0xa79b, len: 1} }
+		0xa79b { return UnicodeSimpleCase{one: 0xa79a, len: 1} }
+		0xa79c { return UnicodeSimpleCase{one: 0xa79d, len: 1} }
+		0xa79d { return UnicodeSimpleCase{one: 0xa79c, len: 1} }
+		0xa79e { return UnicodeSimpleCase{one: 0xa79f, len: 1} }
+		0xa79f { return UnicodeSimpleCase{one: 0xa79e, len: 1} }
+		0xa7a0 { return UnicodeSimpleCase{one: 0xa7a1, len: 1} }
+		0xa7a1 { return UnicodeSimpleCase{one: 0xa7a0, len: 1} }
+		0xa7a2 { return UnicodeSimpleCase{one: 0xa7a3, len: 1} }
+		0xa7a3 { return UnicodeSimpleCase{one: 0xa7a2, len: 1} }
+		0xa7a4 { return UnicodeSimpleCase{one: 0xa7a5, len: 1} }
+		0xa7a5 { return UnicodeSimpleCase{one: 0xa7a4, len: 1} }
+		0xa7a6 { return UnicodeSimpleCase{one: 0xa7a7, len: 1} }
+		0xa7a7 { return UnicodeSimpleCase{one: 0xa7a6, len: 1} }
+		0xa7a8 { return UnicodeSimpleCase{one: 0xa7a9, len: 1} }
+		0xa7a9 { return UnicodeSimpleCase{one: 0xa7a8, len: 1} }
+		0xa7aa { return UnicodeSimpleCase{one: 0x266, len: 1} }
+		0xa7ab { return UnicodeSimpleCase{one: 0x25c, len: 1} }
+		0xa7ac { return UnicodeSimpleCase{one: 0x261, len: 1} }
+		0xa7ad { return UnicodeSimpleCase{one: 0x26c, len: 1} }
+		0xa7ae { return UnicodeSimpleCase{one: 0x26a, len: 1} }
+		0xa7b0 { return UnicodeSimpleCase{one: 0x29e, len: 1} }
+		0xa7b1 { return UnicodeSimpleCase{one: 0x287, len: 1} }
+		0xa7b2 { return UnicodeSimpleCase{one: 0x29d, len: 1} }
+		0xa7b3 { return UnicodeSimpleCase{one: 0xab53, len: 1} }
+		0xa7b4 { return UnicodeSimpleCase{one: 0xa7b5, len: 1} }
+		0xa7b5 { return UnicodeSimpleCase{one: 0xa7b4, len: 1} }
+		0xa7b6 { return UnicodeSimpleCase{one: 0xa7b7, len: 1} }
+		0xa7b7 { return UnicodeSimpleCase{one: 0xa7b6, len: 1} }
+		0xa7b8 { return UnicodeSimpleCase{one: 0xa7b9, len: 1} }
+		0xa7b9 { return UnicodeSimpleCase{one: 0xa7b8, len: 1} }
+		0xa7ba { return UnicodeSimpleCase{one: 0xa7bb, len: 1} }
+		0xa7bb { return UnicodeSimpleCase{one: 0xa7ba, len: 1} }
+		0xa7bc { return UnicodeSimpleCase{one: 0xa7bd, len: 1} }
+		0xa7bd { return UnicodeSimpleCase{one: 0xa7bc, len: 1} }
+		0xa7be { return UnicodeSimpleCase{one: 0xa7bf, len: 1} }
+		0xa7bf { return UnicodeSimpleCase{one: 0xa7be, len: 1} }
+		0xa7c0 { return UnicodeSimpleCase{one: 0xa7c1, len: 1} }
+		0xa7c1 { return UnicodeSimpleCase{one: 0xa7c0, len: 1} }
+		0xa7c2 { return UnicodeSimpleCase{one: 0xa7c3, len: 1} }
+		0xa7c3 { return UnicodeSimpleCase{one: 0xa7c2, len: 1} }
+		0xa7c4 { return UnicodeSimpleCase{one: 0xa794, len: 1} }
+		0xa7c5 { return UnicodeSimpleCase{one: 0x282, len: 1} }
+		0xa7c6 { return UnicodeSimpleCase{one: 0x1d8e, len: 1} }
+		0xa7c7 { return UnicodeSimpleCase{one: 0xa7c8, len: 1} }
+		0xa7c8 { return UnicodeSimpleCase{one: 0xa7c7, len: 1} }
+		0xa7c9 { return UnicodeSimpleCase{one: 0xa7ca, len: 1} }
+		0xa7ca { return UnicodeSimpleCase{one: 0xa7c9, len: 1} }
+		0xa7cb { return UnicodeSimpleCase{one: 0x264, len: 1} }
+		0xa7cc { return UnicodeSimpleCase{one: 0xa7cd, len: 1} }
+		0xa7cd { return UnicodeSimpleCase{one: 0xa7cc, len: 1} }
+		0xa7d0 { return UnicodeSimpleCase{one: 0xa7d1, len: 1} }
+		0xa7d1 { return UnicodeSimpleCase{one: 0xa7d0, len: 1} }
+		0xa7d6 { return UnicodeSimpleCase{one: 0xa7d7, len: 1} }
+		0xa7d7 { return UnicodeSimpleCase{one: 0xa7d6, len: 1} }
+		0xa7d8 { return UnicodeSimpleCase{one: 0xa7d9, len: 1} }
+		0xa7d9 { return UnicodeSimpleCase{one: 0xa7d8, len: 1} }
+		0xa7da { return UnicodeSimpleCase{one: 0xa7db, len: 1} }
+		0xa7db { return UnicodeSimpleCase{one: 0xa7da, len: 1} }
+		0xa7dc { return UnicodeSimpleCase{one: 0x19b, len: 1} }
+		0xa7f5 { return UnicodeSimpleCase{one: 0xa7f6, len: 1} }
+		0xa7f6 { return UnicodeSimpleCase{one: 0xa7f5, len: 1} }
+		0xab53 { return UnicodeSimpleCase{one: 0xa7b3, len: 1} }
+		0xab70 { return UnicodeSimpleCase{one: 0x13a0, len: 1} }
+		0xab71 { return UnicodeSimpleCase{one: 0x13a1, len: 1} }
+		0xab72 { return UnicodeSimpleCase{one: 0x13a2, len: 1} }
+		0xab73 { return UnicodeSimpleCase{one: 0x13a3, len: 1} }
+		0xab74 { return UnicodeSimpleCase{one: 0x13a4, len: 1} }
+		0xab75 { return UnicodeSimpleCase{one: 0x13a5, len: 1} }
+		0xab76 { return UnicodeSimpleCase{one: 0x13a6, len: 1} }
+		0xab77 { return UnicodeSimpleCase{one: 0x13a7, len: 1} }
+		0xab78 { return UnicodeSimpleCase{one: 0x13a8, len: 1} }
+		0xab79 { return UnicodeSimpleCase{one: 0x13a9, len: 1} }
+		0xab7a { return UnicodeSimpleCase{one: 0x13aa, len: 1} }
+		0xab7b { return UnicodeSimpleCase{one: 0x13ab, len: 1} }
+		0xab7c { return UnicodeSimpleCase{one: 0x13ac, len: 1} }
+		0xab7d { return UnicodeSimpleCase{one: 0x13ad, len: 1} }
+		0xab7e { return UnicodeSimpleCase{one: 0x13ae, len: 1} }
+		0xab7f { return UnicodeSimpleCase{one: 0x13af, len: 1} }
+		0xab80 { return UnicodeSimpleCase{one: 0x13b0, len: 1} }
+		0xab81 { return UnicodeSimpleCase{one: 0x13b1, len: 1} }
+		0xab82 { return UnicodeSimpleCase{one: 0x13b2, len: 1} }
+		0xab83 { return UnicodeSimpleCase{one: 0x13b3, len: 1} }
+		0xab84 { return UnicodeSimpleCase{one: 0x13b4, len: 1} }
+		0xab85 { return UnicodeSimpleCase{one: 0x13b5, len: 1} }
+		0xab86 { return UnicodeSimpleCase{one: 0x13b6, len: 1} }
+		0xab87 { return UnicodeSimpleCase{one: 0x13b7, len: 1} }
+		0xab88 { return UnicodeSimpleCase{one: 0x13b8, len: 1} }
+		0xab89 { return UnicodeSimpleCase{one: 0x13b9, len: 1} }
+		0xab8a { return UnicodeSimpleCase{one: 0x13ba, len: 1} }
+		0xab8b { return UnicodeSimpleCase{one: 0x13bb, len: 1} }
+		0xab8c { return UnicodeSimpleCase{one: 0x13bc, len: 1} }
+		0xab8d { return UnicodeSimpleCase{one: 0x13bd, len: 1} }
+		0xab8e { return UnicodeSimpleCase{one: 0x13be, len: 1} }
+		0xab8f { return UnicodeSimpleCase{one: 0x13bf, len: 1} }
+		0xab90 { return UnicodeSimpleCase{one: 0x13c0, len: 1} }
+		0xab91 { return UnicodeSimpleCase{one: 0x13c1, len: 1} }
+		0xab92 { return UnicodeSimpleCase{one: 0x13c2, len: 1} }
+		0xab93 { return UnicodeSimpleCase{one: 0x13c3, len: 1} }
+		0xab94 { return UnicodeSimpleCase{one: 0x13c4, len: 1} }
+		0xab95 { return UnicodeSimpleCase{one: 0x13c5, len: 1} }
+		0xab96 { return UnicodeSimpleCase{one: 0x13c6, len: 1} }
+		0xab97 { return UnicodeSimpleCase{one: 0x13c7, len: 1} }
+		0xab98 { return UnicodeSimpleCase{one: 0x13c8, len: 1} }
+		0xab99 { return UnicodeSimpleCase{one: 0x13c9, len: 1} }
+		0xab9a { return UnicodeSimpleCase{one: 0x13ca, len: 1} }
+		0xab9b { return UnicodeSimpleCase{one: 0x13cb, len: 1} }
+		0xab9c { return UnicodeSimpleCase{one: 0x13cc, len: 1} }
+		0xab9d { return UnicodeSimpleCase{one: 0x13cd, len: 1} }
+		0xab9e { return UnicodeSimpleCase{one: 0x13ce, len: 1} }
+		0xab9f { return UnicodeSimpleCase{one: 0x13cf, len: 1} }
+		0xaba0 { return UnicodeSimpleCase{one: 0x13d0, len: 1} }
+		0xaba1 { return UnicodeSimpleCase{one: 0x13d1, len: 1} }
+		0xaba2 { return UnicodeSimpleCase{one: 0x13d2, len: 1} }
+		0xaba3 { return UnicodeSimpleCase{one: 0x13d3, len: 1} }
+		0xaba4 { return UnicodeSimpleCase{one: 0x13d4, len: 1} }
+		0xaba5 { return UnicodeSimpleCase{one: 0x13d5, len: 1} }
+		0xaba6 { return UnicodeSimpleCase{one: 0x13d6, len: 1} }
+		0xaba7 { return UnicodeSimpleCase{one: 0x13d7, len: 1} }
+		0xaba8 { return UnicodeSimpleCase{one: 0x13d8, len: 1} }
+		0xaba9 { return UnicodeSimpleCase{one: 0x13d9, len: 1} }
+		0xabaa { return UnicodeSimpleCase{one: 0x13da, len: 1} }
+		0xabab { return UnicodeSimpleCase{one: 0x13db, len: 1} }
+		0xabac { return UnicodeSimpleCase{one: 0x13dc, len: 1} }
+		0xabad { return UnicodeSimpleCase{one: 0x13dd, len: 1} }
+		0xabae { return UnicodeSimpleCase{one: 0x13de, len: 1} }
+		0xabaf { return UnicodeSimpleCase{one: 0x13df, len: 1} }
+		0xabb0 { return UnicodeSimpleCase{one: 0x13e0, len: 1} }
+		0xabb1 { return UnicodeSimpleCase{one: 0x13e1, len: 1} }
+		0xabb2 { return UnicodeSimpleCase{one: 0x13e2, len: 1} }
+		0xabb3 { return UnicodeSimpleCase{one: 0x13e3, len: 1} }
+		0xabb4 { return UnicodeSimpleCase{one: 0x13e4, len: 1} }
+		0xabb5 { return UnicodeSimpleCase{one: 0x13e5, len: 1} }
+		0xabb6 { return UnicodeSimpleCase{one: 0x13e6, len: 1} }
+		0xabb7 { return UnicodeSimpleCase{one: 0x13e7, len: 1} }
+		0xabb8 { return UnicodeSimpleCase{one: 0x13e8, len: 1} }
+		0xabb9 { return UnicodeSimpleCase{one: 0x13e9, len: 1} }
+		0xabba { return UnicodeSimpleCase{one: 0x13ea, len: 1} }
+		0xabbb { return UnicodeSimpleCase{one: 0x13eb, len: 1} }
+		0xabbc { return UnicodeSimpleCase{one: 0x13ec, len: 1} }
+		0xabbd { return UnicodeSimpleCase{one: 0x13ed, len: 1} }
+		0xabbe { return UnicodeSimpleCase{one: 0x13ee, len: 1} }
+		0xabbf { return UnicodeSimpleCase{one: 0x13ef, len: 1} }
+		0xfb05 { return UnicodeSimpleCase{one: 0xfb06, len: 1} }
+		0xfb06 { return UnicodeSimpleCase{one: 0xfb05, len: 1} }
+		0xff21 { return UnicodeSimpleCase{one: 0xff41, len: 1} }
+		0xff22 { return UnicodeSimpleCase{one: 0xff42, len: 1} }
+		0xff23 { return UnicodeSimpleCase{one: 0xff43, len: 1} }
+		0xff24 { return UnicodeSimpleCase{one: 0xff44, len: 1} }
+		0xff25 { return UnicodeSimpleCase{one: 0xff45, len: 1} }
+		0xff26 { return UnicodeSimpleCase{one: 0xff46, len: 1} }
+		0xff27 { return UnicodeSimpleCase{one: 0xff47, len: 1} }
+		0xff28 { return UnicodeSimpleCase{one: 0xff48, len: 1} }
+		0xff29 { return UnicodeSimpleCase{one: 0xff49, len: 1} }
+		0xff2a { return UnicodeSimpleCase{one: 0xff4a, len: 1} }
+		0xff2b { return UnicodeSimpleCase{one: 0xff4b, len: 1} }
+		0xff2c { return UnicodeSimpleCase{one: 0xff4c, len: 1} }
+		0xff2d { return UnicodeSimpleCase{one: 0xff4d, len: 1} }
+		0xff2e { return UnicodeSimpleCase{one: 0xff4e, len: 1} }
+		0xff2f { return UnicodeSimpleCase{one: 0xff4f, len: 1} }
+		0xff30 { return UnicodeSimpleCase{one: 0xff50, len: 1} }
+		0xff31 { return UnicodeSimpleCase{one: 0xff51, len: 1} }
+		0xff32 { return UnicodeSimpleCase{one: 0xff52, len: 1} }
+		0xff33 { return UnicodeSimpleCase{one: 0xff53, len: 1} }
+		0xff34 { return UnicodeSimpleCase{one: 0xff54, len: 1} }
+		0xff35 { return UnicodeSimpleCase{one: 0xff55, len: 1} }
+		0xff36 { return UnicodeSimpleCase{one: 0xff56, len: 1} }
+		0xff37 { return UnicodeSimpleCase{one: 0xff57, len: 1} }
+		0xff38 { return UnicodeSimpleCase{one: 0xff58, len: 1} }
+		0xff39 { return UnicodeSimpleCase{one: 0xff59, len: 1} }
+		0xff3a { return UnicodeSimpleCase{one: 0xff5a, len: 1} }
+		0xff41 { return UnicodeSimpleCase{one: 0xff21, len: 1} }
+		0xff42 { return UnicodeSimpleCase{one: 0xff22, len: 1} }
+		0xff43 { return UnicodeSimpleCase{one: 0xff23, len: 1} }
+		0xff44 { return UnicodeSimpleCase{one: 0xff24, len: 1} }
+		0xff45 { return UnicodeSimpleCase{one: 0xff25, len: 1} }
+		0xff46 { return UnicodeSimpleCase{one: 0xff26, len: 1} }
+		0xff47 { return UnicodeSimpleCase{one: 0xff27, len: 1} }
+		0xff48 { return UnicodeSimpleCase{one: 0xff28, len: 1} }
+		0xff49 { return UnicodeSimpleCase{one: 0xff29, len: 1} }
+		0xff4a { return UnicodeSimpleCase{one: 0xff2a, len: 1} }
+		0xff4b { return UnicodeSimpleCase{one: 0xff2b, len: 1} }
+		0xff4c { return UnicodeSimpleCase{one: 0xff2c, len: 1} }
+		0xff4d { return UnicodeSimpleCase{one: 0xff2d, len: 1} }
+		0xff4e { return UnicodeSimpleCase{one: 0xff2e, len: 1} }
+		0xff4f { return UnicodeSimpleCase{one: 0xff2f, len: 1} }
+		0xff50 { return UnicodeSimpleCase{one: 0xff30, len: 1} }
+		0xff51 { return UnicodeSimpleCase{one: 0xff31, len: 1} }
+		0xff52 { return UnicodeSimpleCase{one: 0xff32, len: 1} }
+		0xff53 { return UnicodeSimpleCase{one: 0xff33, len: 1} }
+		0xff54 { return UnicodeSimpleCase{one: 0xff34, len: 1} }
+		0xff55 { return UnicodeSimpleCase{one: 0xff35, len: 1} }
+		0xff56 { return UnicodeSimpleCase{one: 0xff36, len: 1} }
+		0xff57 { return UnicodeSimpleCase{one: 0xff37, len: 1} }
+		0xff58 { return UnicodeSimpleCase{one: 0xff38, len: 1} }
+		0xff59 { return UnicodeSimpleCase{one: 0xff39, len: 1} }
+		0xff5a { return UnicodeSimpleCase{one: 0xff3a, len: 1} }
+		0x10400 { return UnicodeSimpleCase{one: 0x10428, len: 1} }
+		0x10401 { return UnicodeSimpleCase{one: 0x10429, len: 1} }
+		0x10402 { return UnicodeSimpleCase{one: 0x1042a, len: 1} }
+		0x10403 { return UnicodeSimpleCase{one: 0x1042b, len: 1} }
+		0x10404 { return UnicodeSimpleCase{one: 0x1042c, len: 1} }
+		0x10405 { return UnicodeSimpleCase{one: 0x1042d, len: 1} }
+		0x10406 { return UnicodeSimpleCase{one: 0x1042e, len: 1} }
+		0x10407 { return UnicodeSimpleCase{one: 0x1042f, len: 1} }
+		0x10408 { return UnicodeSimpleCase{one: 0x10430, len: 1} }
+		0x10409 { return UnicodeSimpleCase{one: 0x10431, len: 1} }
+		0x1040a { return UnicodeSimpleCase{one: 0x10432, len: 1} }
+		0x1040b { return UnicodeSimpleCase{one: 0x10433, len: 1} }
+		0x1040c { return UnicodeSimpleCase{one: 0x10434, len: 1} }
+		0x1040d { return UnicodeSimpleCase{one: 0x10435, len: 1} }
+		0x1040e { return UnicodeSimpleCase{one: 0x10436, len: 1} }
+		0x1040f { return UnicodeSimpleCase{one: 0x10437, len: 1} }
+		0x10410 { return UnicodeSimpleCase{one: 0x10438, len: 1} }
+		0x10411 { return UnicodeSimpleCase{one: 0x10439, len: 1} }
+		0x10412 { return UnicodeSimpleCase{one: 0x1043a, len: 1} }
+		0x10413 { return UnicodeSimpleCase{one: 0x1043b, len: 1} }
+		0x10414 { return UnicodeSimpleCase{one: 0x1043c, len: 1} }
+		0x10415 { return UnicodeSimpleCase{one: 0x1043d, len: 1} }
+		0x10416 { return UnicodeSimpleCase{one: 0x1043e, len: 1} }
+		0x10417 { return UnicodeSimpleCase{one: 0x1043f, len: 1} }
+		0x10418 { return UnicodeSimpleCase{one: 0x10440, len: 1} }
+		0x10419 { return UnicodeSimpleCase{one: 0x10441, len: 1} }
+		0x1041a { return UnicodeSimpleCase{one: 0x10442, len: 1} }
+		0x1041b { return UnicodeSimpleCase{one: 0x10443, len: 1} }
+		0x1041c { return UnicodeSimpleCase{one: 0x10444, len: 1} }
+		0x1041d { return UnicodeSimpleCase{one: 0x10445, len: 1} }
+		0x1041e { return UnicodeSimpleCase{one: 0x10446, len: 1} }
+		0x1041f { return UnicodeSimpleCase{one: 0x10447, len: 1} }
+		0x10420 { return UnicodeSimpleCase{one: 0x10448, len: 1} }
+		0x10421 { return UnicodeSimpleCase{one: 0x10449, len: 1} }
+		0x10422 { return UnicodeSimpleCase{one: 0x1044a, len: 1} }
+		0x10423 { return UnicodeSimpleCase{one: 0x1044b, len: 1} }
+		0x10424 { return UnicodeSimpleCase{one: 0x1044c, len: 1} }
+		0x10425 { return UnicodeSimpleCase{one: 0x1044d, len: 1} }
+		0x10426 { return UnicodeSimpleCase{one: 0x1044e, len: 1} }
+		0x10427 { return UnicodeSimpleCase{one: 0x1044f, len: 1} }
+		0x10428 { return UnicodeSimpleCase{one: 0x10400, len: 1} }
+		0x10429 { return UnicodeSimpleCase{one: 0x10401, len: 1} }
+		0x1042a { return UnicodeSimpleCase{one: 0x10402, len: 1} }
+		0x1042b { return UnicodeSimpleCase{one: 0x10403, len: 1} }
+		0x1042c { return UnicodeSimpleCase{one: 0x10404, len: 1} }
+		0x1042d { return UnicodeSimpleCase{one: 0x10405, len: 1} }
+		0x1042e { return UnicodeSimpleCase{one: 0x10406, len: 1} }
+		0x1042f { return UnicodeSimpleCase{one: 0x10407, len: 1} }
+		0x10430 { return UnicodeSimpleCase{one: 0x10408, len: 1} }
+		0x10431 { return UnicodeSimpleCase{one: 0x10409, len: 1} }
+		0x10432 { return UnicodeSimpleCase{one: 0x1040a, len: 1} }
+		0x10433 { return UnicodeSimpleCase{one: 0x1040b, len: 1} }
+		0x10434 { return UnicodeSimpleCase{one: 0x1040c, len: 1} }
+		0x10435 { return UnicodeSimpleCase{one: 0x1040d, len: 1} }
+		0x10436 { return UnicodeSimpleCase{one: 0x1040e, len: 1} }
+		0x10437 { return UnicodeSimpleCase{one: 0x1040f, len: 1} }
+		0x10438 { return UnicodeSimpleCase{one: 0x10410, len: 1} }
+		0x10439 { return UnicodeSimpleCase{one: 0x10411, len: 1} }
+		0x1043a { return UnicodeSimpleCase{one: 0x10412, len: 1} }
+		0x1043b { return UnicodeSimpleCase{one: 0x10413, len: 1} }
+		0x1043c { return UnicodeSimpleCase{one: 0x10414, len: 1} }
+		0x1043d { return UnicodeSimpleCase{one: 0x10415, len: 1} }
+		0x1043e { return UnicodeSimpleCase{one: 0x10416, len: 1} }
+		0x1043f { return UnicodeSimpleCase{one: 0x10417, len: 1} }
+		0x10440 { return UnicodeSimpleCase{one: 0x10418, len: 1} }
+		0x10441 { return UnicodeSimpleCase{one: 0x10419, len: 1} }
+		0x10442 { return UnicodeSimpleCase{one: 0x1041a, len: 1} }
+		0x10443 { return UnicodeSimpleCase{one: 0x1041b, len: 1} }
+		0x10444 { return UnicodeSimpleCase{one: 0x1041c, len: 1} }
+		0x10445 { return UnicodeSimpleCase{one: 0x1041d, len: 1} }
+		0x10446 { return UnicodeSimpleCase{one: 0x1041e, len: 1} }
+		0x10447 { return UnicodeSimpleCase{one: 0x1041f, len: 1} }
+		0x10448 { return UnicodeSimpleCase{one: 0x10420, len: 1} }
+		0x10449 { return UnicodeSimpleCase{one: 0x10421, len: 1} }
+		0x1044a { return UnicodeSimpleCase{one: 0x10422, len: 1} }
+		0x1044b { return UnicodeSimpleCase{one: 0x10423, len: 1} }
+		0x1044c { return UnicodeSimpleCase{one: 0x10424, len: 1} }
+		0x1044d { return UnicodeSimpleCase{one: 0x10425, len: 1} }
+		0x1044e { return UnicodeSimpleCase{one: 0x10426, len: 1} }
+		0x1044f { return UnicodeSimpleCase{one: 0x10427, len: 1} }
+		0x104b0 { return UnicodeSimpleCase{one: 0x104d8, len: 1} }
+		0x104b1 { return UnicodeSimpleCase{one: 0x104d9, len: 1} }
+		0x104b2 { return UnicodeSimpleCase{one: 0x104da, len: 1} }
+		0x104b3 { return UnicodeSimpleCase{one: 0x104db, len: 1} }
+		0x104b4 { return UnicodeSimpleCase{one: 0x104dc, len: 1} }
+		0x104b5 { return UnicodeSimpleCase{one: 0x104dd, len: 1} }
+		0x104b6 { return UnicodeSimpleCase{one: 0x104de, len: 1} }
+		0x104b7 { return UnicodeSimpleCase{one: 0x104df, len: 1} }
+		0x104b8 { return UnicodeSimpleCase{one: 0x104e0, len: 1} }
+		0x104b9 { return UnicodeSimpleCase{one: 0x104e1, len: 1} }
+		0x104ba { return UnicodeSimpleCase{one: 0x104e2, len: 1} }
+		0x104bb { return UnicodeSimpleCase{one: 0x104e3, len: 1} }
+		0x104bc { return UnicodeSimpleCase{one: 0x104e4, len: 1} }
+		0x104bd { return UnicodeSimpleCase{one: 0x104e5, len: 1} }
+		0x104be { return UnicodeSimpleCase{one: 0x104e6, len: 1} }
+		0x104bf { return UnicodeSimpleCase{one: 0x104e7, len: 1} }
+		0x104c0 { return UnicodeSimpleCase{one: 0x104e8, len: 1} }
+		0x104c1 { return UnicodeSimpleCase{one: 0x104e9, len: 1} }
+		0x104c2 { return UnicodeSimpleCase{one: 0x104ea, len: 1} }
+		0x104c3 { return UnicodeSimpleCase{one: 0x104eb, len: 1} }
+		0x104c4 { return UnicodeSimpleCase{one: 0x104ec, len: 1} }
+		0x104c5 { return UnicodeSimpleCase{one: 0x104ed, len: 1} }
+		0x104c6 { return UnicodeSimpleCase{one: 0x104ee, len: 1} }
+		0x104c7 { return UnicodeSimpleCase{one: 0x104ef, len: 1} }
+		0x104c8 { return UnicodeSimpleCase{one: 0x104f0, len: 1} }
+		0x104c9 { return UnicodeSimpleCase{one: 0x104f1, len: 1} }
+		0x104ca { return UnicodeSimpleCase{one: 0x104f2, len: 1} }
+		0x104cb { return UnicodeSimpleCase{one: 0x104f3, len: 1} }
+		0x104cc { return UnicodeSimpleCase{one: 0x104f4, len: 1} }
+		0x104cd { return UnicodeSimpleCase{one: 0x104f5, len: 1} }
+		0x104ce { return UnicodeSimpleCase{one: 0x104f6, len: 1} }
+		0x104cf { return UnicodeSimpleCase{one: 0x104f7, len: 1} }
+		0x104d0 { return UnicodeSimpleCase{one: 0x104f8, len: 1} }
+		0x104d1 { return UnicodeSimpleCase{one: 0x104f9, len: 1} }
+		0x104d2 { return UnicodeSimpleCase{one: 0x104fa, len: 1} }
+		0x104d3 { return UnicodeSimpleCase{one: 0x104fb, len: 1} }
+		0x104d8 { return UnicodeSimpleCase{one: 0x104b0, len: 1} }
+		0x104d9 { return UnicodeSimpleCase{one: 0x104b1, len: 1} }
+		0x104da { return UnicodeSimpleCase{one: 0x104b2, len: 1} }
+		0x104db { return UnicodeSimpleCase{one: 0x104b3, len: 1} }
+		0x104dc { return UnicodeSimpleCase{one: 0x104b4, len: 1} }
+		0x104dd { return UnicodeSimpleCase{one: 0x104b5, len: 1} }
+		0x104de { return UnicodeSimpleCase{one: 0x104b6, len: 1} }
+		0x104df { return UnicodeSimpleCase{one: 0x104b7, len: 1} }
+		0x104e0 { return UnicodeSimpleCase{one: 0x104b8, len: 1} }
+		0x104e1 { return UnicodeSimpleCase{one: 0x104b9, len: 1} }
+		0x104e2 { return UnicodeSimpleCase{one: 0x104ba, len: 1} }
+		0x104e3 { return UnicodeSimpleCase{one: 0x104bb, len: 1} }
+		0x104e4 { return UnicodeSimpleCase{one: 0x104bc, len: 1} }
+		0x104e5 { return UnicodeSimpleCase{one: 0x104bd, len: 1} }
+		0x104e6 { return UnicodeSimpleCase{one: 0x104be, len: 1} }
+		0x104e7 { return UnicodeSimpleCase{one: 0x104bf, len: 1} }
+		0x104e8 { return UnicodeSimpleCase{one: 0x104c0, len: 1} }
+		0x104e9 { return UnicodeSimpleCase{one: 0x104c1, len: 1} }
+		0x104ea { return UnicodeSimpleCase{one: 0x104c2, len: 1} }
+		0x104eb { return UnicodeSimpleCase{one: 0x104c3, len: 1} }
+		0x104ec { return UnicodeSimpleCase{one: 0x104c4, len: 1} }
+		0x104ed { return UnicodeSimpleCase{one: 0x104c5, len: 1} }
+		0x104ee { return UnicodeSimpleCase{one: 0x104c6, len: 1} }
+		0x104ef { return UnicodeSimpleCase{one: 0x104c7, len: 1} }
+		0x104f0 { return UnicodeSimpleCase{one: 0x104c8, len: 1} }
+		0x104f1 { return UnicodeSimpleCase{one: 0x104c9, len: 1} }
+		0x104f2 { return UnicodeSimpleCase{one: 0x104ca, len: 1} }
+		0x104f3 { return UnicodeSimpleCase{one: 0x104cb, len: 1} }
+		0x104f4 { return UnicodeSimpleCase{one: 0x104cc, len: 1} }
+		0x104f5 { return UnicodeSimpleCase{one: 0x104cd, len: 1} }
+		0x104f6 { return UnicodeSimpleCase{one: 0x104ce, len: 1} }
+		0x104f7 { return UnicodeSimpleCase{one: 0x104cf, len: 1} }
+		0x104f8 { return UnicodeSimpleCase{one: 0x104d0, len: 1} }
+		0x104f9 { return UnicodeSimpleCase{one: 0x104d1, len: 1} }
+		0x104fa { return UnicodeSimpleCase{one: 0x104d2, len: 1} }
+		0x104fb { return UnicodeSimpleCase{one: 0x104d3, len: 1} }
+		0x10570 { return UnicodeSimpleCase{one: 0x10597, len: 1} }
+		0x10571 { return UnicodeSimpleCase{one: 0x10598, len: 1} }
+		0x10572 { return UnicodeSimpleCase{one: 0x10599, len: 1} }
+		0x10573 { return UnicodeSimpleCase{one: 0x1059a, len: 1} }
+		0x10574 { return UnicodeSimpleCase{one: 0x1059b, len: 1} }
+		0x10575 { return UnicodeSimpleCase{one: 0x1059c, len: 1} }
+		0x10576 { return UnicodeSimpleCase{one: 0x1059d, len: 1} }
+		0x10577 { return UnicodeSimpleCase{one: 0x1059e, len: 1} }
+		0x10578 { return UnicodeSimpleCase{one: 0x1059f, len: 1} }
+		0x10579 { return UnicodeSimpleCase{one: 0x105a0, len: 1} }
+		0x1057a { return UnicodeSimpleCase{one: 0x105a1, len: 1} }
+		0x1057c { return UnicodeSimpleCase{one: 0x105a3, len: 1} }
+		0x1057d { return UnicodeSimpleCase{one: 0x105a4, len: 1} }
+		0x1057e { return UnicodeSimpleCase{one: 0x105a5, len: 1} }
+		0x1057f { return UnicodeSimpleCase{one: 0x105a6, len: 1} }
+		0x10580 { return UnicodeSimpleCase{one: 0x105a7, len: 1} }
+		0x10581 { return UnicodeSimpleCase{one: 0x105a8, len: 1} }
+		0x10582 { return UnicodeSimpleCase{one: 0x105a9, len: 1} }
+		0x10583 { return UnicodeSimpleCase{one: 0x105aa, len: 1} }
+		0x10584 { return UnicodeSimpleCase{one: 0x105ab, len: 1} }
+		0x10585 { return UnicodeSimpleCase{one: 0x105ac, len: 1} }
+		0x10586 { return UnicodeSimpleCase{one: 0x105ad, len: 1} }
+		0x10587 { return UnicodeSimpleCase{one: 0x105ae, len: 1} }
+		0x10588 { return UnicodeSimpleCase{one: 0x105af, len: 1} }
+		0x10589 { return UnicodeSimpleCase{one: 0x105b0, len: 1} }
+		0x1058a { return UnicodeSimpleCase{one: 0x105b1, len: 1} }
+		0x1058c { return UnicodeSimpleCase{one: 0x105b3, len: 1} }
+		0x1058d { return UnicodeSimpleCase{one: 0x105b4, len: 1} }
+		0x1058e { return UnicodeSimpleCase{one: 0x105b5, len: 1} }
+		0x1058f { return UnicodeSimpleCase{one: 0x105b6, len: 1} }
+		0x10590 { return UnicodeSimpleCase{one: 0x105b7, len: 1} }
+		0x10591 { return UnicodeSimpleCase{one: 0x105b8, len: 1} }
+		0x10592 { return UnicodeSimpleCase{one: 0x105b9, len: 1} }
+		0x10594 { return UnicodeSimpleCase{one: 0x105bb, len: 1} }
+		0x10595 { return UnicodeSimpleCase{one: 0x105bc, len: 1} }
+		0x10597 { return UnicodeSimpleCase{one: 0x10570, len: 1} }
+		0x10598 { return UnicodeSimpleCase{one: 0x10571, len: 1} }
+		0x10599 { return UnicodeSimpleCase{one: 0x10572, len: 1} }
+		0x1059a { return UnicodeSimpleCase{one: 0x10573, len: 1} }
+		0x1059b { return UnicodeSimpleCase{one: 0x10574, len: 1} }
+		0x1059c { return UnicodeSimpleCase{one: 0x10575, len: 1} }
+		0x1059d { return UnicodeSimpleCase{one: 0x10576, len: 1} }
+		0x1059e { return UnicodeSimpleCase{one: 0x10577, len: 1} }
+		0x1059f { return UnicodeSimpleCase{one: 0x10578, len: 1} }
+		0x105a0 { return UnicodeSimpleCase{one: 0x10579, len: 1} }
+		0x105a1 { return UnicodeSimpleCase{one: 0x1057a, len: 1} }
+		0x105a3 { return UnicodeSimpleCase{one: 0x1057c, len: 1} }
+		0x105a4 { return UnicodeSimpleCase{one: 0x1057d, len: 1} }
+		0x105a5 { return UnicodeSimpleCase{one: 0x1057e, len: 1} }
+		0x105a6 { return UnicodeSimpleCase{one: 0x1057f, len: 1} }
+		0x105a7 { return UnicodeSimpleCase{one: 0x10580, len: 1} }
+		0x105a8 { return UnicodeSimpleCase{one: 0x10581, len: 1} }
+		0x105a9 { return UnicodeSimpleCase{one: 0x10582, len: 1} }
+		0x105aa { return UnicodeSimpleCase{one: 0x10583, len: 1} }
+		0x105ab { return UnicodeSimpleCase{one: 0x10584, len: 1} }
+		0x105ac { return UnicodeSimpleCase{one: 0x10585, len: 1} }
+		0x105ad { return UnicodeSimpleCase{one: 0x10586, len: 1} }
+		0x105ae { return UnicodeSimpleCase{one: 0x10587, len: 1} }
+		0x105af { return UnicodeSimpleCase{one: 0x10588, len: 1} }
+		0x105b0 { return UnicodeSimpleCase{one: 0x10589, len: 1} }
+		0x105b1 { return UnicodeSimpleCase{one: 0x1058a, len: 1} }
+		0x105b3 { return UnicodeSimpleCase{one: 0x1058c, len: 1} }
+		0x105b4 { return UnicodeSimpleCase{one: 0x1058d, len: 1} }
+		0x105b5 { return UnicodeSimpleCase{one: 0x1058e, len: 1} }
+		0x105b6 { return UnicodeSimpleCase{one: 0x1058f, len: 1} }
+		0x105b7 { return UnicodeSimpleCase{one: 0x10590, len: 1} }
+		0x105b8 { return UnicodeSimpleCase{one: 0x10591, len: 1} }
+		0x105b9 { return UnicodeSimpleCase{one: 0x10592, len: 1} }
+		0x105bb { return UnicodeSimpleCase{one: 0x10594, len: 1} }
+		0x105bc { return UnicodeSimpleCase{one: 0x10595, len: 1} }
+		0x10c80 { return UnicodeSimpleCase{one: 0x10cc0, len: 1} }
+		0x10c81 { return UnicodeSimpleCase{one: 0x10cc1, len: 1} }
+		0x10c82 { return UnicodeSimpleCase{one: 0x10cc2, len: 1} }
+		0x10c83 { return UnicodeSimpleCase{one: 0x10cc3, len: 1} }
+		0x10c84 { return UnicodeSimpleCase{one: 0x10cc4, len: 1} }
+		0x10c85 { return UnicodeSimpleCase{one: 0x10cc5, len: 1} }
+		0x10c86 { return UnicodeSimpleCase{one: 0x10cc6, len: 1} }
+		0x10c87 { return UnicodeSimpleCase{one: 0x10cc7, len: 1} }
+		0x10c88 { return UnicodeSimpleCase{one: 0x10cc8, len: 1} }
+		0x10c89 { return UnicodeSimpleCase{one: 0x10cc9, len: 1} }
+		0x10c8a { return UnicodeSimpleCase{one: 0x10cca, len: 1} }
+		0x10c8b { return UnicodeSimpleCase{one: 0x10ccb, len: 1} }
+		0x10c8c { return UnicodeSimpleCase{one: 0x10ccc, len: 1} }
+		0x10c8d { return UnicodeSimpleCase{one: 0x10ccd, len: 1} }
+		0x10c8e { return UnicodeSimpleCase{one: 0x10cce, len: 1} }
+		0x10c8f { return UnicodeSimpleCase{one: 0x10ccf, len: 1} }
+		0x10c90 { return UnicodeSimpleCase{one: 0x10cd0, len: 1} }
+		0x10c91 { return UnicodeSimpleCase{one: 0x10cd1, len: 1} }
+		0x10c92 { return UnicodeSimpleCase{one: 0x10cd2, len: 1} }
+		0x10c93 { return UnicodeSimpleCase{one: 0x10cd3, len: 1} }
+		0x10c94 { return UnicodeSimpleCase{one: 0x10cd4, len: 1} }
+		0x10c95 { return UnicodeSimpleCase{one: 0x10cd5, len: 1} }
+		0x10c96 { return UnicodeSimpleCase{one: 0x10cd6, len: 1} }
+		0x10c97 { return UnicodeSimpleCase{one: 0x10cd7, len: 1} }
+		0x10c98 { return UnicodeSimpleCase{one: 0x10cd8, len: 1} }
+		0x10c99 { return UnicodeSimpleCase{one: 0x10cd9, len: 1} }
+		0x10c9a { return UnicodeSimpleCase{one: 0x10cda, len: 1} }
+		0x10c9b { return UnicodeSimpleCase{one: 0x10cdb, len: 1} }
+		0x10c9c { return UnicodeSimpleCase{one: 0x10cdc, len: 1} }
+		0x10c9d { return UnicodeSimpleCase{one: 0x10cdd, len: 1} }
+		0x10c9e { return UnicodeSimpleCase{one: 0x10cde, len: 1} }
+		0x10c9f { return UnicodeSimpleCase{one: 0x10cdf, len: 1} }
+		0x10ca0 { return UnicodeSimpleCase{one: 0x10ce0, len: 1} }
+		0x10ca1 { return UnicodeSimpleCase{one: 0x10ce1, len: 1} }
+		0x10ca2 { return UnicodeSimpleCase{one: 0x10ce2, len: 1} }
+		0x10ca3 { return UnicodeSimpleCase{one: 0x10ce3, len: 1} }
+		0x10ca4 { return UnicodeSimpleCase{one: 0x10ce4, len: 1} }
+		0x10ca5 { return UnicodeSimpleCase{one: 0x10ce5, len: 1} }
+		0x10ca6 { return UnicodeSimpleCase{one: 0x10ce6, len: 1} }
+		0x10ca7 { return UnicodeSimpleCase{one: 0x10ce7, len: 1} }
+		0x10ca8 { return UnicodeSimpleCase{one: 0x10ce8, len: 1} }
+		0x10ca9 { return UnicodeSimpleCase{one: 0x10ce9, len: 1} }
+		0x10caa { return UnicodeSimpleCase{one: 0x10cea, len: 1} }
+		0x10cab { return UnicodeSimpleCase{one: 0x10ceb, len: 1} }
+		0x10cac { return UnicodeSimpleCase{one: 0x10cec, len: 1} }
+		0x10cad { return UnicodeSimpleCase{one: 0x10ced, len: 1} }
+		0x10cae { return UnicodeSimpleCase{one: 0x10cee, len: 1} }
+		0x10caf { return UnicodeSimpleCase{one: 0x10cef, len: 1} }
+		0x10cb0 { return UnicodeSimpleCase{one: 0x10cf0, len: 1} }
+		0x10cb1 { return UnicodeSimpleCase{one: 0x10cf1, len: 1} }
+		0x10cb2 { return UnicodeSimpleCase{one: 0x10cf2, len: 1} }
+		0x10cc0 { return UnicodeSimpleCase{one: 0x10c80, len: 1} }
+		0x10cc1 { return UnicodeSimpleCase{one: 0x10c81, len: 1} }
+		0x10cc2 { return UnicodeSimpleCase{one: 0x10c82, len: 1} }
+		0x10cc3 { return UnicodeSimpleCase{one: 0x10c83, len: 1} }
+		0x10cc4 { return UnicodeSimpleCase{one: 0x10c84, len: 1} }
+		0x10cc5 { return UnicodeSimpleCase{one: 0x10c85, len: 1} }
+		0x10cc6 { return UnicodeSimpleCase{one: 0x10c86, len: 1} }
+		0x10cc7 { return UnicodeSimpleCase{one: 0x10c87, len: 1} }
+		0x10cc8 { return UnicodeSimpleCase{one: 0x10c88, len: 1} }
+		0x10cc9 { return UnicodeSimpleCase{one: 0x10c89, len: 1} }
+		0x10cca { return UnicodeSimpleCase{one: 0x10c8a, len: 1} }
+		0x10ccb { return UnicodeSimpleCase{one: 0x10c8b, len: 1} }
+		0x10ccc { return UnicodeSimpleCase{one: 0x10c8c, len: 1} }
+		0x10ccd { return UnicodeSimpleCase{one: 0x10c8d, len: 1} }
+		0x10cce { return UnicodeSimpleCase{one: 0x10c8e, len: 1} }
+		0x10ccf { return UnicodeSimpleCase{one: 0x10c8f, len: 1} }
+		0x10cd0 { return UnicodeSimpleCase{one: 0x10c90, len: 1} }
+		0x10cd1 { return UnicodeSimpleCase{one: 0x10c91, len: 1} }
+		0x10cd2 { return UnicodeSimpleCase{one: 0x10c92, len: 1} }
+		0x10cd3 { return UnicodeSimpleCase{one: 0x10c93, len: 1} }
+		0x10cd4 { return UnicodeSimpleCase{one: 0x10c94, len: 1} }
+		0x10cd5 { return UnicodeSimpleCase{one: 0x10c95, len: 1} }
+		0x10cd6 { return UnicodeSimpleCase{one: 0x10c96, len: 1} }
+		0x10cd7 { return UnicodeSimpleCase{one: 0x10c97, len: 1} }
+		0x10cd8 { return UnicodeSimpleCase{one: 0x10c98, len: 1} }
+		0x10cd9 { return UnicodeSimpleCase{one: 0x10c99, len: 1} }
+		0x10cda { return UnicodeSimpleCase{one: 0x10c9a, len: 1} }
+		0x10cdb { return UnicodeSimpleCase{one: 0x10c9b, len: 1} }
+		0x10cdc { return UnicodeSimpleCase{one: 0x10c9c, len: 1} }
+		0x10cdd { return UnicodeSimpleCase{one: 0x10c9d, len: 1} }
+		0x10cde { return UnicodeSimpleCase{one: 0x10c9e, len: 1} }
+		0x10cdf { return UnicodeSimpleCase{one: 0x10c9f, len: 1} }
+		0x10ce0 { return UnicodeSimpleCase{one: 0x10ca0, len: 1} }
+		0x10ce1 { return UnicodeSimpleCase{one: 0x10ca1, len: 1} }
+		0x10ce2 { return UnicodeSimpleCase{one: 0x10ca2, len: 1} }
+		0x10ce3 { return UnicodeSimpleCase{one: 0x10ca3, len: 1} }
+		0x10ce4 { return UnicodeSimpleCase{one: 0x10ca4, len: 1} }
+		0x10ce5 { return UnicodeSimpleCase{one: 0x10ca5, len: 1} }
+		0x10ce6 { return UnicodeSimpleCase{one: 0x10ca6, len: 1} }
+		0x10ce7 { return UnicodeSimpleCase{one: 0x10ca7, len: 1} }
+		0x10ce8 { return UnicodeSimpleCase{one: 0x10ca8, len: 1} }
+		0x10ce9 { return UnicodeSimpleCase{one: 0x10ca9, len: 1} }
+		0x10cea { return UnicodeSimpleCase{one: 0x10caa, len: 1} }
+		0x10ceb { return UnicodeSimpleCase{one: 0x10cab, len: 1} }
+		0x10cec { return UnicodeSimpleCase{one: 0x10cac, len: 1} }
+		0x10ced { return UnicodeSimpleCase{one: 0x10cad, len: 1} }
+		0x10cee { return UnicodeSimpleCase{one: 0x10cae, len: 1} }
+		0x10cef { return UnicodeSimpleCase{one: 0x10caf, len: 1} }
+		0x10cf0 { return UnicodeSimpleCase{one: 0x10cb0, len: 1} }
+		0x10cf1 { return UnicodeSimpleCase{one: 0x10cb1, len: 1} }
+		0x10cf2 { return UnicodeSimpleCase{one: 0x10cb2, len: 1} }
+		0x10d50 { return UnicodeSimpleCase{one: 0x10d70, len: 1} }
+		0x10d51 { return UnicodeSimpleCase{one: 0x10d71, len: 1} }
+		0x10d52 { return UnicodeSimpleCase{one: 0x10d72, len: 1} }
+		0x10d53 { return UnicodeSimpleCase{one: 0x10d73, len: 1} }
+		0x10d54 { return UnicodeSimpleCase{one: 0x10d74, len: 1} }
+		0x10d55 { return UnicodeSimpleCase{one: 0x10d75, len: 1} }
+		0x10d56 { return UnicodeSimpleCase{one: 0x10d76, len: 1} }
+		0x10d57 { return UnicodeSimpleCase{one: 0x10d77, len: 1} }
+		0x10d58 { return UnicodeSimpleCase{one: 0x10d78, len: 1} }
+		0x10d59 { return UnicodeSimpleCase{one: 0x10d79, len: 1} }
+		0x10d5a { return UnicodeSimpleCase{one: 0x10d7a, len: 1} }
+		0x10d5b { return UnicodeSimpleCase{one: 0x10d7b, len: 1} }
+		0x10d5c { return UnicodeSimpleCase{one: 0x10d7c, len: 1} }
+		0x10d5d { return UnicodeSimpleCase{one: 0x10d7d, len: 1} }
+		0x10d5e { return UnicodeSimpleCase{one: 0x10d7e, len: 1} }
+		0x10d5f { return UnicodeSimpleCase{one: 0x10d7f, len: 1} }
+		0x10d60 { return UnicodeSimpleCase{one: 0x10d80, len: 1} }
+		0x10d61 { return UnicodeSimpleCase{one: 0x10d81, len: 1} }
+		0x10d62 { return UnicodeSimpleCase{one: 0x10d82, len: 1} }
+		0x10d63 { return UnicodeSimpleCase{one: 0x10d83, len: 1} }
+		0x10d64 { return UnicodeSimpleCase{one: 0x10d84, len: 1} }
+		0x10d65 { return UnicodeSimpleCase{one: 0x10d85, len: 1} }
+		0x10d70 { return UnicodeSimpleCase{one: 0x10d50, len: 1} }
+		0x10d71 { return UnicodeSimpleCase{one: 0x10d51, len: 1} }
+		0x10d72 { return UnicodeSimpleCase{one: 0x10d52, len: 1} }
+		0x10d73 { return UnicodeSimpleCase{one: 0x10d53, len: 1} }
+		0x10d74 { return UnicodeSimpleCase{one: 0x10d54, len: 1} }
+		0x10d75 { return UnicodeSimpleCase{one: 0x10d55, len: 1} }
+		0x10d76 { return UnicodeSimpleCase{one: 0x10d56, len: 1} }
+		0x10d77 { return UnicodeSimpleCase{one: 0x10d57, len: 1} }
+		0x10d78 { return UnicodeSimpleCase{one: 0x10d58, len: 1} }
+		0x10d79 { return UnicodeSimpleCase{one: 0x10d59, len: 1} }
+		0x10d7a { return UnicodeSimpleCase{one: 0x10d5a, len: 1} }
+		0x10d7b { return UnicodeSimpleCase{one: 0x10d5b, len: 1} }
+		0x10d7c { return UnicodeSimpleCase{one: 0x10d5c, len: 1} }
+		0x10d7d { return UnicodeSimpleCase{one: 0x10d5d, len: 1} }
+		0x10d7e { return UnicodeSimpleCase{one: 0x10d5e, len: 1} }
+		0x10d7f { return UnicodeSimpleCase{one: 0x10d5f, len: 1} }
+		0x10d80 { return UnicodeSimpleCase{one: 0x10d60, len: 1} }
+		0x10d81 { return UnicodeSimpleCase{one: 0x10d61, len: 1} }
+		0x10d82 { return UnicodeSimpleCase{one: 0x10d62, len: 1} }
+		0x10d83 { return UnicodeSimpleCase{one: 0x10d63, len: 1} }
+		0x10d84 { return UnicodeSimpleCase{one: 0x10d64, len: 1} }
+		0x10d85 { return UnicodeSimpleCase{one: 0x10d65, len: 1} }
+		0x118a0 { return UnicodeSimpleCase{one: 0x118c0, len: 1} }
+		0x118a1 { return UnicodeSimpleCase{one: 0x118c1, len: 1} }
+		0x118a2 { return UnicodeSimpleCase{one: 0x118c2, len: 1} }
+		0x118a3 { return UnicodeSimpleCase{one: 0x118c3, len: 1} }
+		0x118a4 { return UnicodeSimpleCase{one: 0x118c4, len: 1} }
+		0x118a5 { return UnicodeSimpleCase{one: 0x118c5, len: 1} }
+		0x118a6 { return UnicodeSimpleCase{one: 0x118c6, len: 1} }
+		0x118a7 { return UnicodeSimpleCase{one: 0x118c7, len: 1} }
+		0x118a8 { return UnicodeSimpleCase{one: 0x118c8, len: 1} }
+		0x118a9 { return UnicodeSimpleCase{one: 0x118c9, len: 1} }
+		0x118aa { return UnicodeSimpleCase{one: 0x118ca, len: 1} }
+		0x118ab { return UnicodeSimpleCase{one: 0x118cb, len: 1} }
+		0x118ac { return UnicodeSimpleCase{one: 0x118cc, len: 1} }
+		0x118ad { return UnicodeSimpleCase{one: 0x118cd, len: 1} }
+		0x118ae { return UnicodeSimpleCase{one: 0x118ce, len: 1} }
+		0x118af { return UnicodeSimpleCase{one: 0x118cf, len: 1} }
+		0x118b0 { return UnicodeSimpleCase{one: 0x118d0, len: 1} }
+		0x118b1 { return UnicodeSimpleCase{one: 0x118d1, len: 1} }
+		0x118b2 { return UnicodeSimpleCase{one: 0x118d2, len: 1} }
+		0x118b3 { return UnicodeSimpleCase{one: 0x118d3, len: 1} }
+		0x118b4 { return UnicodeSimpleCase{one: 0x118d4, len: 1} }
+		0x118b5 { return UnicodeSimpleCase{one: 0x118d5, len: 1} }
+		0x118b6 { return UnicodeSimpleCase{one: 0x118d6, len: 1} }
+		0x118b7 { return UnicodeSimpleCase{one: 0x118d7, len: 1} }
+		0x118b8 { return UnicodeSimpleCase{one: 0x118d8, len: 1} }
+		0x118b9 { return UnicodeSimpleCase{one: 0x118d9, len: 1} }
+		0x118ba { return UnicodeSimpleCase{one: 0x118da, len: 1} }
+		0x118bb { return UnicodeSimpleCase{one: 0x118db, len: 1} }
+		0x118bc { return UnicodeSimpleCase{one: 0x118dc, len: 1} }
+		0x118bd { return UnicodeSimpleCase{one: 0x118dd, len: 1} }
+		0x118be { return UnicodeSimpleCase{one: 0x118de, len: 1} }
+		0x118bf { return UnicodeSimpleCase{one: 0x118df, len: 1} }
+		0x118c0 { return UnicodeSimpleCase{one: 0x118a0, len: 1} }
+		0x118c1 { return UnicodeSimpleCase{one: 0x118a1, len: 1} }
+		0x118c2 { return UnicodeSimpleCase{one: 0x118a2, len: 1} }
+		0x118c3 { return UnicodeSimpleCase{one: 0x118a3, len: 1} }
+		0x118c4 { return UnicodeSimpleCase{one: 0x118a4, len: 1} }
+		0x118c5 { return UnicodeSimpleCase{one: 0x118a5, len: 1} }
+		0x118c6 { return UnicodeSimpleCase{one: 0x118a6, len: 1} }
+		0x118c7 { return UnicodeSimpleCase{one: 0x118a7, len: 1} }
+		0x118c8 { return UnicodeSimpleCase{one: 0x118a8, len: 1} }
+		0x118c9 { return UnicodeSimpleCase{one: 0x118a9, len: 1} }
+		0x118ca { return UnicodeSimpleCase{one: 0x118aa, len: 1} }
+		0x118cb { return UnicodeSimpleCase{one: 0x118ab, len: 1} }
+		0x118cc { return UnicodeSimpleCase{one: 0x118ac, len: 1} }
+		0x118cd { return UnicodeSimpleCase{one: 0x118ad, len: 1} }
+		0x118ce { return UnicodeSimpleCase{one: 0x118ae, len: 1} }
+		0x118cf { return UnicodeSimpleCase{one: 0x118af, len: 1} }
+		0x118d0 { return UnicodeSimpleCase{one: 0x118b0, len: 1} }
+		0x118d1 { return UnicodeSimpleCase{one: 0x118b1, len: 1} }
+		0x118d2 { return UnicodeSimpleCase{one: 0x118b2, len: 1} }
+		0x118d3 { return UnicodeSimpleCase{one: 0x118b3, len: 1} }
+		0x118d4 { return UnicodeSimpleCase{one: 0x118b4, len: 1} }
+		0x118d5 { return UnicodeSimpleCase{one: 0x118b5, len: 1} }
+		0x118d6 { return UnicodeSimpleCase{one: 0x118b6, len: 1} }
+		0x118d7 { return UnicodeSimpleCase{one: 0x118b7, len: 1} }
+		0x118d8 { return UnicodeSimpleCase{one: 0x118b8, len: 1} }
+		0x118d9 { return UnicodeSimpleCase{one: 0x118b9, len: 1} }
+		0x118da { return UnicodeSimpleCase{one: 0x118ba, len: 1} }
+		0x118db { return UnicodeSimpleCase{one: 0x118bb, len: 1} }
+		0x118dc { return UnicodeSimpleCase{one: 0x118bc, len: 1} }
+		0x118dd { return UnicodeSimpleCase{one: 0x118bd, len: 1} }
+		0x118de { return UnicodeSimpleCase{one: 0x118be, len: 1} }
+		0x118df { return UnicodeSimpleCase{one: 0x118bf, len: 1} }
+		0x16e40 { return UnicodeSimpleCase{one: 0x16e60, len: 1} }
+		0x16e41 { return UnicodeSimpleCase{one: 0x16e61, len: 1} }
+		0x16e42 { return UnicodeSimpleCase{one: 0x16e62, len: 1} }
+		0x16e43 { return UnicodeSimpleCase{one: 0x16e63, len: 1} }
+		0x16e44 { return UnicodeSimpleCase{one: 0x16e64, len: 1} }
+		0x16e45 { return UnicodeSimpleCase{one: 0x16e65, len: 1} }
+		0x16e46 { return UnicodeSimpleCase{one: 0x16e66, len: 1} }
+		0x16e47 { return UnicodeSimpleCase{one: 0x16e67, len: 1} }
+		0x16e48 { return UnicodeSimpleCase{one: 0x16e68, len: 1} }
+		0x16e49 { return UnicodeSimpleCase{one: 0x16e69, len: 1} }
+		0x16e4a { return UnicodeSimpleCase{one: 0x16e6a, len: 1} }
+		0x16e4b { return UnicodeSimpleCase{one: 0x16e6b, len: 1} }
+		0x16e4c { return UnicodeSimpleCase{one: 0x16e6c, len: 1} }
+		0x16e4d { return UnicodeSimpleCase{one: 0x16e6d, len: 1} }
+		0x16e4e { return UnicodeSimpleCase{one: 0x16e6e, len: 1} }
+		0x16e4f { return UnicodeSimpleCase{one: 0x16e6f, len: 1} }
+		0x16e50 { return UnicodeSimpleCase{one: 0x16e70, len: 1} }
+		0x16e51 { return UnicodeSimpleCase{one: 0x16e71, len: 1} }
+		0x16e52 { return UnicodeSimpleCase{one: 0x16e72, len: 1} }
+		0x16e53 { return UnicodeSimpleCase{one: 0x16e73, len: 1} }
+		0x16e54 { return UnicodeSimpleCase{one: 0x16e74, len: 1} }
+		0x16e55 { return UnicodeSimpleCase{one: 0x16e75, len: 1} }
+		0x16e56 { return UnicodeSimpleCase{one: 0x16e76, len: 1} }
+		0x16e57 { return UnicodeSimpleCase{one: 0x16e77, len: 1} }
+		0x16e58 { return UnicodeSimpleCase{one: 0x16e78, len: 1} }
+		0x16e59 { return UnicodeSimpleCase{one: 0x16e79, len: 1} }
+		0x16e5a { return UnicodeSimpleCase{one: 0x16e7a, len: 1} }
+		0x16e5b { return UnicodeSimpleCase{one: 0x16e7b, len: 1} }
+		0x16e5c { return UnicodeSimpleCase{one: 0x16e7c, len: 1} }
+		0x16e5d { return UnicodeSimpleCase{one: 0x16e7d, len: 1} }
+		0x16e5e { return UnicodeSimpleCase{one: 0x16e7e, len: 1} }
+		0x16e5f { return UnicodeSimpleCase{one: 0x16e7f, len: 1} }
+		0x16e60 { return UnicodeSimpleCase{one: 0x16e40, len: 1} }
+		0x16e61 { return UnicodeSimpleCase{one: 0x16e41, len: 1} }
+		0x16e62 { return UnicodeSimpleCase{one: 0x16e42, len: 1} }
+		0x16e63 { return UnicodeSimpleCase{one: 0x16e43, len: 1} }
+		0x16e64 { return UnicodeSimpleCase{one: 0x16e44, len: 1} }
+		0x16e65 { return UnicodeSimpleCase{one: 0x16e45, len: 1} }
+		0x16e66 { return UnicodeSimpleCase{one: 0x16e46, len: 1} }
+		0x16e67 { return UnicodeSimpleCase{one: 0x16e47, len: 1} }
+		0x16e68 { return UnicodeSimpleCase{one: 0x16e48, len: 1} }
+		0x16e69 { return UnicodeSimpleCase{one: 0x16e49, len: 1} }
+		0x16e6a { return UnicodeSimpleCase{one: 0x16e4a, len: 1} }
+		0x16e6b { return UnicodeSimpleCase{one: 0x16e4b, len: 1} }
+		0x16e6c { return UnicodeSimpleCase{one: 0x16e4c, len: 1} }
+		0x16e6d { return UnicodeSimpleCase{one: 0x16e4d, len: 1} }
+		0x16e6e { return UnicodeSimpleCase{one: 0x16e4e, len: 1} }
+		0x16e6f { return UnicodeSimpleCase{one: 0x16e4f, len: 1} }
+		0x16e70 { return UnicodeSimpleCase{one: 0x16e50, len: 1} }
+		0x16e71 { return UnicodeSimpleCase{one: 0x16e51, len: 1} }
+		0x16e72 { return UnicodeSimpleCase{one: 0x16e52, len: 1} }
+		0x16e73 { return UnicodeSimpleCase{one: 0x16e53, len: 1} }
+		0x16e74 { return UnicodeSimpleCase{one: 0x16e54, len: 1} }
+		0x16e75 { return UnicodeSimpleCase{one: 0x16e55, len: 1} }
+		0x16e76 { return UnicodeSimpleCase{one: 0x16e56, len: 1} }
+		0x16e77 { return UnicodeSimpleCase{one: 0x16e57, len: 1} }
+		0x16e78 { return UnicodeSimpleCase{one: 0x16e58, len: 1} }
+		0x16e79 { return UnicodeSimpleCase{one: 0x16e59, len: 1} }
+		0x16e7a { return UnicodeSimpleCase{one: 0x16e5a, len: 1} }
+		0x16e7b { return UnicodeSimpleCase{one: 0x16e5b, len: 1} }
+		0x16e7c { return UnicodeSimpleCase{one: 0x16e5c, len: 1} }
+		0x16e7d { return UnicodeSimpleCase{one: 0x16e5d, len: 1} }
+		0x16e7e { return UnicodeSimpleCase{one: 0x16e5e, len: 1} }
+		0x16e7f { return UnicodeSimpleCase{one: 0x16e5f, len: 1} }
+		0x1e900 { return UnicodeSimpleCase{one: 0x1e922, len: 1} }
+		0x1e901 { return UnicodeSimpleCase{one: 0x1e923, len: 1} }
+		0x1e902 { return UnicodeSimpleCase{one: 0x1e924, len: 1} }
+		0x1e903 { return UnicodeSimpleCase{one: 0x1e925, len: 1} }
+		0x1e904 { return UnicodeSimpleCase{one: 0x1e926, len: 1} }
+		0x1e905 { return UnicodeSimpleCase{one: 0x1e927, len: 1} }
+		0x1e906 { return UnicodeSimpleCase{one: 0x1e928, len: 1} }
+		0x1e907 { return UnicodeSimpleCase{one: 0x1e929, len: 1} }
+		0x1e908 { return UnicodeSimpleCase{one: 0x1e92a, len: 1} }
+		0x1e909 { return UnicodeSimpleCase{one: 0x1e92b, len: 1} }
+		0x1e90a { return UnicodeSimpleCase{one: 0x1e92c, len: 1} }
+		0x1e90b { return UnicodeSimpleCase{one: 0x1e92d, len: 1} }
+		0x1e90c { return UnicodeSimpleCase{one: 0x1e92e, len: 1} }
+		0x1e90d { return UnicodeSimpleCase{one: 0x1e92f, len: 1} }
+		0x1e90e { return UnicodeSimpleCase{one: 0x1e930, len: 1} }
+		0x1e90f { return UnicodeSimpleCase{one: 0x1e931, len: 1} }
+		0x1e910 { return UnicodeSimpleCase{one: 0x1e932, len: 1} }
+		0x1e911 { return UnicodeSimpleCase{one: 0x1e933, len: 1} }
+		0x1e912 { return UnicodeSimpleCase{one: 0x1e934, len: 1} }
+		0x1e913 { return UnicodeSimpleCase{one: 0x1e935, len: 1} }
+		0x1e914 { return UnicodeSimpleCase{one: 0x1e936, len: 1} }
+		0x1e915 { return UnicodeSimpleCase{one: 0x1e937, len: 1} }
+		0x1e916 { return UnicodeSimpleCase{one: 0x1e938, len: 1} }
+		0x1e917 { return UnicodeSimpleCase{one: 0x1e939, len: 1} }
+		0x1e918 { return UnicodeSimpleCase{one: 0x1e93a, len: 1} }
+		0x1e919 { return UnicodeSimpleCase{one: 0x1e93b, len: 1} }
+		0x1e91a { return UnicodeSimpleCase{one: 0x1e93c, len: 1} }
+		0x1e91b { return UnicodeSimpleCase{one: 0x1e93d, len: 1} }
+		0x1e91c { return UnicodeSimpleCase{one: 0x1e93e, len: 1} }
+		0x1e91d { return UnicodeSimpleCase{one: 0x1e93f, len: 1} }
+		0x1e91e { return UnicodeSimpleCase{one: 0x1e940, len: 1} }
+		0x1e91f { return UnicodeSimpleCase{one: 0x1e941, len: 1} }
+		0x1e920 { return UnicodeSimpleCase{one: 0x1e942, len: 1} }
+		0x1e921 { return UnicodeSimpleCase{one: 0x1e943, len: 1} }
+		0x1e922 { return UnicodeSimpleCase{one: 0x1e900, len: 1} }
+		0x1e923 { return UnicodeSimpleCase{one: 0x1e901, len: 1} }
+		0x1e924 { return UnicodeSimpleCase{one: 0x1e902, len: 1} }
+		0x1e925 { return UnicodeSimpleCase{one: 0x1e903, len: 1} }
+		0x1e926 { return UnicodeSimpleCase{one: 0x1e904, len: 1} }
+		0x1e927 { return UnicodeSimpleCase{one: 0x1e905, len: 1} }
+		0x1e928 { return UnicodeSimpleCase{one: 0x1e906, len: 1} }
+		0x1e929 { return UnicodeSimpleCase{one: 0x1e907, len: 1} }
+		0x1e92a { return UnicodeSimpleCase{one: 0x1e908, len: 1} }
+		0x1e92b { return UnicodeSimpleCase{one: 0x1e909, len: 1} }
+		0x1e92c { return UnicodeSimpleCase{one: 0x1e90a, len: 1} }
+		0x1e92d { return UnicodeSimpleCase{one: 0x1e90b, len: 1} }
+		0x1e92e { return UnicodeSimpleCase{one: 0x1e90c, len: 1} }
+		0x1e92f { return UnicodeSimpleCase{one: 0x1e90d, len: 1} }
+		0x1e930 { return UnicodeSimpleCase{one: 0x1e90e, len: 1} }
+		0x1e931 { return UnicodeSimpleCase{one: 0x1e90f, len: 1} }
+		0x1e932 { return UnicodeSimpleCase{one: 0x1e910, len: 1} }
+		0x1e933 { return UnicodeSimpleCase{one: 0x1e911, len: 1} }
+		0x1e934 { return UnicodeSimpleCase{one: 0x1e912, len: 1} }
+		0x1e935 { return UnicodeSimpleCase{one: 0x1e913, len: 1} }
+		0x1e936 { return UnicodeSimpleCase{one: 0x1e914, len: 1} }
+		0x1e937 { return UnicodeSimpleCase{one: 0x1e915, len: 1} }
+		0x1e938 { return UnicodeSimpleCase{one: 0x1e916, len: 1} }
+		0x1e939 { return UnicodeSimpleCase{one: 0x1e917, len: 1} }
+		0x1e93a { return UnicodeSimpleCase{one: 0x1e918, len: 1} }
+		0x1e93b { return UnicodeSimpleCase{one: 0x1e919, len: 1} }
+		0x1e93c { return UnicodeSimpleCase{one: 0x1e91a, len: 1} }
+		0x1e93d { return UnicodeSimpleCase{one: 0x1e91b, len: 1} }
+		0x1e93e { return UnicodeSimpleCase{one: 0x1e91c, len: 1} }
+		0x1e93f { return UnicodeSimpleCase{one: 0x1e91d, len: 1} }
+		0x1e940 { return UnicodeSimpleCase{one: 0x1e91e, len: 1} }
+		0x1e941 { return UnicodeSimpleCase{one: 0x1e91f, len: 1} }
+		0x1e942 { return UnicodeSimpleCase{one: 0x1e920, len: 1} }
+		0x1e943 { return UnicodeSimpleCase{one: 0x1e921, len: 1} }
+		else { return UnicodeSimpleCase{} }
+	}
+}
+
 @[inline]
 fn unicode_simple_case_equal(left rune, right rune) bool {
 	if left == right {
 		return true
 	}
-	match u32(left) {
-		0x41 { return u32(right) == 0x61 }
-		0x42 { return u32(right) == 0x62 }
-		0x43 { return u32(right) == 0x63 }
-		0x44 { return u32(right) == 0x64 }
-		0x45 { return u32(right) == 0x65 }
-		0x46 { return u32(right) == 0x66 }
-		0x47 { return u32(right) == 0x67 }
-		0x48 { return u32(right) == 0x68 }
-		0x49 { return u32(right) == 0x69 }
-		0x4a { return u32(right) == 0x6a }
-		0x4b { return u32(right) == 0x6b || u32(right) == 0x212a }
-		0x4c { return u32(right) == 0x6c }
-		0x4d { return u32(right) == 0x6d }
-		0x4e { return u32(right) == 0x6e }
-		0x4f { return u32(right) == 0x6f }
-		0x50 { return u32(right) == 0x70 }
-		0x51 { return u32(right) == 0x71 }
-		0x52 { return u32(right) == 0x72 }
-		0x53 { return u32(right) == 0x73 || u32(right) == 0x17f }
-		0x54 { return u32(right) == 0x74 }
-		0x55 { return u32(right) == 0x75 }
-		0x56 { return u32(right) == 0x76 }
-		0x57 { return u32(right) == 0x77 }
-		0x58 { return u32(right) == 0x78 }
-		0x59 { return u32(right) == 0x79 }
-		0x5a { return u32(right) == 0x7a }
-		0x61 { return u32(right) == 0x41 }
-		0x62 { return u32(right) == 0x42 }
-		0x63 { return u32(right) == 0x43 }
-		0x64 { return u32(right) == 0x44 }
-		0x65 { return u32(right) == 0x45 }
-		0x66 { return u32(right) == 0x46 }
-		0x67 { return u32(right) == 0x47 }
-		0x68 { return u32(right) == 0x48 }
-		0x69 { return u32(right) == 0x49 }
-		0x6a { return u32(right) == 0x4a }
-		0x6b { return u32(right) == 0x4b || u32(right) == 0x212a }
-		0x6c { return u32(right) == 0x4c }
-		0x6d { return u32(right) == 0x4d }
-		0x6e { return u32(right) == 0x4e }
-		0x6f { return u32(right) == 0x4f }
-		0x70 { return u32(right) == 0x50 }
-		0x71 { return u32(right) == 0x51 }
-		0x72 { return u32(right) == 0x52 }
-		0x73 { return u32(right) == 0x53 || u32(right) == 0x17f }
-		0x74 { return u32(right) == 0x54 }
-		0x75 { return u32(right) == 0x55 }
-		0x76 { return u32(right) == 0x56 }
-		0x77 { return u32(right) == 0x57 }
-		0x78 { return u32(right) == 0x58 }
-		0x79 { return u32(right) == 0x59 }
-		0x7a { return u32(right) == 0x5a }
-		0xb5 { return u32(right) == 0x39c || u32(right) == 0x3bc }
-		0xc0 { return u32(right) == 0xe0 }
-		0xc1 { return u32(right) == 0xe1 }
-		0xc2 { return u32(right) == 0xe2 }
-		0xc3 { return u32(right) == 0xe3 }
-		0xc4 { return u32(right) == 0xe4 }
-		0xc5 { return u32(right) == 0xe5 || u32(right) == 0x212b }
-		0xc6 { return u32(right) == 0xe6 }
-		0xc7 { return u32(right) == 0xe7 }
-		0xc8 { return u32(right) == 0xe8 }
-		0xc9 { return u32(right) == 0xe9 }
-		0xca { return u32(right) == 0xea }
-		0xcb { return u32(right) == 0xeb }
-		0xcc { return u32(right) == 0xec }
-		0xcd { return u32(right) == 0xed }
-		0xce { return u32(right) == 0xee }
-		0xcf { return u32(right) == 0xef }
-		0xd0 { return u32(right) == 0xf0 }
-		0xd1 { return u32(right) == 0xf1 }
-		0xd2 { return u32(right) == 0xf2 }
-		0xd3 { return u32(right) == 0xf3 }
-		0xd4 { return u32(right) == 0xf4 }
-		0xd5 { return u32(right) == 0xf5 }
-		0xd6 { return u32(right) == 0xf6 }
-		0xd8 { return u32(right) == 0xf8 }
-		0xd9 { return u32(right) == 0xf9 }
-		0xda { return u32(right) == 0xfa }
-		0xdb { return u32(right) == 0xfb }
-		0xdc { return u32(right) == 0xfc }
-		0xdd { return u32(right) == 0xfd }
-		0xde { return u32(right) == 0xfe }
-		0xdf { return u32(right) == 0x1e9e }
-		0xe0 { return u32(right) == 0xc0 }
-		0xe1 { return u32(right) == 0xc1 }
-		0xe2 { return u32(right) == 0xc2 }
-		0xe3 { return u32(right) == 0xc3 }
-		0xe4 { return u32(right) == 0xc4 }
-		0xe5 { return u32(right) == 0xc5 || u32(right) == 0x212b }
-		0xe6 { return u32(right) == 0xc6 }
-		0xe7 { return u32(right) == 0xc7 }
-		0xe8 { return u32(right) == 0xc8 }
-		0xe9 { return u32(right) == 0xc9 }
-		0xea { return u32(right) == 0xca }
-		0xeb { return u32(right) == 0xcb }
-		0xec { return u32(right) == 0xcc }
-		0xed { return u32(right) == 0xcd }
-		0xee { return u32(right) == 0xce }
-		0xef { return u32(right) == 0xcf }
-		0xf0 { return u32(right) == 0xd0 }
-		0xf1 { return u32(right) == 0xd1 }
-		0xf2 { return u32(right) == 0xd2 }
-		0xf3 { return u32(right) == 0xd3 }
-		0xf4 { return u32(right) == 0xd4 }
-		0xf5 { return u32(right) == 0xd5 }
-		0xf6 { return u32(right) == 0xd6 }
-		0xf8 { return u32(right) == 0xd8 }
-		0xf9 { return u32(right) == 0xd9 }
-		0xfa { return u32(right) == 0xda }
-		0xfb { return u32(right) == 0xdb }
-		0xfc { return u32(right) == 0xdc }
-		0xfd { return u32(right) == 0xdd }
-		0xfe { return u32(right) == 0xde }
-		0xff { return u32(right) == 0x178 }
-		0x100 { return u32(right) == 0x101 }
-		0x101 { return u32(right) == 0x100 }
-		0x102 { return u32(right) == 0x103 }
-		0x103 { return u32(right) == 0x102 }
-		0x104 { return u32(right) == 0x105 }
-		0x105 { return u32(right) == 0x104 }
-		0x106 { return u32(right) == 0x107 }
-		0x107 { return u32(right) == 0x106 }
-		0x108 { return u32(right) == 0x109 }
-		0x109 { return u32(right) == 0x108 }
-		0x10a { return u32(right) == 0x10b }
-		0x10b { return u32(right) == 0x10a }
-		0x10c { return u32(right) == 0x10d }
-		0x10d { return u32(right) == 0x10c }
-		0x10e { return u32(right) == 0x10f }
-		0x10f { return u32(right) == 0x10e }
-		0x110 { return u32(right) == 0x111 }
-		0x111 { return u32(right) == 0x110 }
-		0x112 { return u32(right) == 0x113 }
-		0x113 { return u32(right) == 0x112 }
-		0x114 { return u32(right) == 0x115 }
-		0x115 { return u32(right) == 0x114 }
-		0x116 { return u32(right) == 0x117 }
-		0x117 { return u32(right) == 0x116 }
-		0x118 { return u32(right) == 0x119 }
-		0x119 { return u32(right) == 0x118 }
-		0x11a { return u32(right) == 0x11b }
-		0x11b { return u32(right) == 0x11a }
-		0x11c { return u32(right) == 0x11d }
-		0x11d { return u32(right) == 0x11c }
-		0x11e { return u32(right) == 0x11f }
-		0x11f { return u32(right) == 0x11e }
-		0x120 { return u32(right) == 0x121 }
-		0x121 { return u32(right) == 0x120 }
-		0x122 { return u32(right) == 0x123 }
-		0x123 { return u32(right) == 0x122 }
-		0x124 { return u32(right) == 0x125 }
-		0x125 { return u32(right) == 0x124 }
-		0x126 { return u32(right) == 0x127 }
-		0x127 { return u32(right) == 0x126 }
-		0x128 { return u32(right) == 0x129 }
-		0x129 { return u32(right) == 0x128 }
-		0x12a { return u32(right) == 0x12b }
-		0x12b { return u32(right) == 0x12a }
-		0x12c { return u32(right) == 0x12d }
-		0x12d { return u32(right) == 0x12c }
-		0x12e { return u32(right) == 0x12f }
-		0x12f { return u32(right) == 0x12e }
-		0x132 { return u32(right) == 0x133 }
-		0x133 { return u32(right) == 0x132 }
-		0x134 { return u32(right) == 0x135 }
-		0x135 { return u32(right) == 0x134 }
-		0x136 { return u32(right) == 0x137 }
-		0x137 { return u32(right) == 0x136 }
-		0x139 { return u32(right) == 0x13a }
-		0x13a { return u32(right) == 0x139 }
-		0x13b { return u32(right) == 0x13c }
-		0x13c { return u32(right) == 0x13b }
-		0x13d { return u32(right) == 0x13e }
-		0x13e { return u32(right) == 0x13d }
-		0x13f { return u32(right) == 0x140 }
-		0x140 { return u32(right) == 0x13f }
-		0x141 { return u32(right) == 0x142 }
-		0x142 { return u32(right) == 0x141 }
-		0x143 { return u32(right) == 0x144 }
-		0x144 { return u32(right) == 0x143 }
-		0x145 { return u32(right) == 0x146 }
-		0x146 { return u32(right) == 0x145 }
-		0x147 { return u32(right) == 0x148 }
-		0x148 { return u32(right) == 0x147 }
-		0x14a { return u32(right) == 0x14b }
-		0x14b { return u32(right) == 0x14a }
-		0x14c { return u32(right) == 0x14d }
-		0x14d { return u32(right) == 0x14c }
-		0x14e { return u32(right) == 0x14f }
-		0x14f { return u32(right) == 0x14e }
-		0x150 { return u32(right) == 0x151 }
-		0x151 { return u32(right) == 0x150 }
-		0x152 { return u32(right) == 0x153 }
-		0x153 { return u32(right) == 0x152 }
-		0x154 { return u32(right) == 0x155 }
-		0x155 { return u32(right) == 0x154 }
-		0x156 { return u32(right) == 0x157 }
-		0x157 { return u32(right) == 0x156 }
-		0x158 { return u32(right) == 0x159 }
-		0x159 { return u32(right) == 0x158 }
-		0x15a { return u32(right) == 0x15b }
-		0x15b { return u32(right) == 0x15a }
-		0x15c { return u32(right) == 0x15d }
-		0x15d { return u32(right) == 0x15c }
-		0x15e { return u32(right) == 0x15f }
-		0x15f { return u32(right) == 0x15e }
-		0x160 { return u32(right) == 0x161 }
-		0x161 { return u32(right) == 0x160 }
-		0x162 { return u32(right) == 0x163 }
-		0x163 { return u32(right) == 0x162 }
-		0x164 { return u32(right) == 0x165 }
-		0x165 { return u32(right) == 0x164 }
-		0x166 { return u32(right) == 0x167 }
-		0x167 { return u32(right) == 0x166 }
-		0x168 { return u32(right) == 0x169 }
-		0x169 { return u32(right) == 0x168 }
-		0x16a { return u32(right) == 0x16b }
-		0x16b { return u32(right) == 0x16a }
-		0x16c { return u32(right) == 0x16d }
-		0x16d { return u32(right) == 0x16c }
-		0x16e { return u32(right) == 0x16f }
-		0x16f { return u32(right) == 0x16e }
-		0x170 { return u32(right) == 0x171 }
-		0x171 { return u32(right) == 0x170 }
-		0x172 { return u32(right) == 0x173 }
-		0x173 { return u32(right) == 0x172 }
-		0x174 { return u32(right) == 0x175 }
-		0x175 { return u32(right) == 0x174 }
-		0x176 { return u32(right) == 0x177 }
-		0x177 { return u32(right) == 0x176 }
-		0x178 { return u32(right) == 0xff }
-		0x179 { return u32(right) == 0x17a }
-		0x17a { return u32(right) == 0x179 }
-		0x17b { return u32(right) == 0x17c }
-		0x17c { return u32(right) == 0x17b }
-		0x17d { return u32(right) == 0x17e }
-		0x17e { return u32(right) == 0x17d }
-		0x17f { return u32(right) == 0x53 || u32(right) == 0x73 }
-		0x180 { return u32(right) == 0x243 }
-		0x181 { return u32(right) == 0x253 }
-		0x182 { return u32(right) == 0x183 }
-		0x183 { return u32(right) == 0x182 }
-		0x184 { return u32(right) == 0x185 }
-		0x185 { return u32(right) == 0x184 }
-		0x186 { return u32(right) == 0x254 }
-		0x187 { return u32(right) == 0x188 }
-		0x188 { return u32(right) == 0x187 }
-		0x189 { return u32(right) == 0x256 }
-		0x18a { return u32(right) == 0x257 }
-		0x18b { return u32(right) == 0x18c }
-		0x18c { return u32(right) == 0x18b }
-		0x18e { return u32(right) == 0x1dd }
-		0x18f { return u32(right) == 0x259 }
-		0x190 { return u32(right) == 0x25b }
-		0x191 { return u32(right) == 0x192 }
-		0x192 { return u32(right) == 0x191 }
-		0x193 { return u32(right) == 0x260 }
-		0x194 { return u32(right) == 0x263 }
-		0x195 { return u32(right) == 0x1f6 }
-		0x196 { return u32(right) == 0x269 }
-		0x197 { return u32(right) == 0x268 }
-		0x198 { return u32(right) == 0x199 }
-		0x199 { return u32(right) == 0x198 }
-		0x19a { return u32(right) == 0x23d }
-		0x19b { return u32(right) == 0xa7dc }
-		0x19c { return u32(right) == 0x26f }
-		0x19d { return u32(right) == 0x272 }
-		0x19e { return u32(right) == 0x220 }
-		0x19f { return u32(right) == 0x275 }
-		0x1a0 { return u32(right) == 0x1a1 }
-		0x1a1 { return u32(right) == 0x1a0 }
-		0x1a2 { return u32(right) == 0x1a3 }
-		0x1a3 { return u32(right) == 0x1a2 }
-		0x1a4 { return u32(right) == 0x1a5 }
-		0x1a5 { return u32(right) == 0x1a4 }
-		0x1a6 { return u32(right) == 0x280 }
-		0x1a7 { return u32(right) == 0x1a8 }
-		0x1a8 { return u32(right) == 0x1a7 }
-		0x1a9 { return u32(right) == 0x283 }
-		0x1ac { return u32(right) == 0x1ad }
-		0x1ad { return u32(right) == 0x1ac }
-		0x1ae { return u32(right) == 0x288 }
-		0x1af { return u32(right) == 0x1b0 }
-		0x1b0 { return u32(right) == 0x1af }
-		0x1b1 { return u32(right) == 0x28a }
-		0x1b2 { return u32(right) == 0x28b }
-		0x1b3 { return u32(right) == 0x1b4 }
-		0x1b4 { return u32(right) == 0x1b3 }
-		0x1b5 { return u32(right) == 0x1b6 }
-		0x1b6 { return u32(right) == 0x1b5 }
-		0x1b7 { return u32(right) == 0x292 }
-		0x1b8 { return u32(right) == 0x1b9 }
-		0x1b9 { return u32(right) == 0x1b8 }
-		0x1bc { return u32(right) == 0x1bd }
-		0x1bd { return u32(right) == 0x1bc }
-		0x1bf { return u32(right) == 0x1f7 }
-		0x1c4 { return u32(right) == 0x1c5 || u32(right) == 0x1c6 }
-		0x1c5 { return u32(right) == 0x1c4 || u32(right) == 0x1c6 }
-		0x1c6 { return u32(right) == 0x1c4 || u32(right) == 0x1c5 }
-		0x1c7 { return u32(right) == 0x1c8 || u32(right) == 0x1c9 }
-		0x1c8 { return u32(right) == 0x1c7 || u32(right) == 0x1c9 }
-		0x1c9 { return u32(right) == 0x1c7 || u32(right) == 0x1c8 }
-		0x1ca { return u32(right) == 0x1cb || u32(right) == 0x1cc }
-		0x1cb { return u32(right) == 0x1ca || u32(right) == 0x1cc }
-		0x1cc { return u32(right) == 0x1ca || u32(right) == 0x1cb }
-		0x1cd { return u32(right) == 0x1ce }
-		0x1ce { return u32(right) == 0x1cd }
-		0x1cf { return u32(right) == 0x1d0 }
-		0x1d0 { return u32(right) == 0x1cf }
-		0x1d1 { return u32(right) == 0x1d2 }
-		0x1d2 { return u32(right) == 0x1d1 }
-		0x1d3 { return u32(right) == 0x1d4 }
-		0x1d4 { return u32(right) == 0x1d3 }
-		0x1d5 { return u32(right) == 0x1d6 }
-		0x1d6 { return u32(right) == 0x1d5 }
-		0x1d7 { return u32(right) == 0x1d8 }
-		0x1d8 { return u32(right) == 0x1d7 }
-		0x1d9 { return u32(right) == 0x1da }
-		0x1da { return u32(right) == 0x1d9 }
-		0x1db { return u32(right) == 0x1dc }
-		0x1dc { return u32(right) == 0x1db }
-		0x1dd { return u32(right) == 0x18e }
-		0x1de { return u32(right) == 0x1df }
-		0x1df { return u32(right) == 0x1de }
-		0x1e0 { return u32(right) == 0x1e1 }
-		0x1e1 { return u32(right) == 0x1e0 }
-		0x1e2 { return u32(right) == 0x1e3 }
-		0x1e3 { return u32(right) == 0x1e2 }
-		0x1e4 { return u32(right) == 0x1e5 }
-		0x1e5 { return u32(right) == 0x1e4 }
-		0x1e6 { return u32(right) == 0x1e7 }
-		0x1e7 { return u32(right) == 0x1e6 }
-		0x1e8 { return u32(right) == 0x1e9 }
-		0x1e9 { return u32(right) == 0x1e8 }
-		0x1ea { return u32(right) == 0x1eb }
-		0x1eb { return u32(right) == 0x1ea }
-		0x1ec { return u32(right) == 0x1ed }
-		0x1ed { return u32(right) == 0x1ec }
-		0x1ee { return u32(right) == 0x1ef }
-		0x1ef { return u32(right) == 0x1ee }
-		0x1f1 { return u32(right) == 0x1f2 || u32(right) == 0x1f3 }
-		0x1f2 { return u32(right) == 0x1f1 || u32(right) == 0x1f3 }
-		0x1f3 { return u32(right) == 0x1f1 || u32(right) == 0x1f2 }
-		0x1f4 { return u32(right) == 0x1f5 }
-		0x1f5 { return u32(right) == 0x1f4 }
-		0x1f6 { return u32(right) == 0x195 }
-		0x1f7 { return u32(right) == 0x1bf }
-		0x1f8 { return u32(right) == 0x1f9 }
-		0x1f9 { return u32(right) == 0x1f8 }
-		0x1fa { return u32(right) == 0x1fb }
-		0x1fb { return u32(right) == 0x1fa }
-		0x1fc { return u32(right) == 0x1fd }
-		0x1fd { return u32(right) == 0x1fc }
-		0x1fe { return u32(right) == 0x1ff }
-		0x1ff { return u32(right) == 0x1fe }
-		0x200 { return u32(right) == 0x201 }
-		0x201 { return u32(right) == 0x200 }
-		0x202 { return u32(right) == 0x203 }
-		0x203 { return u32(right) == 0x202 }
-		0x204 { return u32(right) == 0x205 }
-		0x205 { return u32(right) == 0x204 }
-		0x206 { return u32(right) == 0x207 }
-		0x207 { return u32(right) == 0x206 }
-		0x208 { return u32(right) == 0x209 }
-		0x209 { return u32(right) == 0x208 }
-		0x20a { return u32(right) == 0x20b }
-		0x20b { return u32(right) == 0x20a }
-		0x20c { return u32(right) == 0x20d }
-		0x20d { return u32(right) == 0x20c }
-		0x20e { return u32(right) == 0x20f }
-		0x20f { return u32(right) == 0x20e }
-		0x210 { return u32(right) == 0x211 }
-		0x211 { return u32(right) == 0x210 }
-		0x212 { return u32(right) == 0x213 }
-		0x213 { return u32(right) == 0x212 }
-		0x214 { return u32(right) == 0x215 }
-		0x215 { return u32(right) == 0x214 }
-		0x216 { return u32(right) == 0x217 }
-		0x217 { return u32(right) == 0x216 }
-		0x218 { return u32(right) == 0x219 }
-		0x219 { return u32(right) == 0x218 }
-		0x21a { return u32(right) == 0x21b }
-		0x21b { return u32(right) == 0x21a }
-		0x21c { return u32(right) == 0x21d }
-		0x21d { return u32(right) == 0x21c }
-		0x21e { return u32(right) == 0x21f }
-		0x21f { return u32(right) == 0x21e }
-		0x220 { return u32(right) == 0x19e }
-		0x222 { return u32(right) == 0x223 }
-		0x223 { return u32(right) == 0x222 }
-		0x224 { return u32(right) == 0x225 }
-		0x225 { return u32(right) == 0x224 }
-		0x226 { return u32(right) == 0x227 }
-		0x227 { return u32(right) == 0x226 }
-		0x228 { return u32(right) == 0x229 }
-		0x229 { return u32(right) == 0x228 }
-		0x22a { return u32(right) == 0x22b }
-		0x22b { return u32(right) == 0x22a }
-		0x22c { return u32(right) == 0x22d }
-		0x22d { return u32(right) == 0x22c }
-		0x22e { return u32(right) == 0x22f }
-		0x22f { return u32(right) == 0x22e }
-		0x230 { return u32(right) == 0x231 }
-		0x231 { return u32(right) == 0x230 }
-		0x232 { return u32(right) == 0x233 }
-		0x233 { return u32(right) == 0x232 }
-		0x23a { return u32(right) == 0x2c65 }
-		0x23b { return u32(right) == 0x23c }
-		0x23c { return u32(right) == 0x23b }
-		0x23d { return u32(right) == 0x19a }
-		0x23e { return u32(right) == 0x2c66 }
-		0x23f { return u32(right) == 0x2c7e }
-		0x240 { return u32(right) == 0x2c7f }
-		0x241 { return u32(right) == 0x242 }
-		0x242 { return u32(right) == 0x241 }
-		0x243 { return u32(right) == 0x180 }
-		0x244 { return u32(right) == 0x289 }
-		0x245 { return u32(right) == 0x28c }
-		0x246 { return u32(right) == 0x247 }
-		0x247 { return u32(right) == 0x246 }
-		0x248 { return u32(right) == 0x249 }
-		0x249 { return u32(right) == 0x248 }
-		0x24a { return u32(right) == 0x24b }
-		0x24b { return u32(right) == 0x24a }
-		0x24c { return u32(right) == 0x24d }
-		0x24d { return u32(right) == 0x24c }
-		0x24e { return u32(right) == 0x24f }
-		0x24f { return u32(right) == 0x24e }
-		0x250 { return u32(right) == 0x2c6f }
-		0x251 { return u32(right) == 0x2c6d }
-		0x252 { return u32(right) == 0x2c70 }
-		0x253 { return u32(right) == 0x181 }
-		0x254 { return u32(right) == 0x186 }
-		0x256 { return u32(right) == 0x189 }
-		0x257 { return u32(right) == 0x18a }
-		0x259 { return u32(right) == 0x18f }
-		0x25b { return u32(right) == 0x190 }
-		0x25c { return u32(right) == 0xa7ab }
-		0x260 { return u32(right) == 0x193 }
-		0x261 { return u32(right) == 0xa7ac }
-		0x263 { return u32(right) == 0x194 }
-		0x264 { return u32(right) == 0xa7cb }
-		0x265 { return u32(right) == 0xa78d }
-		0x266 { return u32(right) == 0xa7aa }
-		0x268 { return u32(right) == 0x197 }
-		0x269 { return u32(right) == 0x196 }
-		0x26a { return u32(right) == 0xa7ae }
-		0x26b { return u32(right) == 0x2c62 }
-		0x26c { return u32(right) == 0xa7ad }
-		0x26f { return u32(right) == 0x19c }
-		0x271 { return u32(right) == 0x2c6e }
-		0x272 { return u32(right) == 0x19d }
-		0x275 { return u32(right) == 0x19f }
-		0x27d { return u32(right) == 0x2c64 }
-		0x280 { return u32(right) == 0x1a6 }
-		0x282 { return u32(right) == 0xa7c5 }
-		0x283 { return u32(right) == 0x1a9 }
-		0x287 { return u32(right) == 0xa7b1 }
-		0x288 { return u32(right) == 0x1ae }
-		0x289 { return u32(right) == 0x244 }
-		0x28a { return u32(right) == 0x1b1 }
-		0x28b { return u32(right) == 0x1b2 }
-		0x28c { return u32(right) == 0x245 }
-		0x292 { return u32(right) == 0x1b7 }
-		0x29d { return u32(right) == 0xa7b2 }
-		0x29e { return u32(right) == 0xa7b0 }
-		0x345 { return u32(right) == 0x399 || u32(right) == 0x3b9 || u32(right) == 0x1fbe }
-		0x370 { return u32(right) == 0x371 }
-		0x371 { return u32(right) == 0x370 }
-		0x372 { return u32(right) == 0x373 }
-		0x373 { return u32(right) == 0x372 }
-		0x376 { return u32(right) == 0x377 }
-		0x377 { return u32(right) == 0x376 }
-		0x37b { return u32(right) == 0x3fd }
-		0x37c { return u32(right) == 0x3fe }
-		0x37d { return u32(right) == 0x3ff }
-		0x37f { return u32(right) == 0x3f3 }
-		0x386 { return u32(right) == 0x3ac }
-		0x388 { return u32(right) == 0x3ad }
-		0x389 { return u32(right) == 0x3ae }
-		0x38a { return u32(right) == 0x3af }
-		0x38c { return u32(right) == 0x3cc }
-		0x38e { return u32(right) == 0x3cd }
-		0x38f { return u32(right) == 0x3ce }
-		0x390 { return u32(right) == 0x1fd3 }
-		0x391 { return u32(right) == 0x3b1 }
-		0x392 { return u32(right) == 0x3b2 || u32(right) == 0x3d0 }
-		0x393 { return u32(right) == 0x3b3 }
-		0x394 { return u32(right) == 0x3b4 }
-		0x395 { return u32(right) == 0x3b5 || u32(right) == 0x3f5 }
-		0x396 { return u32(right) == 0x3b6 }
-		0x397 { return u32(right) == 0x3b7 }
-		0x398 { return u32(right) == 0x3b8 || u32(right) == 0x3d1 || u32(right) == 0x3f4 }
-		0x399 { return u32(right) == 0x345 || u32(right) == 0x3b9 || u32(right) == 0x1fbe }
-		0x39a { return u32(right) == 0x3ba || u32(right) == 0x3f0 }
-		0x39b { return u32(right) == 0x3bb }
-		0x39c { return u32(right) == 0xb5 || u32(right) == 0x3bc }
-		0x39d { return u32(right) == 0x3bd }
-		0x39e { return u32(right) == 0x3be }
-		0x39f { return u32(right) == 0x3bf }
-		0x3a0 { return u32(right) == 0x3c0 || u32(right) == 0x3d6 }
-		0x3a1 { return u32(right) == 0x3c1 || u32(right) == 0x3f1 }
-		0x3a3 { return u32(right) == 0x3c2 || u32(right) == 0x3c3 }
-		0x3a4 { return u32(right) == 0x3c4 }
-		0x3a5 { return u32(right) == 0x3c5 }
-		0x3a6 { return u32(right) == 0x3c6 || u32(right) == 0x3d5 }
-		0x3a7 { return u32(right) == 0x3c7 }
-		0x3a8 { return u32(right) == 0x3c8 }
-		0x3a9 { return u32(right) == 0x3c9 || u32(right) == 0x2126 }
-		0x3aa { return u32(right) == 0x3ca }
-		0x3ab { return u32(right) == 0x3cb }
-		0x3ac { return u32(right) == 0x386 }
-		0x3ad { return u32(right) == 0x388 }
-		0x3ae { return u32(right) == 0x389 }
-		0x3af { return u32(right) == 0x38a }
-		0x3b0 { return u32(right) == 0x1fe3 }
-		0x3b1 { return u32(right) == 0x391 }
-		0x3b2 { return u32(right) == 0x392 || u32(right) == 0x3d0 }
-		0x3b3 { return u32(right) == 0x393 }
-		0x3b4 { return u32(right) == 0x394 }
-		0x3b5 { return u32(right) == 0x395 || u32(right) == 0x3f5 }
-		0x3b6 { return u32(right) == 0x396 }
-		0x3b7 { return u32(right) == 0x397 }
-		0x3b8 { return u32(right) == 0x398 || u32(right) == 0x3d1 || u32(right) == 0x3f4 }
-		0x3b9 { return u32(right) == 0x345 || u32(right) == 0x399 || u32(right) == 0x1fbe }
-		0x3ba { return u32(right) == 0x39a || u32(right) == 0x3f0 }
-		0x3bb { return u32(right) == 0x39b }
-		0x3bc { return u32(right) == 0xb5 || u32(right) == 0x39c }
-		0x3bd { return u32(right) == 0x39d }
-		0x3be { return u32(right) == 0x39e }
-		0x3bf { return u32(right) == 0x39f }
-		0x3c0 { return u32(right) == 0x3a0 || u32(right) == 0x3d6 }
-		0x3c1 { return u32(right) == 0x3a1 || u32(right) == 0x3f1 }
-		0x3c2 { return u32(right) == 0x3a3 || u32(right) == 0x3c3 }
-		0x3c3 { return u32(right) == 0x3a3 || u32(right) == 0x3c2 }
-		0x3c4 { return u32(right) == 0x3a4 }
-		0x3c5 { return u32(right) == 0x3a5 }
-		0x3c6 { return u32(right) == 0x3a6 || u32(right) == 0x3d5 }
-		0x3c7 { return u32(right) == 0x3a7 }
-		0x3c8 { return u32(right) == 0x3a8 }
-		0x3c9 { return u32(right) == 0x3a9 || u32(right) == 0x2126 }
-		0x3ca { return u32(right) == 0x3aa }
-		0x3cb { return u32(right) == 0x3ab }
-		0x3cc { return u32(right) == 0x38c }
-		0x3cd { return u32(right) == 0x38e }
-		0x3ce { return u32(right) == 0x38f }
-		0x3cf { return u32(right) == 0x3d7 }
-		0x3d0 { return u32(right) == 0x392 || u32(right) == 0x3b2 }
-		0x3d1 { return u32(right) == 0x398 || u32(right) == 0x3b8 || u32(right) == 0x3f4 }
-		0x3d5 { return u32(right) == 0x3a6 || u32(right) == 0x3c6 }
-		0x3d6 { return u32(right) == 0x3a0 || u32(right) == 0x3c0 }
-		0x3d7 { return u32(right) == 0x3cf }
-		0x3d8 { return u32(right) == 0x3d9 }
-		0x3d9 { return u32(right) == 0x3d8 }
-		0x3da { return u32(right) == 0x3db }
-		0x3db { return u32(right) == 0x3da }
-		0x3dc { return u32(right) == 0x3dd }
-		0x3dd { return u32(right) == 0x3dc }
-		0x3de { return u32(right) == 0x3df }
-		0x3df { return u32(right) == 0x3de }
-		0x3e0 { return u32(right) == 0x3e1 }
-		0x3e1 { return u32(right) == 0x3e0 }
-		0x3e2 { return u32(right) == 0x3e3 }
-		0x3e3 { return u32(right) == 0x3e2 }
-		0x3e4 { return u32(right) == 0x3e5 }
-		0x3e5 { return u32(right) == 0x3e4 }
-		0x3e6 { return u32(right) == 0x3e7 }
-		0x3e7 { return u32(right) == 0x3e6 }
-		0x3e8 { return u32(right) == 0x3e9 }
-		0x3e9 { return u32(right) == 0x3e8 }
-		0x3ea { return u32(right) == 0x3eb }
-		0x3eb { return u32(right) == 0x3ea }
-		0x3ec { return u32(right) == 0x3ed }
-		0x3ed { return u32(right) == 0x3ec }
-		0x3ee { return u32(right) == 0x3ef }
-		0x3ef { return u32(right) == 0x3ee }
-		0x3f0 { return u32(right) == 0x39a || u32(right) == 0x3ba }
-		0x3f1 { return u32(right) == 0x3a1 || u32(right) == 0x3c1 }
-		0x3f2 { return u32(right) == 0x3f9 }
-		0x3f3 { return u32(right) == 0x37f }
-		0x3f4 { return u32(right) == 0x398 || u32(right) == 0x3b8 || u32(right) == 0x3d1 }
-		0x3f5 { return u32(right) == 0x395 || u32(right) == 0x3b5 }
-		0x3f7 { return u32(right) == 0x3f8 }
-		0x3f8 { return u32(right) == 0x3f7 }
-		0x3f9 { return u32(right) == 0x3f2 }
-		0x3fa { return u32(right) == 0x3fb }
-		0x3fb { return u32(right) == 0x3fa }
-		0x3fd { return u32(right) == 0x37b }
-		0x3fe { return u32(right) == 0x37c }
-		0x3ff { return u32(right) == 0x37d }
-		0x400 { return u32(right) == 0x450 }
-		0x401 { return u32(right) == 0x451 }
-		0x402 { return u32(right) == 0x452 }
-		0x403 { return u32(right) == 0x453 }
-		0x404 { return u32(right) == 0x454 }
-		0x405 { return u32(right) == 0x455 }
-		0x406 { return u32(right) == 0x456 }
-		0x407 { return u32(right) == 0x457 }
-		0x408 { return u32(right) == 0x458 }
-		0x409 { return u32(right) == 0x459 }
-		0x40a { return u32(right) == 0x45a }
-		0x40b { return u32(right) == 0x45b }
-		0x40c { return u32(right) == 0x45c }
-		0x40d { return u32(right) == 0x45d }
-		0x40e { return u32(right) == 0x45e }
-		0x40f { return u32(right) == 0x45f }
-		0x410 { return u32(right) == 0x430 }
-		0x411 { return u32(right) == 0x431 }
-		0x412 { return u32(right) == 0x432 || u32(right) == 0x1c80 }
-		0x413 { return u32(right) == 0x433 }
-		0x414 { return u32(right) == 0x434 || u32(right) == 0x1c81 }
-		0x415 { return u32(right) == 0x435 }
-		0x416 { return u32(right) == 0x436 }
-		0x417 { return u32(right) == 0x437 }
-		0x418 { return u32(right) == 0x438 }
-		0x419 { return u32(right) == 0x439 }
-		0x41a { return u32(right) == 0x43a }
-		0x41b { return u32(right) == 0x43b }
-		0x41c { return u32(right) == 0x43c }
-		0x41d { return u32(right) == 0x43d }
-		0x41e { return u32(right) == 0x43e || u32(right) == 0x1c82 }
-		0x41f { return u32(right) == 0x43f }
-		0x420 { return u32(right) == 0x440 }
-		0x421 { return u32(right) == 0x441 || u32(right) == 0x1c83 }
-		0x422 { return u32(right) == 0x442 || u32(right) == 0x1c84 || u32(right) == 0x1c85 }
-		0x423 { return u32(right) == 0x443 }
-		0x424 { return u32(right) == 0x444 }
-		0x425 { return u32(right) == 0x445 }
-		0x426 { return u32(right) == 0x446 }
-		0x427 { return u32(right) == 0x447 }
-		0x428 { return u32(right) == 0x448 }
-		0x429 { return u32(right) == 0x449 }
-		0x42a { return u32(right) == 0x44a || u32(right) == 0x1c86 }
-		0x42b { return u32(right) == 0x44b }
-		0x42c { return u32(right) == 0x44c }
-		0x42d { return u32(right) == 0x44d }
-		0x42e { return u32(right) == 0x44e }
-		0x42f { return u32(right) == 0x44f }
-		0x430 { return u32(right) == 0x410 }
-		0x431 { return u32(right) == 0x411 }
-		0x432 { return u32(right) == 0x412 || u32(right) == 0x1c80 }
-		0x433 { return u32(right) == 0x413 }
-		0x434 { return u32(right) == 0x414 || u32(right) == 0x1c81 }
-		0x435 { return u32(right) == 0x415 }
-		0x436 { return u32(right) == 0x416 }
-		0x437 { return u32(right) == 0x417 }
-		0x438 { return u32(right) == 0x418 }
-		0x439 { return u32(right) == 0x419 }
-		0x43a { return u32(right) == 0x41a }
-		0x43b { return u32(right) == 0x41b }
-		0x43c { return u32(right) == 0x41c }
-		0x43d { return u32(right) == 0x41d }
-		0x43e { return u32(right) == 0x41e || u32(right) == 0x1c82 }
-		0x43f { return u32(right) == 0x41f }
-		0x440 { return u32(right) == 0x420 }
-		0x441 { return u32(right) == 0x421 || u32(right) == 0x1c83 }
-		0x442 { return u32(right) == 0x422 || u32(right) == 0x1c84 || u32(right) == 0x1c85 }
-		0x443 { return u32(right) == 0x423 }
-		0x444 { return u32(right) == 0x424 }
-		0x445 { return u32(right) == 0x425 }
-		0x446 { return u32(right) == 0x426 }
-		0x447 { return u32(right) == 0x427 }
-		0x448 { return u32(right) == 0x428 }
-		0x449 { return u32(right) == 0x429 }
-		0x44a { return u32(right) == 0x42a || u32(right) == 0x1c86 }
-		0x44b { return u32(right) == 0x42b }
-		0x44c { return u32(right) == 0x42c }
-		0x44d { return u32(right) == 0x42d }
-		0x44e { return u32(right) == 0x42e }
-		0x44f { return u32(right) == 0x42f }
-		0x450 { return u32(right) == 0x400 }
-		0x451 { return u32(right) == 0x401 }
-		0x452 { return u32(right) == 0x402 }
-		0x453 { return u32(right) == 0x403 }
-		0x454 { return u32(right) == 0x404 }
-		0x455 { return u32(right) == 0x405 }
-		0x456 { return u32(right) == 0x406 }
-		0x457 { return u32(right) == 0x407 }
-		0x458 { return u32(right) == 0x408 }
-		0x459 { return u32(right) == 0x409 }
-		0x45a { return u32(right) == 0x40a }
-		0x45b { return u32(right) == 0x40b }
-		0x45c { return u32(right) == 0x40c }
-		0x45d { return u32(right) == 0x40d }
-		0x45e { return u32(right) == 0x40e }
-		0x45f { return u32(right) == 0x40f }
-		0x460 { return u32(right) == 0x461 }
-		0x461 { return u32(right) == 0x460 }
-		0x462 { return u32(right) == 0x463 || u32(right) == 0x1c87 }
-		0x463 { return u32(right) == 0x462 || u32(right) == 0x1c87 }
-		0x464 { return u32(right) == 0x465 }
-		0x465 { return u32(right) == 0x464 }
-		0x466 { return u32(right) == 0x467 }
-		0x467 { return u32(right) == 0x466 }
-		0x468 { return u32(right) == 0x469 }
-		0x469 { return u32(right) == 0x468 }
-		0x46a { return u32(right) == 0x46b }
-		0x46b { return u32(right) == 0x46a }
-		0x46c { return u32(right) == 0x46d }
-		0x46d { return u32(right) == 0x46c }
-		0x46e { return u32(right) == 0x46f }
-		0x46f { return u32(right) == 0x46e }
-		0x470 { return u32(right) == 0x471 }
-		0x471 { return u32(right) == 0x470 }
-		0x472 { return u32(right) == 0x473 }
-		0x473 { return u32(right) == 0x472 }
-		0x474 { return u32(right) == 0x475 }
-		0x475 { return u32(right) == 0x474 }
-		0x476 { return u32(right) == 0x477 }
-		0x477 { return u32(right) == 0x476 }
-		0x478 { return u32(right) == 0x479 }
-		0x479 { return u32(right) == 0x478 }
-		0x47a { return u32(right) == 0x47b }
-		0x47b { return u32(right) == 0x47a }
-		0x47c { return u32(right) == 0x47d }
-		0x47d { return u32(right) == 0x47c }
-		0x47e { return u32(right) == 0x47f }
-		0x47f { return u32(right) == 0x47e }
-		0x480 { return u32(right) == 0x481 }
-		0x481 { return u32(right) == 0x480 }
-		0x48a { return u32(right) == 0x48b }
-		0x48b { return u32(right) == 0x48a }
-		0x48c { return u32(right) == 0x48d }
-		0x48d { return u32(right) == 0x48c }
-		0x48e { return u32(right) == 0x48f }
-		0x48f { return u32(right) == 0x48e }
-		0x490 { return u32(right) == 0x491 }
-		0x491 { return u32(right) == 0x490 }
-		0x492 { return u32(right) == 0x493 }
-		0x493 { return u32(right) == 0x492 }
-		0x494 { return u32(right) == 0x495 }
-		0x495 { return u32(right) == 0x494 }
-		0x496 { return u32(right) == 0x497 }
-		0x497 { return u32(right) == 0x496 }
-		0x498 { return u32(right) == 0x499 }
-		0x499 { return u32(right) == 0x498 }
-		0x49a { return u32(right) == 0x49b }
-		0x49b { return u32(right) == 0x49a }
-		0x49c { return u32(right) == 0x49d }
-		0x49d { return u32(right) == 0x49c }
-		0x49e { return u32(right) == 0x49f }
-		0x49f { return u32(right) == 0x49e }
-		0x4a0 { return u32(right) == 0x4a1 }
-		0x4a1 { return u32(right) == 0x4a0 }
-		0x4a2 { return u32(right) == 0x4a3 }
-		0x4a3 { return u32(right) == 0x4a2 }
-		0x4a4 { return u32(right) == 0x4a5 }
-		0x4a5 { return u32(right) == 0x4a4 }
-		0x4a6 { return u32(right) == 0x4a7 }
-		0x4a7 { return u32(right) == 0x4a6 }
-		0x4a8 { return u32(right) == 0x4a9 }
-		0x4a9 { return u32(right) == 0x4a8 }
-		0x4aa { return u32(right) == 0x4ab }
-		0x4ab { return u32(right) == 0x4aa }
-		0x4ac { return u32(right) == 0x4ad }
-		0x4ad { return u32(right) == 0x4ac }
-		0x4ae { return u32(right) == 0x4af }
-		0x4af { return u32(right) == 0x4ae }
-		0x4b0 { return u32(right) == 0x4b1 }
-		0x4b1 { return u32(right) == 0x4b0 }
-		0x4b2 { return u32(right) == 0x4b3 }
-		0x4b3 { return u32(right) == 0x4b2 }
-		0x4b4 { return u32(right) == 0x4b5 }
-		0x4b5 { return u32(right) == 0x4b4 }
-		0x4b6 { return u32(right) == 0x4b7 }
-		0x4b7 { return u32(right) == 0x4b6 }
-		0x4b8 { return u32(right) == 0x4b9 }
-		0x4b9 { return u32(right) == 0x4b8 }
-		0x4ba { return u32(right) == 0x4bb }
-		0x4bb { return u32(right) == 0x4ba }
-		0x4bc { return u32(right) == 0x4bd }
-		0x4bd { return u32(right) == 0x4bc }
-		0x4be { return u32(right) == 0x4bf }
-		0x4bf { return u32(right) == 0x4be }
-		0x4c0 { return u32(right) == 0x4cf }
-		0x4c1 { return u32(right) == 0x4c2 }
-		0x4c2 { return u32(right) == 0x4c1 }
-		0x4c3 { return u32(right) == 0x4c4 }
-		0x4c4 { return u32(right) == 0x4c3 }
-		0x4c5 { return u32(right) == 0x4c6 }
-		0x4c6 { return u32(right) == 0x4c5 }
-		0x4c7 { return u32(right) == 0x4c8 }
-		0x4c8 { return u32(right) == 0x4c7 }
-		0x4c9 { return u32(right) == 0x4ca }
-		0x4ca { return u32(right) == 0x4c9 }
-		0x4cb { return u32(right) == 0x4cc }
-		0x4cc { return u32(right) == 0x4cb }
-		0x4cd { return u32(right) == 0x4ce }
-		0x4ce { return u32(right) == 0x4cd }
-		0x4cf { return u32(right) == 0x4c0 }
-		0x4d0 { return u32(right) == 0x4d1 }
-		0x4d1 { return u32(right) == 0x4d0 }
-		0x4d2 { return u32(right) == 0x4d3 }
-		0x4d3 { return u32(right) == 0x4d2 }
-		0x4d4 { return u32(right) == 0x4d5 }
-		0x4d5 { return u32(right) == 0x4d4 }
-		0x4d6 { return u32(right) == 0x4d7 }
-		0x4d7 { return u32(right) == 0x4d6 }
-		0x4d8 { return u32(right) == 0x4d9 }
-		0x4d9 { return u32(right) == 0x4d8 }
-		0x4da { return u32(right) == 0x4db }
-		0x4db { return u32(right) == 0x4da }
-		0x4dc { return u32(right) == 0x4dd }
-		0x4dd { return u32(right) == 0x4dc }
-		0x4de { return u32(right) == 0x4df }
-		0x4df { return u32(right) == 0x4de }
-		0x4e0 { return u32(right) == 0x4e1 }
-		0x4e1 { return u32(right) == 0x4e0 }
-		0x4e2 { return u32(right) == 0x4e3 }
-		0x4e3 { return u32(right) == 0x4e2 }
-		0x4e4 { return u32(right) == 0x4e5 }
-		0x4e5 { return u32(right) == 0x4e4 }
-		0x4e6 { return u32(right) == 0x4e7 }
-		0x4e7 { return u32(right) == 0x4e6 }
-		0x4e8 { return u32(right) == 0x4e9 }
-		0x4e9 { return u32(right) == 0x4e8 }
-		0x4ea { return u32(right) == 0x4eb }
-		0x4eb { return u32(right) == 0x4ea }
-		0x4ec { return u32(right) == 0x4ed }
-		0x4ed { return u32(right) == 0x4ec }
-		0x4ee { return u32(right) == 0x4ef }
-		0x4ef { return u32(right) == 0x4ee }
-		0x4f0 { return u32(right) == 0x4f1 }
-		0x4f1 { return u32(right) == 0x4f0 }
-		0x4f2 { return u32(right) == 0x4f3 }
-		0x4f3 { return u32(right) == 0x4f2 }
-		0x4f4 { return u32(right) == 0x4f5 }
-		0x4f5 { return u32(right) == 0x4f4 }
-		0x4f6 { return u32(right) == 0x4f7 }
-		0x4f7 { return u32(right) == 0x4f6 }
-		0x4f8 { return u32(right) == 0x4f9 }
-		0x4f9 { return u32(right) == 0x4f8 }
-		0x4fa { return u32(right) == 0x4fb }
-		0x4fb { return u32(right) == 0x4fa }
-		0x4fc { return u32(right) == 0x4fd }
-		0x4fd { return u32(right) == 0x4fc }
-		0x4fe { return u32(right) == 0x4ff }
-		0x4ff { return u32(right) == 0x4fe }
-		0x500 { return u32(right) == 0x501 }
-		0x501 { return u32(right) == 0x500 }
-		0x502 { return u32(right) == 0x503 }
-		0x503 { return u32(right) == 0x502 }
-		0x504 { return u32(right) == 0x505 }
-		0x505 { return u32(right) == 0x504 }
-		0x506 { return u32(right) == 0x507 }
-		0x507 { return u32(right) == 0x506 }
-		0x508 { return u32(right) == 0x509 }
-		0x509 { return u32(right) == 0x508 }
-		0x50a { return u32(right) == 0x50b }
-		0x50b { return u32(right) == 0x50a }
-		0x50c { return u32(right) == 0x50d }
-		0x50d { return u32(right) == 0x50c }
-		0x50e { return u32(right) == 0x50f }
-		0x50f { return u32(right) == 0x50e }
-		0x510 { return u32(right) == 0x511 }
-		0x511 { return u32(right) == 0x510 }
-		0x512 { return u32(right) == 0x513 }
-		0x513 { return u32(right) == 0x512 }
-		0x514 { return u32(right) == 0x515 }
-		0x515 { return u32(right) == 0x514 }
-		0x516 { return u32(right) == 0x517 }
-		0x517 { return u32(right) == 0x516 }
-		0x518 { return u32(right) == 0x519 }
-		0x519 { return u32(right) == 0x518 }
-		0x51a { return u32(right) == 0x51b }
-		0x51b { return u32(right) == 0x51a }
-		0x51c { return u32(right) == 0x51d }
-		0x51d { return u32(right) == 0x51c }
-		0x51e { return u32(right) == 0x51f }
-		0x51f { return u32(right) == 0x51e }
-		0x520 { return u32(right) == 0x521 }
-		0x521 { return u32(right) == 0x520 }
-		0x522 { return u32(right) == 0x523 }
-		0x523 { return u32(right) == 0x522 }
-		0x524 { return u32(right) == 0x525 }
-		0x525 { return u32(right) == 0x524 }
-		0x526 { return u32(right) == 0x527 }
-		0x527 { return u32(right) == 0x526 }
-		0x528 { return u32(right) == 0x529 }
-		0x529 { return u32(right) == 0x528 }
-		0x52a { return u32(right) == 0x52b }
-		0x52b { return u32(right) == 0x52a }
-		0x52c { return u32(right) == 0x52d }
-		0x52d { return u32(right) == 0x52c }
-		0x52e { return u32(right) == 0x52f }
-		0x52f { return u32(right) == 0x52e }
-		0x531 { return u32(right) == 0x561 }
-		0x532 { return u32(right) == 0x562 }
-		0x533 { return u32(right) == 0x563 }
-		0x534 { return u32(right) == 0x564 }
-		0x535 { return u32(right) == 0x565 }
-		0x536 { return u32(right) == 0x566 }
-		0x537 { return u32(right) == 0x567 }
-		0x538 { return u32(right) == 0x568 }
-		0x539 { return u32(right) == 0x569 }
-		0x53a { return u32(right) == 0x56a }
-		0x53b { return u32(right) == 0x56b }
-		0x53c { return u32(right) == 0x56c }
-		0x53d { return u32(right) == 0x56d }
-		0x53e { return u32(right) == 0x56e }
-		0x53f { return u32(right) == 0x56f }
-		0x540 { return u32(right) == 0x570 }
-		0x541 { return u32(right) == 0x571 }
-		0x542 { return u32(right) == 0x572 }
-		0x543 { return u32(right) == 0x573 }
-		0x544 { return u32(right) == 0x574 }
-		0x545 { return u32(right) == 0x575 }
-		0x546 { return u32(right) == 0x576 }
-		0x547 { return u32(right) == 0x577 }
-		0x548 { return u32(right) == 0x578 }
-		0x549 { return u32(right) == 0x579 }
-		0x54a { return u32(right) == 0x57a }
-		0x54b { return u32(right) == 0x57b }
-		0x54c { return u32(right) == 0x57c }
-		0x54d { return u32(right) == 0x57d }
-		0x54e { return u32(right) == 0x57e }
-		0x54f { return u32(right) == 0x57f }
-		0x550 { return u32(right) == 0x580 }
-		0x551 { return u32(right) == 0x581 }
-		0x552 { return u32(right) == 0x582 }
-		0x553 { return u32(right) == 0x583 }
-		0x554 { return u32(right) == 0x584 }
-		0x555 { return u32(right) == 0x585 }
-		0x556 { return u32(right) == 0x586 }
-		0x561 { return u32(right) == 0x531 }
-		0x562 { return u32(right) == 0x532 }
-		0x563 { return u32(right) == 0x533 }
-		0x564 { return u32(right) == 0x534 }
-		0x565 { return u32(right) == 0x535 }
-		0x566 { return u32(right) == 0x536 }
-		0x567 { return u32(right) == 0x537 }
-		0x568 { return u32(right) == 0x538 }
-		0x569 { return u32(right) == 0x539 }
-		0x56a { return u32(right) == 0x53a }
-		0x56b { return u32(right) == 0x53b }
-		0x56c { return u32(right) == 0x53c }
-		0x56d { return u32(right) == 0x53d }
-		0x56e { return u32(right) == 0x53e }
-		0x56f { return u32(right) == 0x53f }
-		0x570 { return u32(right) == 0x540 }
-		0x571 { return u32(right) == 0x541 }
-		0x572 { return u32(right) == 0x542 }
-		0x573 { return u32(right) == 0x543 }
-		0x574 { return u32(right) == 0x544 }
-		0x575 { return u32(right) == 0x545 }
-		0x576 { return u32(right) == 0x546 }
-		0x577 { return u32(right) == 0x547 }
-		0x578 { return u32(right) == 0x548 }
-		0x579 { return u32(right) == 0x549 }
-		0x57a { return u32(right) == 0x54a }
-		0x57b { return u32(right) == 0x54b }
-		0x57c { return u32(right) == 0x54c }
-		0x57d { return u32(right) == 0x54d }
-		0x57e { return u32(right) == 0x54e }
-		0x57f { return u32(right) == 0x54f }
-		0x580 { return u32(right) == 0x550 }
-		0x581 { return u32(right) == 0x551 }
-		0x582 { return u32(right) == 0x552 }
-		0x583 { return u32(right) == 0x553 }
-		0x584 { return u32(right) == 0x554 }
-		0x585 { return u32(right) == 0x555 }
-		0x586 { return u32(right) == 0x556 }
-		0x10a0 { return u32(right) == 0x2d00 }
-		0x10a1 { return u32(right) == 0x2d01 }
-		0x10a2 { return u32(right) == 0x2d02 }
-		0x10a3 { return u32(right) == 0x2d03 }
-		0x10a4 { return u32(right) == 0x2d04 }
-		0x10a5 { return u32(right) == 0x2d05 }
-		0x10a6 { return u32(right) == 0x2d06 }
-		0x10a7 { return u32(right) == 0x2d07 }
-		0x10a8 { return u32(right) == 0x2d08 }
-		0x10a9 { return u32(right) == 0x2d09 }
-		0x10aa { return u32(right) == 0x2d0a }
-		0x10ab { return u32(right) == 0x2d0b }
-		0x10ac { return u32(right) == 0x2d0c }
-		0x10ad { return u32(right) == 0x2d0d }
-		0x10ae { return u32(right) == 0x2d0e }
-		0x10af { return u32(right) == 0x2d0f }
-		0x10b0 { return u32(right) == 0x2d10 }
-		0x10b1 { return u32(right) == 0x2d11 }
-		0x10b2 { return u32(right) == 0x2d12 }
-		0x10b3 { return u32(right) == 0x2d13 }
-		0x10b4 { return u32(right) == 0x2d14 }
-		0x10b5 { return u32(right) == 0x2d15 }
-		0x10b6 { return u32(right) == 0x2d16 }
-		0x10b7 { return u32(right) == 0x2d17 }
-		0x10b8 { return u32(right) == 0x2d18 }
-		0x10b9 { return u32(right) == 0x2d19 }
-		0x10ba { return u32(right) == 0x2d1a }
-		0x10bb { return u32(right) == 0x2d1b }
-		0x10bc { return u32(right) == 0x2d1c }
-		0x10bd { return u32(right) == 0x2d1d }
-		0x10be { return u32(right) == 0x2d1e }
-		0x10bf { return u32(right) == 0x2d1f }
-		0x10c0 { return u32(right) == 0x2d20 }
-		0x10c1 { return u32(right) == 0x2d21 }
-		0x10c2 { return u32(right) == 0x2d22 }
-		0x10c3 { return u32(right) == 0x2d23 }
-		0x10c4 { return u32(right) == 0x2d24 }
-		0x10c5 { return u32(right) == 0x2d25 }
-		0x10c7 { return u32(right) == 0x2d27 }
-		0x10cd { return u32(right) == 0x2d2d }
-		0x10d0 { return u32(right) == 0x1c90 }
-		0x10d1 { return u32(right) == 0x1c91 }
-		0x10d2 { return u32(right) == 0x1c92 }
-		0x10d3 { return u32(right) == 0x1c93 }
-		0x10d4 { return u32(right) == 0x1c94 }
-		0x10d5 { return u32(right) == 0x1c95 }
-		0x10d6 { return u32(right) == 0x1c96 }
-		0x10d7 { return u32(right) == 0x1c97 }
-		0x10d8 { return u32(right) == 0x1c98 }
-		0x10d9 { return u32(right) == 0x1c99 }
-		0x10da { return u32(right) == 0x1c9a }
-		0x10db { return u32(right) == 0x1c9b }
-		0x10dc { return u32(right) == 0x1c9c }
-		0x10dd { return u32(right) == 0x1c9d }
-		0x10de { return u32(right) == 0x1c9e }
-		0x10df { return u32(right) == 0x1c9f }
-		0x10e0 { return u32(right) == 0x1ca0 }
-		0x10e1 { return u32(right) == 0x1ca1 }
-		0x10e2 { return u32(right) == 0x1ca2 }
-		0x10e3 { return u32(right) == 0x1ca3 }
-		0x10e4 { return u32(right) == 0x1ca4 }
-		0x10e5 { return u32(right) == 0x1ca5 }
-		0x10e6 { return u32(right) == 0x1ca6 }
-		0x10e7 { return u32(right) == 0x1ca7 }
-		0x10e8 { return u32(right) == 0x1ca8 }
-		0x10e9 { return u32(right) == 0x1ca9 }
-		0x10ea { return u32(right) == 0x1caa }
-		0x10eb { return u32(right) == 0x1cab }
-		0x10ec { return u32(right) == 0x1cac }
-		0x10ed { return u32(right) == 0x1cad }
-		0x10ee { return u32(right) == 0x1cae }
-		0x10ef { return u32(right) == 0x1caf }
-		0x10f0 { return u32(right) == 0x1cb0 }
-		0x10f1 { return u32(right) == 0x1cb1 }
-		0x10f2 { return u32(right) == 0x1cb2 }
-		0x10f3 { return u32(right) == 0x1cb3 }
-		0x10f4 { return u32(right) == 0x1cb4 }
-		0x10f5 { return u32(right) == 0x1cb5 }
-		0x10f6 { return u32(right) == 0x1cb6 }
-		0x10f7 { return u32(right) == 0x1cb7 }
-		0x10f8 { return u32(right) == 0x1cb8 }
-		0x10f9 { return u32(right) == 0x1cb9 }
-		0x10fa { return u32(right) == 0x1cba }
-		0x10fd { return u32(right) == 0x1cbd }
-		0x10fe { return u32(right) == 0x1cbe }
-		0x10ff { return u32(right) == 0x1cbf }
-		0x13a0 { return u32(right) == 0xab70 }
-		0x13a1 { return u32(right) == 0xab71 }
-		0x13a2 { return u32(right) == 0xab72 }
-		0x13a3 { return u32(right) == 0xab73 }
-		0x13a4 { return u32(right) == 0xab74 }
-		0x13a5 { return u32(right) == 0xab75 }
-		0x13a6 { return u32(right) == 0xab76 }
-		0x13a7 { return u32(right) == 0xab77 }
-		0x13a8 { return u32(right) == 0xab78 }
-		0x13a9 { return u32(right) == 0xab79 }
-		0x13aa { return u32(right) == 0xab7a }
-		0x13ab { return u32(right) == 0xab7b }
-		0x13ac { return u32(right) == 0xab7c }
-		0x13ad { return u32(right) == 0xab7d }
-		0x13ae { return u32(right) == 0xab7e }
-		0x13af { return u32(right) == 0xab7f }
-		0x13b0 { return u32(right) == 0xab80 }
-		0x13b1 { return u32(right) == 0xab81 }
-		0x13b2 { return u32(right) == 0xab82 }
-		0x13b3 { return u32(right) == 0xab83 }
-		0x13b4 { return u32(right) == 0xab84 }
-		0x13b5 { return u32(right) == 0xab85 }
-		0x13b6 { return u32(right) == 0xab86 }
-		0x13b7 { return u32(right) == 0xab87 }
-		0x13b8 { return u32(right) == 0xab88 }
-		0x13b9 { return u32(right) == 0xab89 }
-		0x13ba { return u32(right) == 0xab8a }
-		0x13bb { return u32(right) == 0xab8b }
-		0x13bc { return u32(right) == 0xab8c }
-		0x13bd { return u32(right) == 0xab8d }
-		0x13be { return u32(right) == 0xab8e }
-		0x13bf { return u32(right) == 0xab8f }
-		0x13c0 { return u32(right) == 0xab90 }
-		0x13c1 { return u32(right) == 0xab91 }
-		0x13c2 { return u32(right) == 0xab92 }
-		0x13c3 { return u32(right) == 0xab93 }
-		0x13c4 { return u32(right) == 0xab94 }
-		0x13c5 { return u32(right) == 0xab95 }
-		0x13c6 { return u32(right) == 0xab96 }
-		0x13c7 { return u32(right) == 0xab97 }
-		0x13c8 { return u32(right) == 0xab98 }
-		0x13c9 { return u32(right) == 0xab99 }
-		0x13ca { return u32(right) == 0xab9a }
-		0x13cb { return u32(right) == 0xab9b }
-		0x13cc { return u32(right) == 0xab9c }
-		0x13cd { return u32(right) == 0xab9d }
-		0x13ce { return u32(right) == 0xab9e }
-		0x13cf { return u32(right) == 0xab9f }
-		0x13d0 { return u32(right) == 0xaba0 }
-		0x13d1 { return u32(right) == 0xaba1 }
-		0x13d2 { return u32(right) == 0xaba2 }
-		0x13d3 { return u32(right) == 0xaba3 }
-		0x13d4 { return u32(right) == 0xaba4 }
-		0x13d5 { return u32(right) == 0xaba5 }
-		0x13d6 { return u32(right) == 0xaba6 }
-		0x13d7 { return u32(right) == 0xaba7 }
-		0x13d8 { return u32(right) == 0xaba8 }
-		0x13d9 { return u32(right) == 0xaba9 }
-		0x13da { return u32(right) == 0xabaa }
-		0x13db { return u32(right) == 0xabab }
-		0x13dc { return u32(right) == 0xabac }
-		0x13dd { return u32(right) == 0xabad }
-		0x13de { return u32(right) == 0xabae }
-		0x13df { return u32(right) == 0xabaf }
-		0x13e0 { return u32(right) == 0xabb0 }
-		0x13e1 { return u32(right) == 0xabb1 }
-		0x13e2 { return u32(right) == 0xabb2 }
-		0x13e3 { return u32(right) == 0xabb3 }
-		0x13e4 { return u32(right) == 0xabb4 }
-		0x13e5 { return u32(right) == 0xabb5 }
-		0x13e6 { return u32(right) == 0xabb6 }
-		0x13e7 { return u32(right) == 0xabb7 }
-		0x13e8 { return u32(right) == 0xabb8 }
-		0x13e9 { return u32(right) == 0xabb9 }
-		0x13ea { return u32(right) == 0xabba }
-		0x13eb { return u32(right) == 0xabbb }
-		0x13ec { return u32(right) == 0xabbc }
-		0x13ed { return u32(right) == 0xabbd }
-		0x13ee { return u32(right) == 0xabbe }
-		0x13ef { return u32(right) == 0xabbf }
-		0x13f0 { return u32(right) == 0x13f8 }
-		0x13f1 { return u32(right) == 0x13f9 }
-		0x13f2 { return u32(right) == 0x13fa }
-		0x13f3 { return u32(right) == 0x13fb }
-		0x13f4 { return u32(right) == 0x13fc }
-		0x13f5 { return u32(right) == 0x13fd }
-		0x13f8 { return u32(right) == 0x13f0 }
-		0x13f9 { return u32(right) == 0x13f1 }
-		0x13fa { return u32(right) == 0x13f2 }
-		0x13fb { return u32(right) == 0x13f3 }
-		0x13fc { return u32(right) == 0x13f4 }
-		0x13fd { return u32(right) == 0x13f5 }
-		0x1c80 { return u32(right) == 0x412 || u32(right) == 0x432 }
-		0x1c81 { return u32(right) == 0x414 || u32(right) == 0x434 }
-		0x1c82 { return u32(right) == 0x41e || u32(right) == 0x43e }
-		0x1c83 { return u32(right) == 0x421 || u32(right) == 0x441 }
-		0x1c84 { return u32(right) == 0x422 || u32(right) == 0x442 || u32(right) == 0x1c85 }
-		0x1c85 { return u32(right) == 0x422 || u32(right) == 0x442 || u32(right) == 0x1c84 }
-		0x1c86 { return u32(right) == 0x42a || u32(right) == 0x44a }
-		0x1c87 { return u32(right) == 0x462 || u32(right) == 0x463 }
-		0x1c88 { return u32(right) == 0xa64a || u32(right) == 0xa64b }
-		0x1c89 { return u32(right) == 0x1c8a }
-		0x1c8a { return u32(right) == 0x1c89 }
-		0x1c90 { return u32(right) == 0x10d0 }
-		0x1c91 { return u32(right) == 0x10d1 }
-		0x1c92 { return u32(right) == 0x10d2 }
-		0x1c93 { return u32(right) == 0x10d3 }
-		0x1c94 { return u32(right) == 0x10d4 }
-		0x1c95 { return u32(right) == 0x10d5 }
-		0x1c96 { return u32(right) == 0x10d6 }
-		0x1c97 { return u32(right) == 0x10d7 }
-		0x1c98 { return u32(right) == 0x10d8 }
-		0x1c99 { return u32(right) == 0x10d9 }
-		0x1c9a { return u32(right) == 0x10da }
-		0x1c9b { return u32(right) == 0x10db }
-		0x1c9c { return u32(right) == 0x10dc }
-		0x1c9d { return u32(right) == 0x10dd }
-		0x1c9e { return u32(right) == 0x10de }
-		0x1c9f { return u32(right) == 0x10df }
-		0x1ca0 { return u32(right) == 0x10e0 }
-		0x1ca1 { return u32(right) == 0x10e1 }
-		0x1ca2 { return u32(right) == 0x10e2 }
-		0x1ca3 { return u32(right) == 0x10e3 }
-		0x1ca4 { return u32(right) == 0x10e4 }
-		0x1ca5 { return u32(right) == 0x10e5 }
-		0x1ca6 { return u32(right) == 0x10e6 }
-		0x1ca7 { return u32(right) == 0x10e7 }
-		0x1ca8 { return u32(right) == 0x10e8 }
-		0x1ca9 { return u32(right) == 0x10e9 }
-		0x1caa { return u32(right) == 0x10ea }
-		0x1cab { return u32(right) == 0x10eb }
-		0x1cac { return u32(right) == 0x10ec }
-		0x1cad { return u32(right) == 0x10ed }
-		0x1cae { return u32(right) == 0x10ee }
-		0x1caf { return u32(right) == 0x10ef }
-		0x1cb0 { return u32(right) == 0x10f0 }
-		0x1cb1 { return u32(right) == 0x10f1 }
-		0x1cb2 { return u32(right) == 0x10f2 }
-		0x1cb3 { return u32(right) == 0x10f3 }
-		0x1cb4 { return u32(right) == 0x10f4 }
-		0x1cb5 { return u32(right) == 0x10f5 }
-		0x1cb6 { return u32(right) == 0x10f6 }
-		0x1cb7 { return u32(right) == 0x10f7 }
-		0x1cb8 { return u32(right) == 0x10f8 }
-		0x1cb9 { return u32(right) == 0x10f9 }
-		0x1cba { return u32(right) == 0x10fa }
-		0x1cbd { return u32(right) == 0x10fd }
-		0x1cbe { return u32(right) == 0x10fe }
-		0x1cbf { return u32(right) == 0x10ff }
-		0x1d79 { return u32(right) == 0xa77d }
-		0x1d7d { return u32(right) == 0x2c63 }
-		0x1d8e { return u32(right) == 0xa7c6 }
-		0x1e00 { return u32(right) == 0x1e01 }
-		0x1e01 { return u32(right) == 0x1e00 }
-		0x1e02 { return u32(right) == 0x1e03 }
-		0x1e03 { return u32(right) == 0x1e02 }
-		0x1e04 { return u32(right) == 0x1e05 }
-		0x1e05 { return u32(right) == 0x1e04 }
-		0x1e06 { return u32(right) == 0x1e07 }
-		0x1e07 { return u32(right) == 0x1e06 }
-		0x1e08 { return u32(right) == 0x1e09 }
-		0x1e09 { return u32(right) == 0x1e08 }
-		0x1e0a { return u32(right) == 0x1e0b }
-		0x1e0b { return u32(right) == 0x1e0a }
-		0x1e0c { return u32(right) == 0x1e0d }
-		0x1e0d { return u32(right) == 0x1e0c }
-		0x1e0e { return u32(right) == 0x1e0f }
-		0x1e0f { return u32(right) == 0x1e0e }
-		0x1e10 { return u32(right) == 0x1e11 }
-		0x1e11 { return u32(right) == 0x1e10 }
-		0x1e12 { return u32(right) == 0x1e13 }
-		0x1e13 { return u32(right) == 0x1e12 }
-		0x1e14 { return u32(right) == 0x1e15 }
-		0x1e15 { return u32(right) == 0x1e14 }
-		0x1e16 { return u32(right) == 0x1e17 }
-		0x1e17 { return u32(right) == 0x1e16 }
-		0x1e18 { return u32(right) == 0x1e19 }
-		0x1e19 { return u32(right) == 0x1e18 }
-		0x1e1a { return u32(right) == 0x1e1b }
-		0x1e1b { return u32(right) == 0x1e1a }
-		0x1e1c { return u32(right) == 0x1e1d }
-		0x1e1d { return u32(right) == 0x1e1c }
-		0x1e1e { return u32(right) == 0x1e1f }
-		0x1e1f { return u32(right) == 0x1e1e }
-		0x1e20 { return u32(right) == 0x1e21 }
-		0x1e21 { return u32(right) == 0x1e20 }
-		0x1e22 { return u32(right) == 0x1e23 }
-		0x1e23 { return u32(right) == 0x1e22 }
-		0x1e24 { return u32(right) == 0x1e25 }
-		0x1e25 { return u32(right) == 0x1e24 }
-		0x1e26 { return u32(right) == 0x1e27 }
-		0x1e27 { return u32(right) == 0x1e26 }
-		0x1e28 { return u32(right) == 0x1e29 }
-		0x1e29 { return u32(right) == 0x1e28 }
-		0x1e2a { return u32(right) == 0x1e2b }
-		0x1e2b { return u32(right) == 0x1e2a }
-		0x1e2c { return u32(right) == 0x1e2d }
-		0x1e2d { return u32(right) == 0x1e2c }
-		0x1e2e { return u32(right) == 0x1e2f }
-		0x1e2f { return u32(right) == 0x1e2e }
-		0x1e30 { return u32(right) == 0x1e31 }
-		0x1e31 { return u32(right) == 0x1e30 }
-		0x1e32 { return u32(right) == 0x1e33 }
-		0x1e33 { return u32(right) == 0x1e32 }
-		0x1e34 { return u32(right) == 0x1e35 }
-		0x1e35 { return u32(right) == 0x1e34 }
-		0x1e36 { return u32(right) == 0x1e37 }
-		0x1e37 { return u32(right) == 0x1e36 }
-		0x1e38 { return u32(right) == 0x1e39 }
-		0x1e39 { return u32(right) == 0x1e38 }
-		0x1e3a { return u32(right) == 0x1e3b }
-		0x1e3b { return u32(right) == 0x1e3a }
-		0x1e3c { return u32(right) == 0x1e3d }
-		0x1e3d { return u32(right) == 0x1e3c }
-		0x1e3e { return u32(right) == 0x1e3f }
-		0x1e3f { return u32(right) == 0x1e3e }
-		0x1e40 { return u32(right) == 0x1e41 }
-		0x1e41 { return u32(right) == 0x1e40 }
-		0x1e42 { return u32(right) == 0x1e43 }
-		0x1e43 { return u32(right) == 0x1e42 }
-		0x1e44 { return u32(right) == 0x1e45 }
-		0x1e45 { return u32(right) == 0x1e44 }
-		0x1e46 { return u32(right) == 0x1e47 }
-		0x1e47 { return u32(right) == 0x1e46 }
-		0x1e48 { return u32(right) == 0x1e49 }
-		0x1e49 { return u32(right) == 0x1e48 }
-		0x1e4a { return u32(right) == 0x1e4b }
-		0x1e4b { return u32(right) == 0x1e4a }
-		0x1e4c { return u32(right) == 0x1e4d }
-		0x1e4d { return u32(right) == 0x1e4c }
-		0x1e4e { return u32(right) == 0x1e4f }
-		0x1e4f { return u32(right) == 0x1e4e }
-		0x1e50 { return u32(right) == 0x1e51 }
-		0x1e51 { return u32(right) == 0x1e50 }
-		0x1e52 { return u32(right) == 0x1e53 }
-		0x1e53 { return u32(right) == 0x1e52 }
-		0x1e54 { return u32(right) == 0x1e55 }
-		0x1e55 { return u32(right) == 0x1e54 }
-		0x1e56 { return u32(right) == 0x1e57 }
-		0x1e57 { return u32(right) == 0x1e56 }
-		0x1e58 { return u32(right) == 0x1e59 }
-		0x1e59 { return u32(right) == 0x1e58 }
-		0x1e5a { return u32(right) == 0x1e5b }
-		0x1e5b { return u32(right) == 0x1e5a }
-		0x1e5c { return u32(right) == 0x1e5d }
-		0x1e5d { return u32(right) == 0x1e5c }
-		0x1e5e { return u32(right) == 0x1e5f }
-		0x1e5f { return u32(right) == 0x1e5e }
-		0x1e60 { return u32(right) == 0x1e61 || u32(right) == 0x1e9b }
-		0x1e61 { return u32(right) == 0x1e60 || u32(right) == 0x1e9b }
-		0x1e62 { return u32(right) == 0x1e63 }
-		0x1e63 { return u32(right) == 0x1e62 }
-		0x1e64 { return u32(right) == 0x1e65 }
-		0x1e65 { return u32(right) == 0x1e64 }
-		0x1e66 { return u32(right) == 0x1e67 }
-		0x1e67 { return u32(right) == 0x1e66 }
-		0x1e68 { return u32(right) == 0x1e69 }
-		0x1e69 { return u32(right) == 0x1e68 }
-		0x1e6a { return u32(right) == 0x1e6b }
-		0x1e6b { return u32(right) == 0x1e6a }
-		0x1e6c { return u32(right) == 0x1e6d }
-		0x1e6d { return u32(right) == 0x1e6c }
-		0x1e6e { return u32(right) == 0x1e6f }
-		0x1e6f { return u32(right) == 0x1e6e }
-		0x1e70 { return u32(right) == 0x1e71 }
-		0x1e71 { return u32(right) == 0x1e70 }
-		0x1e72 { return u32(right) == 0x1e73 }
-		0x1e73 { return u32(right) == 0x1e72 }
-		0x1e74 { return u32(right) == 0x1e75 }
-		0x1e75 { return u32(right) == 0x1e74 }
-		0x1e76 { return u32(right) == 0x1e77 }
-		0x1e77 { return u32(right) == 0x1e76 }
-		0x1e78 { return u32(right) == 0x1e79 }
-		0x1e79 { return u32(right) == 0x1e78 }
-		0x1e7a { return u32(right) == 0x1e7b }
-		0x1e7b { return u32(right) == 0x1e7a }
-		0x1e7c { return u32(right) == 0x1e7d }
-		0x1e7d { return u32(right) == 0x1e7c }
-		0x1e7e { return u32(right) == 0x1e7f }
-		0x1e7f { return u32(right) == 0x1e7e }
-		0x1e80 { return u32(right) == 0x1e81 }
-		0x1e81 { return u32(right) == 0x1e80 }
-		0x1e82 { return u32(right) == 0x1e83 }
-		0x1e83 { return u32(right) == 0x1e82 }
-		0x1e84 { return u32(right) == 0x1e85 }
-		0x1e85 { return u32(right) == 0x1e84 }
-		0x1e86 { return u32(right) == 0x1e87 }
-		0x1e87 { return u32(right) == 0x1e86 }
-		0x1e88 { return u32(right) == 0x1e89 }
-		0x1e89 { return u32(right) == 0x1e88 }
-		0x1e8a { return u32(right) == 0x1e8b }
-		0x1e8b { return u32(right) == 0x1e8a }
-		0x1e8c { return u32(right) == 0x1e8d }
-		0x1e8d { return u32(right) == 0x1e8c }
-		0x1e8e { return u32(right) == 0x1e8f }
-		0x1e8f { return u32(right) == 0x1e8e }
-		0x1e90 { return u32(right) == 0x1e91 }
-		0x1e91 { return u32(right) == 0x1e90 }
-		0x1e92 { return u32(right) == 0x1e93 }
-		0x1e93 { return u32(right) == 0x1e92 }
-		0x1e94 { return u32(right) == 0x1e95 }
-		0x1e95 { return u32(right) == 0x1e94 }
-		0x1e9b { return u32(right) == 0x1e60 || u32(right) == 0x1e61 }
-		0x1e9e { return u32(right) == 0xdf }
-		0x1ea0 { return u32(right) == 0x1ea1 }
-		0x1ea1 { return u32(right) == 0x1ea0 }
-		0x1ea2 { return u32(right) == 0x1ea3 }
-		0x1ea3 { return u32(right) == 0x1ea2 }
-		0x1ea4 { return u32(right) == 0x1ea5 }
-		0x1ea5 { return u32(right) == 0x1ea4 }
-		0x1ea6 { return u32(right) == 0x1ea7 }
-		0x1ea7 { return u32(right) == 0x1ea6 }
-		0x1ea8 { return u32(right) == 0x1ea9 }
-		0x1ea9 { return u32(right) == 0x1ea8 }
-		0x1eaa { return u32(right) == 0x1eab }
-		0x1eab { return u32(right) == 0x1eaa }
-		0x1eac { return u32(right) == 0x1ead }
-		0x1ead { return u32(right) == 0x1eac }
-		0x1eae { return u32(right) == 0x1eaf }
-		0x1eaf { return u32(right) == 0x1eae }
-		0x1eb0 { return u32(right) == 0x1eb1 }
-		0x1eb1 { return u32(right) == 0x1eb0 }
-		0x1eb2 { return u32(right) == 0x1eb3 }
-		0x1eb3 { return u32(right) == 0x1eb2 }
-		0x1eb4 { return u32(right) == 0x1eb5 }
-		0x1eb5 { return u32(right) == 0x1eb4 }
-		0x1eb6 { return u32(right) == 0x1eb7 }
-		0x1eb7 { return u32(right) == 0x1eb6 }
-		0x1eb8 { return u32(right) == 0x1eb9 }
-		0x1eb9 { return u32(right) == 0x1eb8 }
-		0x1eba { return u32(right) == 0x1ebb }
-		0x1ebb { return u32(right) == 0x1eba }
-		0x1ebc { return u32(right) == 0x1ebd }
-		0x1ebd { return u32(right) == 0x1ebc }
-		0x1ebe { return u32(right) == 0x1ebf }
-		0x1ebf { return u32(right) == 0x1ebe }
-		0x1ec0 { return u32(right) == 0x1ec1 }
-		0x1ec1 { return u32(right) == 0x1ec0 }
-		0x1ec2 { return u32(right) == 0x1ec3 }
-		0x1ec3 { return u32(right) == 0x1ec2 }
-		0x1ec4 { return u32(right) == 0x1ec5 }
-		0x1ec5 { return u32(right) == 0x1ec4 }
-		0x1ec6 { return u32(right) == 0x1ec7 }
-		0x1ec7 { return u32(right) == 0x1ec6 }
-		0x1ec8 { return u32(right) == 0x1ec9 }
-		0x1ec9 { return u32(right) == 0x1ec8 }
-		0x1eca { return u32(right) == 0x1ecb }
-		0x1ecb { return u32(right) == 0x1eca }
-		0x1ecc { return u32(right) == 0x1ecd }
-		0x1ecd { return u32(right) == 0x1ecc }
-		0x1ece { return u32(right) == 0x1ecf }
-		0x1ecf { return u32(right) == 0x1ece }
-		0x1ed0 { return u32(right) == 0x1ed1 }
-		0x1ed1 { return u32(right) == 0x1ed0 }
-		0x1ed2 { return u32(right) == 0x1ed3 }
-		0x1ed3 { return u32(right) == 0x1ed2 }
-		0x1ed4 { return u32(right) == 0x1ed5 }
-		0x1ed5 { return u32(right) == 0x1ed4 }
-		0x1ed6 { return u32(right) == 0x1ed7 }
-		0x1ed7 { return u32(right) == 0x1ed6 }
-		0x1ed8 { return u32(right) == 0x1ed9 }
-		0x1ed9 { return u32(right) == 0x1ed8 }
-		0x1eda { return u32(right) == 0x1edb }
-		0x1edb { return u32(right) == 0x1eda }
-		0x1edc { return u32(right) == 0x1edd }
-		0x1edd { return u32(right) == 0x1edc }
-		0x1ede { return u32(right) == 0x1edf }
-		0x1edf { return u32(right) == 0x1ede }
-		0x1ee0 { return u32(right) == 0x1ee1 }
-		0x1ee1 { return u32(right) == 0x1ee0 }
-		0x1ee2 { return u32(right) == 0x1ee3 }
-		0x1ee3 { return u32(right) == 0x1ee2 }
-		0x1ee4 { return u32(right) == 0x1ee5 }
-		0x1ee5 { return u32(right) == 0x1ee4 }
-		0x1ee6 { return u32(right) == 0x1ee7 }
-		0x1ee7 { return u32(right) == 0x1ee6 }
-		0x1ee8 { return u32(right) == 0x1ee9 }
-		0x1ee9 { return u32(right) == 0x1ee8 }
-		0x1eea { return u32(right) == 0x1eeb }
-		0x1eeb { return u32(right) == 0x1eea }
-		0x1eec { return u32(right) == 0x1eed }
-		0x1eed { return u32(right) == 0x1eec }
-		0x1eee { return u32(right) == 0x1eef }
-		0x1eef { return u32(right) == 0x1eee }
-		0x1ef0 { return u32(right) == 0x1ef1 }
-		0x1ef1 { return u32(right) == 0x1ef0 }
-		0x1ef2 { return u32(right) == 0x1ef3 }
-		0x1ef3 { return u32(right) == 0x1ef2 }
-		0x1ef4 { return u32(right) == 0x1ef5 }
-		0x1ef5 { return u32(right) == 0x1ef4 }
-		0x1ef6 { return u32(right) == 0x1ef7 }
-		0x1ef7 { return u32(right) == 0x1ef6 }
-		0x1ef8 { return u32(right) == 0x1ef9 }
-		0x1ef9 { return u32(right) == 0x1ef8 }
-		0x1efa { return u32(right) == 0x1efb }
-		0x1efb { return u32(right) == 0x1efa }
-		0x1efc { return u32(right) == 0x1efd }
-		0x1efd { return u32(right) == 0x1efc }
-		0x1efe { return u32(right) == 0x1eff }
-		0x1eff { return u32(right) == 0x1efe }
-		0x1f00 { return u32(right) == 0x1f08 }
-		0x1f01 { return u32(right) == 0x1f09 }
-		0x1f02 { return u32(right) == 0x1f0a }
-		0x1f03 { return u32(right) == 0x1f0b }
-		0x1f04 { return u32(right) == 0x1f0c }
-		0x1f05 { return u32(right) == 0x1f0d }
-		0x1f06 { return u32(right) == 0x1f0e }
-		0x1f07 { return u32(right) == 0x1f0f }
-		0x1f08 { return u32(right) == 0x1f00 }
-		0x1f09 { return u32(right) == 0x1f01 }
-		0x1f0a { return u32(right) == 0x1f02 }
-		0x1f0b { return u32(right) == 0x1f03 }
-		0x1f0c { return u32(right) == 0x1f04 }
-		0x1f0d { return u32(right) == 0x1f05 }
-		0x1f0e { return u32(right) == 0x1f06 }
-		0x1f0f { return u32(right) == 0x1f07 }
-		0x1f10 { return u32(right) == 0x1f18 }
-		0x1f11 { return u32(right) == 0x1f19 }
-		0x1f12 { return u32(right) == 0x1f1a }
-		0x1f13 { return u32(right) == 0x1f1b }
-		0x1f14 { return u32(right) == 0x1f1c }
-		0x1f15 { return u32(right) == 0x1f1d }
-		0x1f18 { return u32(right) == 0x1f10 }
-		0x1f19 { return u32(right) == 0x1f11 }
-		0x1f1a { return u32(right) == 0x1f12 }
-		0x1f1b { return u32(right) == 0x1f13 }
-		0x1f1c { return u32(right) == 0x1f14 }
-		0x1f1d { return u32(right) == 0x1f15 }
-		0x1f20 { return u32(right) == 0x1f28 }
-		0x1f21 { return u32(right) == 0x1f29 }
-		0x1f22 { return u32(right) == 0x1f2a }
-		0x1f23 { return u32(right) == 0x1f2b }
-		0x1f24 { return u32(right) == 0x1f2c }
-		0x1f25 { return u32(right) == 0x1f2d }
-		0x1f26 { return u32(right) == 0x1f2e }
-		0x1f27 { return u32(right) == 0x1f2f }
-		0x1f28 { return u32(right) == 0x1f20 }
-		0x1f29 { return u32(right) == 0x1f21 }
-		0x1f2a { return u32(right) == 0x1f22 }
-		0x1f2b { return u32(right) == 0x1f23 }
-		0x1f2c { return u32(right) == 0x1f24 }
-		0x1f2d { return u32(right) == 0x1f25 }
-		0x1f2e { return u32(right) == 0x1f26 }
-		0x1f2f { return u32(right) == 0x1f27 }
-		0x1f30 { return u32(right) == 0x1f38 }
-		0x1f31 { return u32(right) == 0x1f39 }
-		0x1f32 { return u32(right) == 0x1f3a }
-		0x1f33 { return u32(right) == 0x1f3b }
-		0x1f34 { return u32(right) == 0x1f3c }
-		0x1f35 { return u32(right) == 0x1f3d }
-		0x1f36 { return u32(right) == 0x1f3e }
-		0x1f37 { return u32(right) == 0x1f3f }
-		0x1f38 { return u32(right) == 0x1f30 }
-		0x1f39 { return u32(right) == 0x1f31 }
-		0x1f3a { return u32(right) == 0x1f32 }
-		0x1f3b { return u32(right) == 0x1f33 }
-		0x1f3c { return u32(right) == 0x1f34 }
-		0x1f3d { return u32(right) == 0x1f35 }
-		0x1f3e { return u32(right) == 0x1f36 }
-		0x1f3f { return u32(right) == 0x1f37 }
-		0x1f40 { return u32(right) == 0x1f48 }
-		0x1f41 { return u32(right) == 0x1f49 }
-		0x1f42 { return u32(right) == 0x1f4a }
-		0x1f43 { return u32(right) == 0x1f4b }
-		0x1f44 { return u32(right) == 0x1f4c }
-		0x1f45 { return u32(right) == 0x1f4d }
-		0x1f48 { return u32(right) == 0x1f40 }
-		0x1f49 { return u32(right) == 0x1f41 }
-		0x1f4a { return u32(right) == 0x1f42 }
-		0x1f4b { return u32(right) == 0x1f43 }
-		0x1f4c { return u32(right) == 0x1f44 }
-		0x1f4d { return u32(right) == 0x1f45 }
-		0x1f51 { return u32(right) == 0x1f59 }
-		0x1f53 { return u32(right) == 0x1f5b }
-		0x1f55 { return u32(right) == 0x1f5d }
-		0x1f57 { return u32(right) == 0x1f5f }
-		0x1f59 { return u32(right) == 0x1f51 }
-		0x1f5b { return u32(right) == 0x1f53 }
-		0x1f5d { return u32(right) == 0x1f55 }
-		0x1f5f { return u32(right) == 0x1f57 }
-		0x1f60 { return u32(right) == 0x1f68 }
-		0x1f61 { return u32(right) == 0x1f69 }
-		0x1f62 { return u32(right) == 0x1f6a }
-		0x1f63 { return u32(right) == 0x1f6b }
-		0x1f64 { return u32(right) == 0x1f6c }
-		0x1f65 { return u32(right) == 0x1f6d }
-		0x1f66 { return u32(right) == 0x1f6e }
-		0x1f67 { return u32(right) == 0x1f6f }
-		0x1f68 { return u32(right) == 0x1f60 }
-		0x1f69 { return u32(right) == 0x1f61 }
-		0x1f6a { return u32(right) == 0x1f62 }
-		0x1f6b { return u32(right) == 0x1f63 }
-		0x1f6c { return u32(right) == 0x1f64 }
-		0x1f6d { return u32(right) == 0x1f65 }
-		0x1f6e { return u32(right) == 0x1f66 }
-		0x1f6f { return u32(right) == 0x1f67 }
-		0x1f70 { return u32(right) == 0x1fba }
-		0x1f71 { return u32(right) == 0x1fbb }
-		0x1f72 { return u32(right) == 0x1fc8 }
-		0x1f73 { return u32(right) == 0x1fc9 }
-		0x1f74 { return u32(right) == 0x1fca }
-		0x1f75 { return u32(right) == 0x1fcb }
-		0x1f76 { return u32(right) == 0x1fda }
-		0x1f77 { return u32(right) == 0x1fdb }
-		0x1f78 { return u32(right) == 0x1ff8 }
-		0x1f79 { return u32(right) == 0x1ff9 }
-		0x1f7a { return u32(right) == 0x1fea }
-		0x1f7b { return u32(right) == 0x1feb }
-		0x1f7c { return u32(right) == 0x1ffa }
-		0x1f7d { return u32(right) == 0x1ffb }
-		0x1f80 { return u32(right) == 0x1f88 }
-		0x1f81 { return u32(right) == 0x1f89 }
-		0x1f82 { return u32(right) == 0x1f8a }
-		0x1f83 { return u32(right) == 0x1f8b }
-		0x1f84 { return u32(right) == 0x1f8c }
-		0x1f85 { return u32(right) == 0x1f8d }
-		0x1f86 { return u32(right) == 0x1f8e }
-		0x1f87 { return u32(right) == 0x1f8f }
-		0x1f88 { return u32(right) == 0x1f80 }
-		0x1f89 { return u32(right) == 0x1f81 }
-		0x1f8a { return u32(right) == 0x1f82 }
-		0x1f8b { return u32(right) == 0x1f83 }
-		0x1f8c { return u32(right) == 0x1f84 }
-		0x1f8d { return u32(right) == 0x1f85 }
-		0x1f8e { return u32(right) == 0x1f86 }
-		0x1f8f { return u32(right) == 0x1f87 }
-		0x1f90 { return u32(right) == 0x1f98 }
-		0x1f91 { return u32(right) == 0x1f99 }
-		0x1f92 { return u32(right) == 0x1f9a }
-		0x1f93 { return u32(right) == 0x1f9b }
-		0x1f94 { return u32(right) == 0x1f9c }
-		0x1f95 { return u32(right) == 0x1f9d }
-		0x1f96 { return u32(right) == 0x1f9e }
-		0x1f97 { return u32(right) == 0x1f9f }
-		0x1f98 { return u32(right) == 0x1f90 }
-		0x1f99 { return u32(right) == 0x1f91 }
-		0x1f9a { return u32(right) == 0x1f92 }
-		0x1f9b { return u32(right) == 0x1f93 }
-		0x1f9c { return u32(right) == 0x1f94 }
-		0x1f9d { return u32(right) == 0x1f95 }
-		0x1f9e { return u32(right) == 0x1f96 }
-		0x1f9f { return u32(right) == 0x1f97 }
-		0x1fa0 { return u32(right) == 0x1fa8 }
-		0x1fa1 { return u32(right) == 0x1fa9 }
-		0x1fa2 { return u32(right) == 0x1faa }
-		0x1fa3 { return u32(right) == 0x1fab }
-		0x1fa4 { return u32(right) == 0x1fac }
-		0x1fa5 { return u32(right) == 0x1fad }
-		0x1fa6 { return u32(right) == 0x1fae }
-		0x1fa7 { return u32(right) == 0x1faf }
-		0x1fa8 { return u32(right) == 0x1fa0 }
-		0x1fa9 { return u32(right) == 0x1fa1 }
-		0x1faa { return u32(right) == 0x1fa2 }
-		0x1fab { return u32(right) == 0x1fa3 }
-		0x1fac { return u32(right) == 0x1fa4 }
-		0x1fad { return u32(right) == 0x1fa5 }
-		0x1fae { return u32(right) == 0x1fa6 }
-		0x1faf { return u32(right) == 0x1fa7 }
-		0x1fb0 { return u32(right) == 0x1fb8 }
-		0x1fb1 { return u32(right) == 0x1fb9 }
-		0x1fb3 { return u32(right) == 0x1fbc }
-		0x1fb8 { return u32(right) == 0x1fb0 }
-		0x1fb9 { return u32(right) == 0x1fb1 }
-		0x1fba { return u32(right) == 0x1f70 }
-		0x1fbb { return u32(right) == 0x1f71 }
-		0x1fbc { return u32(right) == 0x1fb3 }
-		0x1fbe { return u32(right) == 0x345 || u32(right) == 0x399 || u32(right) == 0x3b9 }
-		0x1fc3 { return u32(right) == 0x1fcc }
-		0x1fc8 { return u32(right) == 0x1f72 }
-		0x1fc9 { return u32(right) == 0x1f73 }
-		0x1fca { return u32(right) == 0x1f74 }
-		0x1fcb { return u32(right) == 0x1f75 }
-		0x1fcc { return u32(right) == 0x1fc3 }
-		0x1fd0 { return u32(right) == 0x1fd8 }
-		0x1fd1 { return u32(right) == 0x1fd9 }
-		0x1fd3 { return u32(right) == 0x390 }
-		0x1fd8 { return u32(right) == 0x1fd0 }
-		0x1fd9 { return u32(right) == 0x1fd1 }
-		0x1fda { return u32(right) == 0x1f76 }
-		0x1fdb { return u32(right) == 0x1f77 }
-		0x1fe0 { return u32(right) == 0x1fe8 }
-		0x1fe1 { return u32(right) == 0x1fe9 }
-		0x1fe3 { return u32(right) == 0x3b0 }
-		0x1fe5 { return u32(right) == 0x1fec }
-		0x1fe8 { return u32(right) == 0x1fe0 }
-		0x1fe9 { return u32(right) == 0x1fe1 }
-		0x1fea { return u32(right) == 0x1f7a }
-		0x1feb { return u32(right) == 0x1f7b }
-		0x1fec { return u32(right) == 0x1fe5 }
-		0x1ff3 { return u32(right) == 0x1ffc }
-		0x1ff8 { return u32(right) == 0x1f78 }
-		0x1ff9 { return u32(right) == 0x1f79 }
-		0x1ffa { return u32(right) == 0x1f7c }
-		0x1ffb { return u32(right) == 0x1f7d }
-		0x1ffc { return u32(right) == 0x1ff3 }
-		0x2126 { return u32(right) == 0x3a9 || u32(right) == 0x3c9 }
-		0x212a { return u32(right) == 0x4b || u32(right) == 0x6b }
-		0x212b { return u32(right) == 0xc5 || u32(right) == 0xe5 }
-		0x2132 { return u32(right) == 0x214e }
-		0x214e { return u32(right) == 0x2132 }
-		0x2160 { return u32(right) == 0x2170 }
-		0x2161 { return u32(right) == 0x2171 }
-		0x2162 { return u32(right) == 0x2172 }
-		0x2163 { return u32(right) == 0x2173 }
-		0x2164 { return u32(right) == 0x2174 }
-		0x2165 { return u32(right) == 0x2175 }
-		0x2166 { return u32(right) == 0x2176 }
-		0x2167 { return u32(right) == 0x2177 }
-		0x2168 { return u32(right) == 0x2178 }
-		0x2169 { return u32(right) == 0x2179 }
-		0x216a { return u32(right) == 0x217a }
-		0x216b { return u32(right) == 0x217b }
-		0x216c { return u32(right) == 0x217c }
-		0x216d { return u32(right) == 0x217d }
-		0x216e { return u32(right) == 0x217e }
-		0x216f { return u32(right) == 0x217f }
-		0x2170 { return u32(right) == 0x2160 }
-		0x2171 { return u32(right) == 0x2161 }
-		0x2172 { return u32(right) == 0x2162 }
-		0x2173 { return u32(right) == 0x2163 }
-		0x2174 { return u32(right) == 0x2164 }
-		0x2175 { return u32(right) == 0x2165 }
-		0x2176 { return u32(right) == 0x2166 }
-		0x2177 { return u32(right) == 0x2167 }
-		0x2178 { return u32(right) == 0x2168 }
-		0x2179 { return u32(right) == 0x2169 }
-		0x217a { return u32(right) == 0x216a }
-		0x217b { return u32(right) == 0x216b }
-		0x217c { return u32(right) == 0x216c }
-		0x217d { return u32(right) == 0x216d }
-		0x217e { return u32(right) == 0x216e }
-		0x217f { return u32(right) == 0x216f }
-		0x2183 { return u32(right) == 0x2184 }
-		0x2184 { return u32(right) == 0x2183 }
-		0x24b6 { return u32(right) == 0x24d0 }
-		0x24b7 { return u32(right) == 0x24d1 }
-		0x24b8 { return u32(right) == 0x24d2 }
-		0x24b9 { return u32(right) == 0x24d3 }
-		0x24ba { return u32(right) == 0x24d4 }
-		0x24bb { return u32(right) == 0x24d5 }
-		0x24bc { return u32(right) == 0x24d6 }
-		0x24bd { return u32(right) == 0x24d7 }
-		0x24be { return u32(right) == 0x24d8 }
-		0x24bf { return u32(right) == 0x24d9 }
-		0x24c0 { return u32(right) == 0x24da }
-		0x24c1 { return u32(right) == 0x24db }
-		0x24c2 { return u32(right) == 0x24dc }
-		0x24c3 { return u32(right) == 0x24dd }
-		0x24c4 { return u32(right) == 0x24de }
-		0x24c5 { return u32(right) == 0x24df }
-		0x24c6 { return u32(right) == 0x24e0 }
-		0x24c7 { return u32(right) == 0x24e1 }
-		0x24c8 { return u32(right) == 0x24e2 }
-		0x24c9 { return u32(right) == 0x24e3 }
-		0x24ca { return u32(right) == 0x24e4 }
-		0x24cb { return u32(right) == 0x24e5 }
-		0x24cc { return u32(right) == 0x24e6 }
-		0x24cd { return u32(right) == 0x24e7 }
-		0x24ce { return u32(right) == 0x24e8 }
-		0x24cf { return u32(right) == 0x24e9 }
-		0x24d0 { return u32(right) == 0x24b6 }
-		0x24d1 { return u32(right) == 0x24b7 }
-		0x24d2 { return u32(right) == 0x24b8 }
-		0x24d3 { return u32(right) == 0x24b9 }
-		0x24d4 { return u32(right) == 0x24ba }
-		0x24d5 { return u32(right) == 0x24bb }
-		0x24d6 { return u32(right) == 0x24bc }
-		0x24d7 { return u32(right) == 0x24bd }
-		0x24d8 { return u32(right) == 0x24be }
-		0x24d9 { return u32(right) == 0x24bf }
-		0x24da { return u32(right) == 0x24c0 }
-		0x24db { return u32(right) == 0x24c1 }
-		0x24dc { return u32(right) == 0x24c2 }
-		0x24dd { return u32(right) == 0x24c3 }
-		0x24de { return u32(right) == 0x24c4 }
-		0x24df { return u32(right) == 0x24c5 }
-		0x24e0 { return u32(right) == 0x24c6 }
-		0x24e1 { return u32(right) == 0x24c7 }
-		0x24e2 { return u32(right) == 0x24c8 }
-		0x24e3 { return u32(right) == 0x24c9 }
-		0x24e4 { return u32(right) == 0x24ca }
-		0x24e5 { return u32(right) == 0x24cb }
-		0x24e6 { return u32(right) == 0x24cc }
-		0x24e7 { return u32(right) == 0x24cd }
-		0x24e8 { return u32(right) == 0x24ce }
-		0x24e9 { return u32(right) == 0x24cf }
-		0x2c00 { return u32(right) == 0x2c30 }
-		0x2c01 { return u32(right) == 0x2c31 }
-		0x2c02 { return u32(right) == 0x2c32 }
-		0x2c03 { return u32(right) == 0x2c33 }
-		0x2c04 { return u32(right) == 0x2c34 }
-		0x2c05 { return u32(right) == 0x2c35 }
-		0x2c06 { return u32(right) == 0x2c36 }
-		0x2c07 { return u32(right) == 0x2c37 }
-		0x2c08 { return u32(right) == 0x2c38 }
-		0x2c09 { return u32(right) == 0x2c39 }
-		0x2c0a { return u32(right) == 0x2c3a }
-		0x2c0b { return u32(right) == 0x2c3b }
-		0x2c0c { return u32(right) == 0x2c3c }
-		0x2c0d { return u32(right) == 0x2c3d }
-		0x2c0e { return u32(right) == 0x2c3e }
-		0x2c0f { return u32(right) == 0x2c3f }
-		0x2c10 { return u32(right) == 0x2c40 }
-		0x2c11 { return u32(right) == 0x2c41 }
-		0x2c12 { return u32(right) == 0x2c42 }
-		0x2c13 { return u32(right) == 0x2c43 }
-		0x2c14 { return u32(right) == 0x2c44 }
-		0x2c15 { return u32(right) == 0x2c45 }
-		0x2c16 { return u32(right) == 0x2c46 }
-		0x2c17 { return u32(right) == 0x2c47 }
-		0x2c18 { return u32(right) == 0x2c48 }
-		0x2c19 { return u32(right) == 0x2c49 }
-		0x2c1a { return u32(right) == 0x2c4a }
-		0x2c1b { return u32(right) == 0x2c4b }
-		0x2c1c { return u32(right) == 0x2c4c }
-		0x2c1d { return u32(right) == 0x2c4d }
-		0x2c1e { return u32(right) == 0x2c4e }
-		0x2c1f { return u32(right) == 0x2c4f }
-		0x2c20 { return u32(right) == 0x2c50 }
-		0x2c21 { return u32(right) == 0x2c51 }
-		0x2c22 { return u32(right) == 0x2c52 }
-		0x2c23 { return u32(right) == 0x2c53 }
-		0x2c24 { return u32(right) == 0x2c54 }
-		0x2c25 { return u32(right) == 0x2c55 }
-		0x2c26 { return u32(right) == 0x2c56 }
-		0x2c27 { return u32(right) == 0x2c57 }
-		0x2c28 { return u32(right) == 0x2c58 }
-		0x2c29 { return u32(right) == 0x2c59 }
-		0x2c2a { return u32(right) == 0x2c5a }
-		0x2c2b { return u32(right) == 0x2c5b }
-		0x2c2c { return u32(right) == 0x2c5c }
-		0x2c2d { return u32(right) == 0x2c5d }
-		0x2c2e { return u32(right) == 0x2c5e }
-		0x2c2f { return u32(right) == 0x2c5f }
-		0x2c30 { return u32(right) == 0x2c00 }
-		0x2c31 { return u32(right) == 0x2c01 }
-		0x2c32 { return u32(right) == 0x2c02 }
-		0x2c33 { return u32(right) == 0x2c03 }
-		0x2c34 { return u32(right) == 0x2c04 }
-		0x2c35 { return u32(right) == 0x2c05 }
-		0x2c36 { return u32(right) == 0x2c06 }
-		0x2c37 { return u32(right) == 0x2c07 }
-		0x2c38 { return u32(right) == 0x2c08 }
-		0x2c39 { return u32(right) == 0x2c09 }
-		0x2c3a { return u32(right) == 0x2c0a }
-		0x2c3b { return u32(right) == 0x2c0b }
-		0x2c3c { return u32(right) == 0x2c0c }
-		0x2c3d { return u32(right) == 0x2c0d }
-		0x2c3e { return u32(right) == 0x2c0e }
-		0x2c3f { return u32(right) == 0x2c0f }
-		0x2c40 { return u32(right) == 0x2c10 }
-		0x2c41 { return u32(right) == 0x2c11 }
-		0x2c42 { return u32(right) == 0x2c12 }
-		0x2c43 { return u32(right) == 0x2c13 }
-		0x2c44 { return u32(right) == 0x2c14 }
-		0x2c45 { return u32(right) == 0x2c15 }
-		0x2c46 { return u32(right) == 0x2c16 }
-		0x2c47 { return u32(right) == 0x2c17 }
-		0x2c48 { return u32(right) == 0x2c18 }
-		0x2c49 { return u32(right) == 0x2c19 }
-		0x2c4a { return u32(right) == 0x2c1a }
-		0x2c4b { return u32(right) == 0x2c1b }
-		0x2c4c { return u32(right) == 0x2c1c }
-		0x2c4d { return u32(right) == 0x2c1d }
-		0x2c4e { return u32(right) == 0x2c1e }
-		0x2c4f { return u32(right) == 0x2c1f }
-		0x2c50 { return u32(right) == 0x2c20 }
-		0x2c51 { return u32(right) == 0x2c21 }
-		0x2c52 { return u32(right) == 0x2c22 }
-		0x2c53 { return u32(right) == 0x2c23 }
-		0x2c54 { return u32(right) == 0x2c24 }
-		0x2c55 { return u32(right) == 0x2c25 }
-		0x2c56 { return u32(right) == 0x2c26 }
-		0x2c57 { return u32(right) == 0x2c27 }
-		0x2c58 { return u32(right) == 0x2c28 }
-		0x2c59 { return u32(right) == 0x2c29 }
-		0x2c5a { return u32(right) == 0x2c2a }
-		0x2c5b { return u32(right) == 0x2c2b }
-		0x2c5c { return u32(right) == 0x2c2c }
-		0x2c5d { return u32(right) == 0x2c2d }
-		0x2c5e { return u32(right) == 0x2c2e }
-		0x2c5f { return u32(right) == 0x2c2f }
-		0x2c60 { return u32(right) == 0x2c61 }
-		0x2c61 { return u32(right) == 0x2c60 }
-		0x2c62 { return u32(right) == 0x26b }
-		0x2c63 { return u32(right) == 0x1d7d }
-		0x2c64 { return u32(right) == 0x27d }
-		0x2c65 { return u32(right) == 0x23a }
-		0x2c66 { return u32(right) == 0x23e }
-		0x2c67 { return u32(right) == 0x2c68 }
-		0x2c68 { return u32(right) == 0x2c67 }
-		0x2c69 { return u32(right) == 0x2c6a }
-		0x2c6a { return u32(right) == 0x2c69 }
-		0x2c6b { return u32(right) == 0x2c6c }
-		0x2c6c { return u32(right) == 0x2c6b }
-		0x2c6d { return u32(right) == 0x251 }
-		0x2c6e { return u32(right) == 0x271 }
-		0x2c6f { return u32(right) == 0x250 }
-		0x2c70 { return u32(right) == 0x252 }
-		0x2c72 { return u32(right) == 0x2c73 }
-		0x2c73 { return u32(right) == 0x2c72 }
-		0x2c75 { return u32(right) == 0x2c76 }
-		0x2c76 { return u32(right) == 0x2c75 }
-		0x2c7e { return u32(right) == 0x23f }
-		0x2c7f { return u32(right) == 0x240 }
-		0x2c80 { return u32(right) == 0x2c81 }
-		0x2c81 { return u32(right) == 0x2c80 }
-		0x2c82 { return u32(right) == 0x2c83 }
-		0x2c83 { return u32(right) == 0x2c82 }
-		0x2c84 { return u32(right) == 0x2c85 }
-		0x2c85 { return u32(right) == 0x2c84 }
-		0x2c86 { return u32(right) == 0x2c87 }
-		0x2c87 { return u32(right) == 0x2c86 }
-		0x2c88 { return u32(right) == 0x2c89 }
-		0x2c89 { return u32(right) == 0x2c88 }
-		0x2c8a { return u32(right) == 0x2c8b }
-		0x2c8b { return u32(right) == 0x2c8a }
-		0x2c8c { return u32(right) == 0x2c8d }
-		0x2c8d { return u32(right) == 0x2c8c }
-		0x2c8e { return u32(right) == 0x2c8f }
-		0x2c8f { return u32(right) == 0x2c8e }
-		0x2c90 { return u32(right) == 0x2c91 }
-		0x2c91 { return u32(right) == 0x2c90 }
-		0x2c92 { return u32(right) == 0x2c93 }
-		0x2c93 { return u32(right) == 0x2c92 }
-		0x2c94 { return u32(right) == 0x2c95 }
-		0x2c95 { return u32(right) == 0x2c94 }
-		0x2c96 { return u32(right) == 0x2c97 }
-		0x2c97 { return u32(right) == 0x2c96 }
-		0x2c98 { return u32(right) == 0x2c99 }
-		0x2c99 { return u32(right) == 0x2c98 }
-		0x2c9a { return u32(right) == 0x2c9b }
-		0x2c9b { return u32(right) == 0x2c9a }
-		0x2c9c { return u32(right) == 0x2c9d }
-		0x2c9d { return u32(right) == 0x2c9c }
-		0x2c9e { return u32(right) == 0x2c9f }
-		0x2c9f { return u32(right) == 0x2c9e }
-		0x2ca0 { return u32(right) == 0x2ca1 }
-		0x2ca1 { return u32(right) == 0x2ca0 }
-		0x2ca2 { return u32(right) == 0x2ca3 }
-		0x2ca3 { return u32(right) == 0x2ca2 }
-		0x2ca4 { return u32(right) == 0x2ca5 }
-		0x2ca5 { return u32(right) == 0x2ca4 }
-		0x2ca6 { return u32(right) == 0x2ca7 }
-		0x2ca7 { return u32(right) == 0x2ca6 }
-		0x2ca8 { return u32(right) == 0x2ca9 }
-		0x2ca9 { return u32(right) == 0x2ca8 }
-		0x2caa { return u32(right) == 0x2cab }
-		0x2cab { return u32(right) == 0x2caa }
-		0x2cac { return u32(right) == 0x2cad }
-		0x2cad { return u32(right) == 0x2cac }
-		0x2cae { return u32(right) == 0x2caf }
-		0x2caf { return u32(right) == 0x2cae }
-		0x2cb0 { return u32(right) == 0x2cb1 }
-		0x2cb1 { return u32(right) == 0x2cb0 }
-		0x2cb2 { return u32(right) == 0x2cb3 }
-		0x2cb3 { return u32(right) == 0x2cb2 }
-		0x2cb4 { return u32(right) == 0x2cb5 }
-		0x2cb5 { return u32(right) == 0x2cb4 }
-		0x2cb6 { return u32(right) == 0x2cb7 }
-		0x2cb7 { return u32(right) == 0x2cb6 }
-		0x2cb8 { return u32(right) == 0x2cb9 }
-		0x2cb9 { return u32(right) == 0x2cb8 }
-		0x2cba { return u32(right) == 0x2cbb }
-		0x2cbb { return u32(right) == 0x2cba }
-		0x2cbc { return u32(right) == 0x2cbd }
-		0x2cbd { return u32(right) == 0x2cbc }
-		0x2cbe { return u32(right) == 0x2cbf }
-		0x2cbf { return u32(right) == 0x2cbe }
-		0x2cc0 { return u32(right) == 0x2cc1 }
-		0x2cc1 { return u32(right) == 0x2cc0 }
-		0x2cc2 { return u32(right) == 0x2cc3 }
-		0x2cc3 { return u32(right) == 0x2cc2 }
-		0x2cc4 { return u32(right) == 0x2cc5 }
-		0x2cc5 { return u32(right) == 0x2cc4 }
-		0x2cc6 { return u32(right) == 0x2cc7 }
-		0x2cc7 { return u32(right) == 0x2cc6 }
-		0x2cc8 { return u32(right) == 0x2cc9 }
-		0x2cc9 { return u32(right) == 0x2cc8 }
-		0x2cca { return u32(right) == 0x2ccb }
-		0x2ccb { return u32(right) == 0x2cca }
-		0x2ccc { return u32(right) == 0x2ccd }
-		0x2ccd { return u32(right) == 0x2ccc }
-		0x2cce { return u32(right) == 0x2ccf }
-		0x2ccf { return u32(right) == 0x2cce }
-		0x2cd0 { return u32(right) == 0x2cd1 }
-		0x2cd1 { return u32(right) == 0x2cd0 }
-		0x2cd2 { return u32(right) == 0x2cd3 }
-		0x2cd3 { return u32(right) == 0x2cd2 }
-		0x2cd4 { return u32(right) == 0x2cd5 }
-		0x2cd5 { return u32(right) == 0x2cd4 }
-		0x2cd6 { return u32(right) == 0x2cd7 }
-		0x2cd7 { return u32(right) == 0x2cd6 }
-		0x2cd8 { return u32(right) == 0x2cd9 }
-		0x2cd9 { return u32(right) == 0x2cd8 }
-		0x2cda { return u32(right) == 0x2cdb }
-		0x2cdb { return u32(right) == 0x2cda }
-		0x2cdc { return u32(right) == 0x2cdd }
-		0x2cdd { return u32(right) == 0x2cdc }
-		0x2cde { return u32(right) == 0x2cdf }
-		0x2cdf { return u32(right) == 0x2cde }
-		0x2ce0 { return u32(right) == 0x2ce1 }
-		0x2ce1 { return u32(right) == 0x2ce0 }
-		0x2ce2 { return u32(right) == 0x2ce3 }
-		0x2ce3 { return u32(right) == 0x2ce2 }
-		0x2ceb { return u32(right) == 0x2cec }
-		0x2cec { return u32(right) == 0x2ceb }
-		0x2ced { return u32(right) == 0x2cee }
-		0x2cee { return u32(right) == 0x2ced }
-		0x2cf2 { return u32(right) == 0x2cf3 }
-		0x2cf3 { return u32(right) == 0x2cf2 }
-		0x2d00 { return u32(right) == 0x10a0 }
-		0x2d01 { return u32(right) == 0x10a1 }
-		0x2d02 { return u32(right) == 0x10a2 }
-		0x2d03 { return u32(right) == 0x10a3 }
-		0x2d04 { return u32(right) == 0x10a4 }
-		0x2d05 { return u32(right) == 0x10a5 }
-		0x2d06 { return u32(right) == 0x10a6 }
-		0x2d07 { return u32(right) == 0x10a7 }
-		0x2d08 { return u32(right) == 0x10a8 }
-		0x2d09 { return u32(right) == 0x10a9 }
-		0x2d0a { return u32(right) == 0x10aa }
-		0x2d0b { return u32(right) == 0x10ab }
-		0x2d0c { return u32(right) == 0x10ac }
-		0x2d0d { return u32(right) == 0x10ad }
-		0x2d0e { return u32(right) == 0x10ae }
-		0x2d0f { return u32(right) == 0x10af }
-		0x2d10 { return u32(right) == 0x10b0 }
-		0x2d11 { return u32(right) == 0x10b1 }
-		0x2d12 { return u32(right) == 0x10b2 }
-		0x2d13 { return u32(right) == 0x10b3 }
-		0x2d14 { return u32(right) == 0x10b4 }
-		0x2d15 { return u32(right) == 0x10b5 }
-		0x2d16 { return u32(right) == 0x10b6 }
-		0x2d17 { return u32(right) == 0x10b7 }
-		0x2d18 { return u32(right) == 0x10b8 }
-		0x2d19 { return u32(right) == 0x10b9 }
-		0x2d1a { return u32(right) == 0x10ba }
-		0x2d1b { return u32(right) == 0x10bb }
-		0x2d1c { return u32(right) == 0x10bc }
-		0x2d1d { return u32(right) == 0x10bd }
-		0x2d1e { return u32(right) == 0x10be }
-		0x2d1f { return u32(right) == 0x10bf }
-		0x2d20 { return u32(right) == 0x10c0 }
-		0x2d21 { return u32(right) == 0x10c1 }
-		0x2d22 { return u32(right) == 0x10c2 }
-		0x2d23 { return u32(right) == 0x10c3 }
-		0x2d24 { return u32(right) == 0x10c4 }
-		0x2d25 { return u32(right) == 0x10c5 }
-		0x2d27 { return u32(right) == 0x10c7 }
-		0x2d2d { return u32(right) == 0x10cd }
-		0xa640 { return u32(right) == 0xa641 }
-		0xa641 { return u32(right) == 0xa640 }
-		0xa642 { return u32(right) == 0xa643 }
-		0xa643 { return u32(right) == 0xa642 }
-		0xa644 { return u32(right) == 0xa645 }
-		0xa645 { return u32(right) == 0xa644 }
-		0xa646 { return u32(right) == 0xa647 }
-		0xa647 { return u32(right) == 0xa646 }
-		0xa648 { return u32(right) == 0xa649 }
-		0xa649 { return u32(right) == 0xa648 }
-		0xa64a { return u32(right) == 0x1c88 || u32(right) == 0xa64b }
-		0xa64b { return u32(right) == 0x1c88 || u32(right) == 0xa64a }
-		0xa64c { return u32(right) == 0xa64d }
-		0xa64d { return u32(right) == 0xa64c }
-		0xa64e { return u32(right) == 0xa64f }
-		0xa64f { return u32(right) == 0xa64e }
-		0xa650 { return u32(right) == 0xa651 }
-		0xa651 { return u32(right) == 0xa650 }
-		0xa652 { return u32(right) == 0xa653 }
-		0xa653 { return u32(right) == 0xa652 }
-		0xa654 { return u32(right) == 0xa655 }
-		0xa655 { return u32(right) == 0xa654 }
-		0xa656 { return u32(right) == 0xa657 }
-		0xa657 { return u32(right) == 0xa656 }
-		0xa658 { return u32(right) == 0xa659 }
-		0xa659 { return u32(right) == 0xa658 }
-		0xa65a { return u32(right) == 0xa65b }
-		0xa65b { return u32(right) == 0xa65a }
-		0xa65c { return u32(right) == 0xa65d }
-		0xa65d { return u32(right) == 0xa65c }
-		0xa65e { return u32(right) == 0xa65f }
-		0xa65f { return u32(right) == 0xa65e }
-		0xa660 { return u32(right) == 0xa661 }
-		0xa661 { return u32(right) == 0xa660 }
-		0xa662 { return u32(right) == 0xa663 }
-		0xa663 { return u32(right) == 0xa662 }
-		0xa664 { return u32(right) == 0xa665 }
-		0xa665 { return u32(right) == 0xa664 }
-		0xa666 { return u32(right) == 0xa667 }
-		0xa667 { return u32(right) == 0xa666 }
-		0xa668 { return u32(right) == 0xa669 }
-		0xa669 { return u32(right) == 0xa668 }
-		0xa66a { return u32(right) == 0xa66b }
-		0xa66b { return u32(right) == 0xa66a }
-		0xa66c { return u32(right) == 0xa66d }
-		0xa66d { return u32(right) == 0xa66c }
-		0xa680 { return u32(right) == 0xa681 }
-		0xa681 { return u32(right) == 0xa680 }
-		0xa682 { return u32(right) == 0xa683 }
-		0xa683 { return u32(right) == 0xa682 }
-		0xa684 { return u32(right) == 0xa685 }
-		0xa685 { return u32(right) == 0xa684 }
-		0xa686 { return u32(right) == 0xa687 }
-		0xa687 { return u32(right) == 0xa686 }
-		0xa688 { return u32(right) == 0xa689 }
-		0xa689 { return u32(right) == 0xa688 }
-		0xa68a { return u32(right) == 0xa68b }
-		0xa68b { return u32(right) == 0xa68a }
-		0xa68c { return u32(right) == 0xa68d }
-		0xa68d { return u32(right) == 0xa68c }
-		0xa68e { return u32(right) == 0xa68f }
-		0xa68f { return u32(right) == 0xa68e }
-		0xa690 { return u32(right) == 0xa691 }
-		0xa691 { return u32(right) == 0xa690 }
-		0xa692 { return u32(right) == 0xa693 }
-		0xa693 { return u32(right) == 0xa692 }
-		0xa694 { return u32(right) == 0xa695 }
-		0xa695 { return u32(right) == 0xa694 }
-		0xa696 { return u32(right) == 0xa697 }
-		0xa697 { return u32(right) == 0xa696 }
-		0xa698 { return u32(right) == 0xa699 }
-		0xa699 { return u32(right) == 0xa698 }
-		0xa69a { return u32(right) == 0xa69b }
-		0xa69b { return u32(right) == 0xa69a }
-		0xa722 { return u32(right) == 0xa723 }
-		0xa723 { return u32(right) == 0xa722 }
-		0xa724 { return u32(right) == 0xa725 }
-		0xa725 { return u32(right) == 0xa724 }
-		0xa726 { return u32(right) == 0xa727 }
-		0xa727 { return u32(right) == 0xa726 }
-		0xa728 { return u32(right) == 0xa729 }
-		0xa729 { return u32(right) == 0xa728 }
-		0xa72a { return u32(right) == 0xa72b }
-		0xa72b { return u32(right) == 0xa72a }
-		0xa72c { return u32(right) == 0xa72d }
-		0xa72d { return u32(right) == 0xa72c }
-		0xa72e { return u32(right) == 0xa72f }
-		0xa72f { return u32(right) == 0xa72e }
-		0xa732 { return u32(right) == 0xa733 }
-		0xa733 { return u32(right) == 0xa732 }
-		0xa734 { return u32(right) == 0xa735 }
-		0xa735 { return u32(right) == 0xa734 }
-		0xa736 { return u32(right) == 0xa737 }
-		0xa737 { return u32(right) == 0xa736 }
-		0xa738 { return u32(right) == 0xa739 }
-		0xa739 { return u32(right) == 0xa738 }
-		0xa73a { return u32(right) == 0xa73b }
-		0xa73b { return u32(right) == 0xa73a }
-		0xa73c { return u32(right) == 0xa73d }
-		0xa73d { return u32(right) == 0xa73c }
-		0xa73e { return u32(right) == 0xa73f }
-		0xa73f { return u32(right) == 0xa73e }
-		0xa740 { return u32(right) == 0xa741 }
-		0xa741 { return u32(right) == 0xa740 }
-		0xa742 { return u32(right) == 0xa743 }
-		0xa743 { return u32(right) == 0xa742 }
-		0xa744 { return u32(right) == 0xa745 }
-		0xa745 { return u32(right) == 0xa744 }
-		0xa746 { return u32(right) == 0xa747 }
-		0xa747 { return u32(right) == 0xa746 }
-		0xa748 { return u32(right) == 0xa749 }
-		0xa749 { return u32(right) == 0xa748 }
-		0xa74a { return u32(right) == 0xa74b }
-		0xa74b { return u32(right) == 0xa74a }
-		0xa74c { return u32(right) == 0xa74d }
-		0xa74d { return u32(right) == 0xa74c }
-		0xa74e { return u32(right) == 0xa74f }
-		0xa74f { return u32(right) == 0xa74e }
-		0xa750 { return u32(right) == 0xa751 }
-		0xa751 { return u32(right) == 0xa750 }
-		0xa752 { return u32(right) == 0xa753 }
-		0xa753 { return u32(right) == 0xa752 }
-		0xa754 { return u32(right) == 0xa755 }
-		0xa755 { return u32(right) == 0xa754 }
-		0xa756 { return u32(right) == 0xa757 }
-		0xa757 { return u32(right) == 0xa756 }
-		0xa758 { return u32(right) == 0xa759 }
-		0xa759 { return u32(right) == 0xa758 }
-		0xa75a { return u32(right) == 0xa75b }
-		0xa75b { return u32(right) == 0xa75a }
-		0xa75c { return u32(right) == 0xa75d }
-		0xa75d { return u32(right) == 0xa75c }
-		0xa75e { return u32(right) == 0xa75f }
-		0xa75f { return u32(right) == 0xa75e }
-		0xa760 { return u32(right) == 0xa761 }
-		0xa761 { return u32(right) == 0xa760 }
-		0xa762 { return u32(right) == 0xa763 }
-		0xa763 { return u32(right) == 0xa762 }
-		0xa764 { return u32(right) == 0xa765 }
-		0xa765 { return u32(right) == 0xa764 }
-		0xa766 { return u32(right) == 0xa767 }
-		0xa767 { return u32(right) == 0xa766 }
-		0xa768 { return u32(right) == 0xa769 }
-		0xa769 { return u32(right) == 0xa768 }
-		0xa76a { return u32(right) == 0xa76b }
-		0xa76b { return u32(right) == 0xa76a }
-		0xa76c { return u32(right) == 0xa76d }
-		0xa76d { return u32(right) == 0xa76c }
-		0xa76e { return u32(right) == 0xa76f }
-		0xa76f { return u32(right) == 0xa76e }
-		0xa779 { return u32(right) == 0xa77a }
-		0xa77a { return u32(right) == 0xa779 }
-		0xa77b { return u32(right) == 0xa77c }
-		0xa77c { return u32(right) == 0xa77b }
-		0xa77d { return u32(right) == 0x1d79 }
-		0xa77e { return u32(right) == 0xa77f }
-		0xa77f { return u32(right) == 0xa77e }
-		0xa780 { return u32(right) == 0xa781 }
-		0xa781 { return u32(right) == 0xa780 }
-		0xa782 { return u32(right) == 0xa783 }
-		0xa783 { return u32(right) == 0xa782 }
-		0xa784 { return u32(right) == 0xa785 }
-		0xa785 { return u32(right) == 0xa784 }
-		0xa786 { return u32(right) == 0xa787 }
-		0xa787 { return u32(right) == 0xa786 }
-		0xa78b { return u32(right) == 0xa78c }
-		0xa78c { return u32(right) == 0xa78b }
-		0xa78d { return u32(right) == 0x265 }
-		0xa790 { return u32(right) == 0xa791 }
-		0xa791 { return u32(right) == 0xa790 }
-		0xa792 { return u32(right) == 0xa793 }
-		0xa793 { return u32(right) == 0xa792 }
-		0xa794 { return u32(right) == 0xa7c4 }
-		0xa796 { return u32(right) == 0xa797 }
-		0xa797 { return u32(right) == 0xa796 }
-		0xa798 { return u32(right) == 0xa799 }
-		0xa799 { return u32(right) == 0xa798 }
-		0xa79a { return u32(right) == 0xa79b }
-		0xa79b { return u32(right) == 0xa79a }
-		0xa79c { return u32(right) == 0xa79d }
-		0xa79d { return u32(right) == 0xa79c }
-		0xa79e { return u32(right) == 0xa79f }
-		0xa79f { return u32(right) == 0xa79e }
-		0xa7a0 { return u32(right) == 0xa7a1 }
-		0xa7a1 { return u32(right) == 0xa7a0 }
-		0xa7a2 { return u32(right) == 0xa7a3 }
-		0xa7a3 { return u32(right) == 0xa7a2 }
-		0xa7a4 { return u32(right) == 0xa7a5 }
-		0xa7a5 { return u32(right) == 0xa7a4 }
-		0xa7a6 { return u32(right) == 0xa7a7 }
-		0xa7a7 { return u32(right) == 0xa7a6 }
-		0xa7a8 { return u32(right) == 0xa7a9 }
-		0xa7a9 { return u32(right) == 0xa7a8 }
-		0xa7aa { return u32(right) == 0x266 }
-		0xa7ab { return u32(right) == 0x25c }
-		0xa7ac { return u32(right) == 0x261 }
-		0xa7ad { return u32(right) == 0x26c }
-		0xa7ae { return u32(right) == 0x26a }
-		0xa7b0 { return u32(right) == 0x29e }
-		0xa7b1 { return u32(right) == 0x287 }
-		0xa7b2 { return u32(right) == 0x29d }
-		0xa7b3 { return u32(right) == 0xab53 }
-		0xa7b4 { return u32(right) == 0xa7b5 }
-		0xa7b5 { return u32(right) == 0xa7b4 }
-		0xa7b6 { return u32(right) == 0xa7b7 }
-		0xa7b7 { return u32(right) == 0xa7b6 }
-		0xa7b8 { return u32(right) == 0xa7b9 }
-		0xa7b9 { return u32(right) == 0xa7b8 }
-		0xa7ba { return u32(right) == 0xa7bb }
-		0xa7bb { return u32(right) == 0xa7ba }
-		0xa7bc { return u32(right) == 0xa7bd }
-		0xa7bd { return u32(right) == 0xa7bc }
-		0xa7be { return u32(right) == 0xa7bf }
-		0xa7bf { return u32(right) == 0xa7be }
-		0xa7c0 { return u32(right) == 0xa7c1 }
-		0xa7c1 { return u32(right) == 0xa7c0 }
-		0xa7c2 { return u32(right) == 0xa7c3 }
-		0xa7c3 { return u32(right) == 0xa7c2 }
-		0xa7c4 { return u32(right) == 0xa794 }
-		0xa7c5 { return u32(right) == 0x282 }
-		0xa7c6 { return u32(right) == 0x1d8e }
-		0xa7c7 { return u32(right) == 0xa7c8 }
-		0xa7c8 { return u32(right) == 0xa7c7 }
-		0xa7c9 { return u32(right) == 0xa7ca }
-		0xa7ca { return u32(right) == 0xa7c9 }
-		0xa7cb { return u32(right) == 0x264 }
-		0xa7cc { return u32(right) == 0xa7cd }
-		0xa7cd { return u32(right) == 0xa7cc }
-		0xa7d0 { return u32(right) == 0xa7d1 }
-		0xa7d1 { return u32(right) == 0xa7d0 }
-		0xa7d6 { return u32(right) == 0xa7d7 }
-		0xa7d7 { return u32(right) == 0xa7d6 }
-		0xa7d8 { return u32(right) == 0xa7d9 }
-		0xa7d9 { return u32(right) == 0xa7d8 }
-		0xa7da { return u32(right) == 0xa7db }
-		0xa7db { return u32(right) == 0xa7da }
-		0xa7dc { return u32(right) == 0x19b }
-		0xa7f5 { return u32(right) == 0xa7f6 }
-		0xa7f6 { return u32(right) == 0xa7f5 }
-		0xab53 { return u32(right) == 0xa7b3 }
-		0xab70 { return u32(right) == 0x13a0 }
-		0xab71 { return u32(right) == 0x13a1 }
-		0xab72 { return u32(right) == 0x13a2 }
-		0xab73 { return u32(right) == 0x13a3 }
-		0xab74 { return u32(right) == 0x13a4 }
-		0xab75 { return u32(right) == 0x13a5 }
-		0xab76 { return u32(right) == 0x13a6 }
-		0xab77 { return u32(right) == 0x13a7 }
-		0xab78 { return u32(right) == 0x13a8 }
-		0xab79 { return u32(right) == 0x13a9 }
-		0xab7a { return u32(right) == 0x13aa }
-		0xab7b { return u32(right) == 0x13ab }
-		0xab7c { return u32(right) == 0x13ac }
-		0xab7d { return u32(right) == 0x13ad }
-		0xab7e { return u32(right) == 0x13ae }
-		0xab7f { return u32(right) == 0x13af }
-		0xab80 { return u32(right) == 0x13b0 }
-		0xab81 { return u32(right) == 0x13b1 }
-		0xab82 { return u32(right) == 0x13b2 }
-		0xab83 { return u32(right) == 0x13b3 }
-		0xab84 { return u32(right) == 0x13b4 }
-		0xab85 { return u32(right) == 0x13b5 }
-		0xab86 { return u32(right) == 0x13b6 }
-		0xab87 { return u32(right) == 0x13b7 }
-		0xab88 { return u32(right) == 0x13b8 }
-		0xab89 { return u32(right) == 0x13b9 }
-		0xab8a { return u32(right) == 0x13ba }
-		0xab8b { return u32(right) == 0x13bb }
-		0xab8c { return u32(right) == 0x13bc }
-		0xab8d { return u32(right) == 0x13bd }
-		0xab8e { return u32(right) == 0x13be }
-		0xab8f { return u32(right) == 0x13bf }
-		0xab90 { return u32(right) == 0x13c0 }
-		0xab91 { return u32(right) == 0x13c1 }
-		0xab92 { return u32(right) == 0x13c2 }
-		0xab93 { return u32(right) == 0x13c3 }
-		0xab94 { return u32(right) == 0x13c4 }
-		0xab95 { return u32(right) == 0x13c5 }
-		0xab96 { return u32(right) == 0x13c6 }
-		0xab97 { return u32(right) == 0x13c7 }
-		0xab98 { return u32(right) == 0x13c8 }
-		0xab99 { return u32(right) == 0x13c9 }
-		0xab9a { return u32(right) == 0x13ca }
-		0xab9b { return u32(right) == 0x13cb }
-		0xab9c { return u32(right) == 0x13cc }
-		0xab9d { return u32(right) == 0x13cd }
-		0xab9e { return u32(right) == 0x13ce }
-		0xab9f { return u32(right) == 0x13cf }
-		0xaba0 { return u32(right) == 0x13d0 }
-		0xaba1 { return u32(right) == 0x13d1 }
-		0xaba2 { return u32(right) == 0x13d2 }
-		0xaba3 { return u32(right) == 0x13d3 }
-		0xaba4 { return u32(right) == 0x13d4 }
-		0xaba5 { return u32(right) == 0x13d5 }
-		0xaba6 { return u32(right) == 0x13d6 }
-		0xaba7 { return u32(right) == 0x13d7 }
-		0xaba8 { return u32(right) == 0x13d8 }
-		0xaba9 { return u32(right) == 0x13d9 }
-		0xabaa { return u32(right) == 0x13da }
-		0xabab { return u32(right) == 0x13db }
-		0xabac { return u32(right) == 0x13dc }
-		0xabad { return u32(right) == 0x13dd }
-		0xabae { return u32(right) == 0x13de }
-		0xabaf { return u32(right) == 0x13df }
-		0xabb0 { return u32(right) == 0x13e0 }
-		0xabb1 { return u32(right) == 0x13e1 }
-		0xabb2 { return u32(right) == 0x13e2 }
-		0xabb3 { return u32(right) == 0x13e3 }
-		0xabb4 { return u32(right) == 0x13e4 }
-		0xabb5 { return u32(right) == 0x13e5 }
-		0xabb6 { return u32(right) == 0x13e6 }
-		0xabb7 { return u32(right) == 0x13e7 }
-		0xabb8 { return u32(right) == 0x13e8 }
-		0xabb9 { return u32(right) == 0x13e9 }
-		0xabba { return u32(right) == 0x13ea }
-		0xabbb { return u32(right) == 0x13eb }
-		0xabbc { return u32(right) == 0x13ec }
-		0xabbd { return u32(right) == 0x13ed }
-		0xabbe { return u32(right) == 0x13ee }
-		0xabbf { return u32(right) == 0x13ef }
-		0xfb05 { return u32(right) == 0xfb06 }
-		0xfb06 { return u32(right) == 0xfb05 }
-		0xff21 { return u32(right) == 0xff41 }
-		0xff22 { return u32(right) == 0xff42 }
-		0xff23 { return u32(right) == 0xff43 }
-		0xff24 { return u32(right) == 0xff44 }
-		0xff25 { return u32(right) == 0xff45 }
-		0xff26 { return u32(right) == 0xff46 }
-		0xff27 { return u32(right) == 0xff47 }
-		0xff28 { return u32(right) == 0xff48 }
-		0xff29 { return u32(right) == 0xff49 }
-		0xff2a { return u32(right) == 0xff4a }
-		0xff2b { return u32(right) == 0xff4b }
-		0xff2c { return u32(right) == 0xff4c }
-		0xff2d { return u32(right) == 0xff4d }
-		0xff2e { return u32(right) == 0xff4e }
-		0xff2f { return u32(right) == 0xff4f }
-		0xff30 { return u32(right) == 0xff50 }
-		0xff31 { return u32(right) == 0xff51 }
-		0xff32 { return u32(right) == 0xff52 }
-		0xff33 { return u32(right) == 0xff53 }
-		0xff34 { return u32(right) == 0xff54 }
-		0xff35 { return u32(right) == 0xff55 }
-		0xff36 { return u32(right) == 0xff56 }
-		0xff37 { return u32(right) == 0xff57 }
-		0xff38 { return u32(right) == 0xff58 }
-		0xff39 { return u32(right) == 0xff59 }
-		0xff3a { return u32(right) == 0xff5a }
-		0xff41 { return u32(right) == 0xff21 }
-		0xff42 { return u32(right) == 0xff22 }
-		0xff43 { return u32(right) == 0xff23 }
-		0xff44 { return u32(right) == 0xff24 }
-		0xff45 { return u32(right) == 0xff25 }
-		0xff46 { return u32(right) == 0xff26 }
-		0xff47 { return u32(right) == 0xff27 }
-		0xff48 { return u32(right) == 0xff28 }
-		0xff49 { return u32(right) == 0xff29 }
-		0xff4a { return u32(right) == 0xff2a }
-		0xff4b { return u32(right) == 0xff2b }
-		0xff4c { return u32(right) == 0xff2c }
-		0xff4d { return u32(right) == 0xff2d }
-		0xff4e { return u32(right) == 0xff2e }
-		0xff4f { return u32(right) == 0xff2f }
-		0xff50 { return u32(right) == 0xff30 }
-		0xff51 { return u32(right) == 0xff31 }
-		0xff52 { return u32(right) == 0xff32 }
-		0xff53 { return u32(right) == 0xff33 }
-		0xff54 { return u32(right) == 0xff34 }
-		0xff55 { return u32(right) == 0xff35 }
-		0xff56 { return u32(right) == 0xff36 }
-		0xff57 { return u32(right) == 0xff37 }
-		0xff58 { return u32(right) == 0xff38 }
-		0xff59 { return u32(right) == 0xff39 }
-		0xff5a { return u32(right) == 0xff3a }
-		0x10400 { return u32(right) == 0x10428 }
-		0x10401 { return u32(right) == 0x10429 }
-		0x10402 { return u32(right) == 0x1042a }
-		0x10403 { return u32(right) == 0x1042b }
-		0x10404 { return u32(right) == 0x1042c }
-		0x10405 { return u32(right) == 0x1042d }
-		0x10406 { return u32(right) == 0x1042e }
-		0x10407 { return u32(right) == 0x1042f }
-		0x10408 { return u32(right) == 0x10430 }
-		0x10409 { return u32(right) == 0x10431 }
-		0x1040a { return u32(right) == 0x10432 }
-		0x1040b { return u32(right) == 0x10433 }
-		0x1040c { return u32(right) == 0x10434 }
-		0x1040d { return u32(right) == 0x10435 }
-		0x1040e { return u32(right) == 0x10436 }
-		0x1040f { return u32(right) == 0x10437 }
-		0x10410 { return u32(right) == 0x10438 }
-		0x10411 { return u32(right) == 0x10439 }
-		0x10412 { return u32(right) == 0x1043a }
-		0x10413 { return u32(right) == 0x1043b }
-		0x10414 { return u32(right) == 0x1043c }
-		0x10415 { return u32(right) == 0x1043d }
-		0x10416 { return u32(right) == 0x1043e }
-		0x10417 { return u32(right) == 0x1043f }
-		0x10418 { return u32(right) == 0x10440 }
-		0x10419 { return u32(right) == 0x10441 }
-		0x1041a { return u32(right) == 0x10442 }
-		0x1041b { return u32(right) == 0x10443 }
-		0x1041c { return u32(right) == 0x10444 }
-		0x1041d { return u32(right) == 0x10445 }
-		0x1041e { return u32(right) == 0x10446 }
-		0x1041f { return u32(right) == 0x10447 }
-		0x10420 { return u32(right) == 0x10448 }
-		0x10421 { return u32(right) == 0x10449 }
-		0x10422 { return u32(right) == 0x1044a }
-		0x10423 { return u32(right) == 0x1044b }
-		0x10424 { return u32(right) == 0x1044c }
-		0x10425 { return u32(right) == 0x1044d }
-		0x10426 { return u32(right) == 0x1044e }
-		0x10427 { return u32(right) == 0x1044f }
-		0x10428 { return u32(right) == 0x10400 }
-		0x10429 { return u32(right) == 0x10401 }
-		0x1042a { return u32(right) == 0x10402 }
-		0x1042b { return u32(right) == 0x10403 }
-		0x1042c { return u32(right) == 0x10404 }
-		0x1042d { return u32(right) == 0x10405 }
-		0x1042e { return u32(right) == 0x10406 }
-		0x1042f { return u32(right) == 0x10407 }
-		0x10430 { return u32(right) == 0x10408 }
-		0x10431 { return u32(right) == 0x10409 }
-		0x10432 { return u32(right) == 0x1040a }
-		0x10433 { return u32(right) == 0x1040b }
-		0x10434 { return u32(right) == 0x1040c }
-		0x10435 { return u32(right) == 0x1040d }
-		0x10436 { return u32(right) == 0x1040e }
-		0x10437 { return u32(right) == 0x1040f }
-		0x10438 { return u32(right) == 0x10410 }
-		0x10439 { return u32(right) == 0x10411 }
-		0x1043a { return u32(right) == 0x10412 }
-		0x1043b { return u32(right) == 0x10413 }
-		0x1043c { return u32(right) == 0x10414 }
-		0x1043d { return u32(right) == 0x10415 }
-		0x1043e { return u32(right) == 0x10416 }
-		0x1043f { return u32(right) == 0x10417 }
-		0x10440 { return u32(right) == 0x10418 }
-		0x10441 { return u32(right) == 0x10419 }
-		0x10442 { return u32(right) == 0x1041a }
-		0x10443 { return u32(right) == 0x1041b }
-		0x10444 { return u32(right) == 0x1041c }
-		0x10445 { return u32(right) == 0x1041d }
-		0x10446 { return u32(right) == 0x1041e }
-		0x10447 { return u32(right) == 0x1041f }
-		0x10448 { return u32(right) == 0x10420 }
-		0x10449 { return u32(right) == 0x10421 }
-		0x1044a { return u32(right) == 0x10422 }
-		0x1044b { return u32(right) == 0x10423 }
-		0x1044c { return u32(right) == 0x10424 }
-		0x1044d { return u32(right) == 0x10425 }
-		0x1044e { return u32(right) == 0x10426 }
-		0x1044f { return u32(right) == 0x10427 }
-		0x104b0 { return u32(right) == 0x104d8 }
-		0x104b1 { return u32(right) == 0x104d9 }
-		0x104b2 { return u32(right) == 0x104da }
-		0x104b3 { return u32(right) == 0x104db }
-		0x104b4 { return u32(right) == 0x104dc }
-		0x104b5 { return u32(right) == 0x104dd }
-		0x104b6 { return u32(right) == 0x104de }
-		0x104b7 { return u32(right) == 0x104df }
-		0x104b8 { return u32(right) == 0x104e0 }
-		0x104b9 { return u32(right) == 0x104e1 }
-		0x104ba { return u32(right) == 0x104e2 }
-		0x104bb { return u32(right) == 0x104e3 }
-		0x104bc { return u32(right) == 0x104e4 }
-		0x104bd { return u32(right) == 0x104e5 }
-		0x104be { return u32(right) == 0x104e6 }
-		0x104bf { return u32(right) == 0x104e7 }
-		0x104c0 { return u32(right) == 0x104e8 }
-		0x104c1 { return u32(right) == 0x104e9 }
-		0x104c2 { return u32(right) == 0x104ea }
-		0x104c3 { return u32(right) == 0x104eb }
-		0x104c4 { return u32(right) == 0x104ec }
-		0x104c5 { return u32(right) == 0x104ed }
-		0x104c6 { return u32(right) == 0x104ee }
-		0x104c7 { return u32(right) == 0x104ef }
-		0x104c8 { return u32(right) == 0x104f0 }
-		0x104c9 { return u32(right) == 0x104f1 }
-		0x104ca { return u32(right) == 0x104f2 }
-		0x104cb { return u32(right) == 0x104f3 }
-		0x104cc { return u32(right) == 0x104f4 }
-		0x104cd { return u32(right) == 0x104f5 }
-		0x104ce { return u32(right) == 0x104f6 }
-		0x104cf { return u32(right) == 0x104f7 }
-		0x104d0 { return u32(right) == 0x104f8 }
-		0x104d1 { return u32(right) == 0x104f9 }
-		0x104d2 { return u32(right) == 0x104fa }
-		0x104d3 { return u32(right) == 0x104fb }
-		0x104d8 { return u32(right) == 0x104b0 }
-		0x104d9 { return u32(right) == 0x104b1 }
-		0x104da { return u32(right) == 0x104b2 }
-		0x104db { return u32(right) == 0x104b3 }
-		0x104dc { return u32(right) == 0x104b4 }
-		0x104dd { return u32(right) == 0x104b5 }
-		0x104de { return u32(right) == 0x104b6 }
-		0x104df { return u32(right) == 0x104b7 }
-		0x104e0 { return u32(right) == 0x104b8 }
-		0x104e1 { return u32(right) == 0x104b9 }
-		0x104e2 { return u32(right) == 0x104ba }
-		0x104e3 { return u32(right) == 0x104bb }
-		0x104e4 { return u32(right) == 0x104bc }
-		0x104e5 { return u32(right) == 0x104bd }
-		0x104e6 { return u32(right) == 0x104be }
-		0x104e7 { return u32(right) == 0x104bf }
-		0x104e8 { return u32(right) == 0x104c0 }
-		0x104e9 { return u32(right) == 0x104c1 }
-		0x104ea { return u32(right) == 0x104c2 }
-		0x104eb { return u32(right) == 0x104c3 }
-		0x104ec { return u32(right) == 0x104c4 }
-		0x104ed { return u32(right) == 0x104c5 }
-		0x104ee { return u32(right) == 0x104c6 }
-		0x104ef { return u32(right) == 0x104c7 }
-		0x104f0 { return u32(right) == 0x104c8 }
-		0x104f1 { return u32(right) == 0x104c9 }
-		0x104f2 { return u32(right) == 0x104ca }
-		0x104f3 { return u32(right) == 0x104cb }
-		0x104f4 { return u32(right) == 0x104cc }
-		0x104f5 { return u32(right) == 0x104cd }
-		0x104f6 { return u32(right) == 0x104ce }
-		0x104f7 { return u32(right) == 0x104cf }
-		0x104f8 { return u32(right) == 0x104d0 }
-		0x104f9 { return u32(right) == 0x104d1 }
-		0x104fa { return u32(right) == 0x104d2 }
-		0x104fb { return u32(right) == 0x104d3 }
-		0x10570 { return u32(right) == 0x10597 }
-		0x10571 { return u32(right) == 0x10598 }
-		0x10572 { return u32(right) == 0x10599 }
-		0x10573 { return u32(right) == 0x1059a }
-		0x10574 { return u32(right) == 0x1059b }
-		0x10575 { return u32(right) == 0x1059c }
-		0x10576 { return u32(right) == 0x1059d }
-		0x10577 { return u32(right) == 0x1059e }
-		0x10578 { return u32(right) == 0x1059f }
-		0x10579 { return u32(right) == 0x105a0 }
-		0x1057a { return u32(right) == 0x105a1 }
-		0x1057c { return u32(right) == 0x105a3 }
-		0x1057d { return u32(right) == 0x105a4 }
-		0x1057e { return u32(right) == 0x105a5 }
-		0x1057f { return u32(right) == 0x105a6 }
-		0x10580 { return u32(right) == 0x105a7 }
-		0x10581 { return u32(right) == 0x105a8 }
-		0x10582 { return u32(right) == 0x105a9 }
-		0x10583 { return u32(right) == 0x105aa }
-		0x10584 { return u32(right) == 0x105ab }
-		0x10585 { return u32(right) == 0x105ac }
-		0x10586 { return u32(right) == 0x105ad }
-		0x10587 { return u32(right) == 0x105ae }
-		0x10588 { return u32(right) == 0x105af }
-		0x10589 { return u32(right) == 0x105b0 }
-		0x1058a { return u32(right) == 0x105b1 }
-		0x1058c { return u32(right) == 0x105b3 }
-		0x1058d { return u32(right) == 0x105b4 }
-		0x1058e { return u32(right) == 0x105b5 }
-		0x1058f { return u32(right) == 0x105b6 }
-		0x10590 { return u32(right) == 0x105b7 }
-		0x10591 { return u32(right) == 0x105b8 }
-		0x10592 { return u32(right) == 0x105b9 }
-		0x10594 { return u32(right) == 0x105bb }
-		0x10595 { return u32(right) == 0x105bc }
-		0x10597 { return u32(right) == 0x10570 }
-		0x10598 { return u32(right) == 0x10571 }
-		0x10599 { return u32(right) == 0x10572 }
-		0x1059a { return u32(right) == 0x10573 }
-		0x1059b { return u32(right) == 0x10574 }
-		0x1059c { return u32(right) == 0x10575 }
-		0x1059d { return u32(right) == 0x10576 }
-		0x1059e { return u32(right) == 0x10577 }
-		0x1059f { return u32(right) == 0x10578 }
-		0x105a0 { return u32(right) == 0x10579 }
-		0x105a1 { return u32(right) == 0x1057a }
-		0x105a3 { return u32(right) == 0x1057c }
-		0x105a4 { return u32(right) == 0x1057d }
-		0x105a5 { return u32(right) == 0x1057e }
-		0x105a6 { return u32(right) == 0x1057f }
-		0x105a7 { return u32(right) == 0x10580 }
-		0x105a8 { return u32(right) == 0x10581 }
-		0x105a9 { return u32(right) == 0x10582 }
-		0x105aa { return u32(right) == 0x10583 }
-		0x105ab { return u32(right) == 0x10584 }
-		0x105ac { return u32(right) == 0x10585 }
-		0x105ad { return u32(right) == 0x10586 }
-		0x105ae { return u32(right) == 0x10587 }
-		0x105af { return u32(right) == 0x10588 }
-		0x105b0 { return u32(right) == 0x10589 }
-		0x105b1 { return u32(right) == 0x1058a }
-		0x105b3 { return u32(right) == 0x1058c }
-		0x105b4 { return u32(right) == 0x1058d }
-		0x105b5 { return u32(right) == 0x1058e }
-		0x105b6 { return u32(right) == 0x1058f }
-		0x105b7 { return u32(right) == 0x10590 }
-		0x105b8 { return u32(right) == 0x10591 }
-		0x105b9 { return u32(right) == 0x10592 }
-		0x105bb { return u32(right) == 0x10594 }
-		0x105bc { return u32(right) == 0x10595 }
-		0x10c80 { return u32(right) == 0x10cc0 }
-		0x10c81 { return u32(right) == 0x10cc1 }
-		0x10c82 { return u32(right) == 0x10cc2 }
-		0x10c83 { return u32(right) == 0x10cc3 }
-		0x10c84 { return u32(right) == 0x10cc4 }
-		0x10c85 { return u32(right) == 0x10cc5 }
-		0x10c86 { return u32(right) == 0x10cc6 }
-		0x10c87 { return u32(right) == 0x10cc7 }
-		0x10c88 { return u32(right) == 0x10cc8 }
-		0x10c89 { return u32(right) == 0x10cc9 }
-		0x10c8a { return u32(right) == 0x10cca }
-		0x10c8b { return u32(right) == 0x10ccb }
-		0x10c8c { return u32(right) == 0x10ccc }
-		0x10c8d { return u32(right) == 0x10ccd }
-		0x10c8e { return u32(right) == 0x10cce }
-		0x10c8f { return u32(right) == 0x10ccf }
-		0x10c90 { return u32(right) == 0x10cd0 }
-		0x10c91 { return u32(right) == 0x10cd1 }
-		0x10c92 { return u32(right) == 0x10cd2 }
-		0x10c93 { return u32(right) == 0x10cd3 }
-		0x10c94 { return u32(right) == 0x10cd4 }
-		0x10c95 { return u32(right) == 0x10cd5 }
-		0x10c96 { return u32(right) == 0x10cd6 }
-		0x10c97 { return u32(right) == 0x10cd7 }
-		0x10c98 { return u32(right) == 0x10cd8 }
-		0x10c99 { return u32(right) == 0x10cd9 }
-		0x10c9a { return u32(right) == 0x10cda }
-		0x10c9b { return u32(right) == 0x10cdb }
-		0x10c9c { return u32(right) == 0x10cdc }
-		0x10c9d { return u32(right) == 0x10cdd }
-		0x10c9e { return u32(right) == 0x10cde }
-		0x10c9f { return u32(right) == 0x10cdf }
-		0x10ca0 { return u32(right) == 0x10ce0 }
-		0x10ca1 { return u32(right) == 0x10ce1 }
-		0x10ca2 { return u32(right) == 0x10ce2 }
-		0x10ca3 { return u32(right) == 0x10ce3 }
-		0x10ca4 { return u32(right) == 0x10ce4 }
-		0x10ca5 { return u32(right) == 0x10ce5 }
-		0x10ca6 { return u32(right) == 0x10ce6 }
-		0x10ca7 { return u32(right) == 0x10ce7 }
-		0x10ca8 { return u32(right) == 0x10ce8 }
-		0x10ca9 { return u32(right) == 0x10ce9 }
-		0x10caa { return u32(right) == 0x10cea }
-		0x10cab { return u32(right) == 0x10ceb }
-		0x10cac { return u32(right) == 0x10cec }
-		0x10cad { return u32(right) == 0x10ced }
-		0x10cae { return u32(right) == 0x10cee }
-		0x10caf { return u32(right) == 0x10cef }
-		0x10cb0 { return u32(right) == 0x10cf0 }
-		0x10cb1 { return u32(right) == 0x10cf1 }
-		0x10cb2 { return u32(right) == 0x10cf2 }
-		0x10cc0 { return u32(right) == 0x10c80 }
-		0x10cc1 { return u32(right) == 0x10c81 }
-		0x10cc2 { return u32(right) == 0x10c82 }
-		0x10cc3 { return u32(right) == 0x10c83 }
-		0x10cc4 { return u32(right) == 0x10c84 }
-		0x10cc5 { return u32(right) == 0x10c85 }
-		0x10cc6 { return u32(right) == 0x10c86 }
-		0x10cc7 { return u32(right) == 0x10c87 }
-		0x10cc8 { return u32(right) == 0x10c88 }
-		0x10cc9 { return u32(right) == 0x10c89 }
-		0x10cca { return u32(right) == 0x10c8a }
-		0x10ccb { return u32(right) == 0x10c8b }
-		0x10ccc { return u32(right) == 0x10c8c }
-		0x10ccd { return u32(right) == 0x10c8d }
-		0x10cce { return u32(right) == 0x10c8e }
-		0x10ccf { return u32(right) == 0x10c8f }
-		0x10cd0 { return u32(right) == 0x10c90 }
-		0x10cd1 { return u32(right) == 0x10c91 }
-		0x10cd2 { return u32(right) == 0x10c92 }
-		0x10cd3 { return u32(right) == 0x10c93 }
-		0x10cd4 { return u32(right) == 0x10c94 }
-		0x10cd5 { return u32(right) == 0x10c95 }
-		0x10cd6 { return u32(right) == 0x10c96 }
-		0x10cd7 { return u32(right) == 0x10c97 }
-		0x10cd8 { return u32(right) == 0x10c98 }
-		0x10cd9 { return u32(right) == 0x10c99 }
-		0x10cda { return u32(right) == 0x10c9a }
-		0x10cdb { return u32(right) == 0x10c9b }
-		0x10cdc { return u32(right) == 0x10c9c }
-		0x10cdd { return u32(right) == 0x10c9d }
-		0x10cde { return u32(right) == 0x10c9e }
-		0x10cdf { return u32(right) == 0x10c9f }
-		0x10ce0 { return u32(right) == 0x10ca0 }
-		0x10ce1 { return u32(right) == 0x10ca1 }
-		0x10ce2 { return u32(right) == 0x10ca2 }
-		0x10ce3 { return u32(right) == 0x10ca3 }
-		0x10ce4 { return u32(right) == 0x10ca4 }
-		0x10ce5 { return u32(right) == 0x10ca5 }
-		0x10ce6 { return u32(right) == 0x10ca6 }
-		0x10ce7 { return u32(right) == 0x10ca7 }
-		0x10ce8 { return u32(right) == 0x10ca8 }
-		0x10ce9 { return u32(right) == 0x10ca9 }
-		0x10cea { return u32(right) == 0x10caa }
-		0x10ceb { return u32(right) == 0x10cab }
-		0x10cec { return u32(right) == 0x10cac }
-		0x10ced { return u32(right) == 0x10cad }
-		0x10cee { return u32(right) == 0x10cae }
-		0x10cef { return u32(right) == 0x10caf }
-		0x10cf0 { return u32(right) == 0x10cb0 }
-		0x10cf1 { return u32(right) == 0x10cb1 }
-		0x10cf2 { return u32(right) == 0x10cb2 }
-		0x10d50 { return u32(right) == 0x10d70 }
-		0x10d51 { return u32(right) == 0x10d71 }
-		0x10d52 { return u32(right) == 0x10d72 }
-		0x10d53 { return u32(right) == 0x10d73 }
-		0x10d54 { return u32(right) == 0x10d74 }
-		0x10d55 { return u32(right) == 0x10d75 }
-		0x10d56 { return u32(right) == 0x10d76 }
-		0x10d57 { return u32(right) == 0x10d77 }
-		0x10d58 { return u32(right) == 0x10d78 }
-		0x10d59 { return u32(right) == 0x10d79 }
-		0x10d5a { return u32(right) == 0x10d7a }
-		0x10d5b { return u32(right) == 0x10d7b }
-		0x10d5c { return u32(right) == 0x10d7c }
-		0x10d5d { return u32(right) == 0x10d7d }
-		0x10d5e { return u32(right) == 0x10d7e }
-		0x10d5f { return u32(right) == 0x10d7f }
-		0x10d60 { return u32(right) == 0x10d80 }
-		0x10d61 { return u32(right) == 0x10d81 }
-		0x10d62 { return u32(right) == 0x10d82 }
-		0x10d63 { return u32(right) == 0x10d83 }
-		0x10d64 { return u32(right) == 0x10d84 }
-		0x10d65 { return u32(right) == 0x10d85 }
-		0x10d70 { return u32(right) == 0x10d50 }
-		0x10d71 { return u32(right) == 0x10d51 }
-		0x10d72 { return u32(right) == 0x10d52 }
-		0x10d73 { return u32(right) == 0x10d53 }
-		0x10d74 { return u32(right) == 0x10d54 }
-		0x10d75 { return u32(right) == 0x10d55 }
-		0x10d76 { return u32(right) == 0x10d56 }
-		0x10d77 { return u32(right) == 0x10d57 }
-		0x10d78 { return u32(right) == 0x10d58 }
-		0x10d79 { return u32(right) == 0x10d59 }
-		0x10d7a { return u32(right) == 0x10d5a }
-		0x10d7b { return u32(right) == 0x10d5b }
-		0x10d7c { return u32(right) == 0x10d5c }
-		0x10d7d { return u32(right) == 0x10d5d }
-		0x10d7e { return u32(right) == 0x10d5e }
-		0x10d7f { return u32(right) == 0x10d5f }
-		0x10d80 { return u32(right) == 0x10d60 }
-		0x10d81 { return u32(right) == 0x10d61 }
-		0x10d82 { return u32(right) == 0x10d62 }
-		0x10d83 { return u32(right) == 0x10d63 }
-		0x10d84 { return u32(right) == 0x10d64 }
-		0x10d85 { return u32(right) == 0x10d65 }
-		0x118a0 { return u32(right) == 0x118c0 }
-		0x118a1 { return u32(right) == 0x118c1 }
-		0x118a2 { return u32(right) == 0x118c2 }
-		0x118a3 { return u32(right) == 0x118c3 }
-		0x118a4 { return u32(right) == 0x118c4 }
-		0x118a5 { return u32(right) == 0x118c5 }
-		0x118a6 { return u32(right) == 0x118c6 }
-		0x118a7 { return u32(right) == 0x118c7 }
-		0x118a8 { return u32(right) == 0x118c8 }
-		0x118a9 { return u32(right) == 0x118c9 }
-		0x118aa { return u32(right) == 0x118ca }
-		0x118ab { return u32(right) == 0x118cb }
-		0x118ac { return u32(right) == 0x118cc }
-		0x118ad { return u32(right) == 0x118cd }
-		0x118ae { return u32(right) == 0x118ce }
-		0x118af { return u32(right) == 0x118cf }
-		0x118b0 { return u32(right) == 0x118d0 }
-		0x118b1 { return u32(right) == 0x118d1 }
-		0x118b2 { return u32(right) == 0x118d2 }
-		0x118b3 { return u32(right) == 0x118d3 }
-		0x118b4 { return u32(right) == 0x118d4 }
-		0x118b5 { return u32(right) == 0x118d5 }
-		0x118b6 { return u32(right) == 0x118d6 }
-		0x118b7 { return u32(right) == 0x118d7 }
-		0x118b8 { return u32(right) == 0x118d8 }
-		0x118b9 { return u32(right) == 0x118d9 }
-		0x118ba { return u32(right) == 0x118da }
-		0x118bb { return u32(right) == 0x118db }
-		0x118bc { return u32(right) == 0x118dc }
-		0x118bd { return u32(right) == 0x118dd }
-		0x118be { return u32(right) == 0x118de }
-		0x118bf { return u32(right) == 0x118df }
-		0x118c0 { return u32(right) == 0x118a0 }
-		0x118c1 { return u32(right) == 0x118a1 }
-		0x118c2 { return u32(right) == 0x118a2 }
-		0x118c3 { return u32(right) == 0x118a3 }
-		0x118c4 { return u32(right) == 0x118a4 }
-		0x118c5 { return u32(right) == 0x118a5 }
-		0x118c6 { return u32(right) == 0x118a6 }
-		0x118c7 { return u32(right) == 0x118a7 }
-		0x118c8 { return u32(right) == 0x118a8 }
-		0x118c9 { return u32(right) == 0x118a9 }
-		0x118ca { return u32(right) == 0x118aa }
-		0x118cb { return u32(right) == 0x118ab }
-		0x118cc { return u32(right) == 0x118ac }
-		0x118cd { return u32(right) == 0x118ad }
-		0x118ce { return u32(right) == 0x118ae }
-		0x118cf { return u32(right) == 0x118af }
-		0x118d0 { return u32(right) == 0x118b0 }
-		0x118d1 { return u32(right) == 0x118b1 }
-		0x118d2 { return u32(right) == 0x118b2 }
-		0x118d3 { return u32(right) == 0x118b3 }
-		0x118d4 { return u32(right) == 0x118b4 }
-		0x118d5 { return u32(right) == 0x118b5 }
-		0x118d6 { return u32(right) == 0x118b6 }
-		0x118d7 { return u32(right) == 0x118b7 }
-		0x118d8 { return u32(right) == 0x118b8 }
-		0x118d9 { return u32(right) == 0x118b9 }
-		0x118da { return u32(right) == 0x118ba }
-		0x118db { return u32(right) == 0x118bb }
-		0x118dc { return u32(right) == 0x118bc }
-		0x118dd { return u32(right) == 0x118bd }
-		0x118de { return u32(right) == 0x118be }
-		0x118df { return u32(right) == 0x118bf }
-		0x16e40 { return u32(right) == 0x16e60 }
-		0x16e41 { return u32(right) == 0x16e61 }
-		0x16e42 { return u32(right) == 0x16e62 }
-		0x16e43 { return u32(right) == 0x16e63 }
-		0x16e44 { return u32(right) == 0x16e64 }
-		0x16e45 { return u32(right) == 0x16e65 }
-		0x16e46 { return u32(right) == 0x16e66 }
-		0x16e47 { return u32(right) == 0x16e67 }
-		0x16e48 { return u32(right) == 0x16e68 }
-		0x16e49 { return u32(right) == 0x16e69 }
-		0x16e4a { return u32(right) == 0x16e6a }
-		0x16e4b { return u32(right) == 0x16e6b }
-		0x16e4c { return u32(right) == 0x16e6c }
-		0x16e4d { return u32(right) == 0x16e6d }
-		0x16e4e { return u32(right) == 0x16e6e }
-		0x16e4f { return u32(right) == 0x16e6f }
-		0x16e50 { return u32(right) == 0x16e70 }
-		0x16e51 { return u32(right) == 0x16e71 }
-		0x16e52 { return u32(right) == 0x16e72 }
-		0x16e53 { return u32(right) == 0x16e73 }
-		0x16e54 { return u32(right) == 0x16e74 }
-		0x16e55 { return u32(right) == 0x16e75 }
-		0x16e56 { return u32(right) == 0x16e76 }
-		0x16e57 { return u32(right) == 0x16e77 }
-		0x16e58 { return u32(right) == 0x16e78 }
-		0x16e59 { return u32(right) == 0x16e79 }
-		0x16e5a { return u32(right) == 0x16e7a }
-		0x16e5b { return u32(right) == 0x16e7b }
-		0x16e5c { return u32(right) == 0x16e7c }
-		0x16e5d { return u32(right) == 0x16e7d }
-		0x16e5e { return u32(right) == 0x16e7e }
-		0x16e5f { return u32(right) == 0x16e7f }
-		0x16e60 { return u32(right) == 0x16e40 }
-		0x16e61 { return u32(right) == 0x16e41 }
-		0x16e62 { return u32(right) == 0x16e42 }
-		0x16e63 { return u32(right) == 0x16e43 }
-		0x16e64 { return u32(right) == 0x16e44 }
-		0x16e65 { return u32(right) == 0x16e45 }
-		0x16e66 { return u32(right) == 0x16e46 }
-		0x16e67 { return u32(right) == 0x16e47 }
-		0x16e68 { return u32(right) == 0x16e48 }
-		0x16e69 { return u32(right) == 0x16e49 }
-		0x16e6a { return u32(right) == 0x16e4a }
-		0x16e6b { return u32(right) == 0x16e4b }
-		0x16e6c { return u32(right) == 0x16e4c }
-		0x16e6d { return u32(right) == 0x16e4d }
-		0x16e6e { return u32(right) == 0x16e4e }
-		0x16e6f { return u32(right) == 0x16e4f }
-		0x16e70 { return u32(right) == 0x16e50 }
-		0x16e71 { return u32(right) == 0x16e51 }
-		0x16e72 { return u32(right) == 0x16e52 }
-		0x16e73 { return u32(right) == 0x16e53 }
-		0x16e74 { return u32(right) == 0x16e54 }
-		0x16e75 { return u32(right) == 0x16e55 }
-		0x16e76 { return u32(right) == 0x16e56 }
-		0x16e77 { return u32(right) == 0x16e57 }
-		0x16e78 { return u32(right) == 0x16e58 }
-		0x16e79 { return u32(right) == 0x16e59 }
-		0x16e7a { return u32(right) == 0x16e5a }
-		0x16e7b { return u32(right) == 0x16e5b }
-		0x16e7c { return u32(right) == 0x16e5c }
-		0x16e7d { return u32(right) == 0x16e5d }
-		0x16e7e { return u32(right) == 0x16e5e }
-		0x16e7f { return u32(right) == 0x16e5f }
-		0x1e900 { return u32(right) == 0x1e922 }
-		0x1e901 { return u32(right) == 0x1e923 }
-		0x1e902 { return u32(right) == 0x1e924 }
-		0x1e903 { return u32(right) == 0x1e925 }
-		0x1e904 { return u32(right) == 0x1e926 }
-		0x1e905 { return u32(right) == 0x1e927 }
-		0x1e906 { return u32(right) == 0x1e928 }
-		0x1e907 { return u32(right) == 0x1e929 }
-		0x1e908 { return u32(right) == 0x1e92a }
-		0x1e909 { return u32(right) == 0x1e92b }
-		0x1e90a { return u32(right) == 0x1e92c }
-		0x1e90b { return u32(right) == 0x1e92d }
-		0x1e90c { return u32(right) == 0x1e92e }
-		0x1e90d { return u32(right) == 0x1e92f }
-		0x1e90e { return u32(right) == 0x1e930 }
-		0x1e90f { return u32(right) == 0x1e931 }
-		0x1e910 { return u32(right) == 0x1e932 }
-		0x1e911 { return u32(right) == 0x1e933 }
-		0x1e912 { return u32(right) == 0x1e934 }
-		0x1e913 { return u32(right) == 0x1e935 }
-		0x1e914 { return u32(right) == 0x1e936 }
-		0x1e915 { return u32(right) == 0x1e937 }
-		0x1e916 { return u32(right) == 0x1e938 }
-		0x1e917 { return u32(right) == 0x1e939 }
-		0x1e918 { return u32(right) == 0x1e93a }
-		0x1e919 { return u32(right) == 0x1e93b }
-		0x1e91a { return u32(right) == 0x1e93c }
-		0x1e91b { return u32(right) == 0x1e93d }
-		0x1e91c { return u32(right) == 0x1e93e }
-		0x1e91d { return u32(right) == 0x1e93f }
-		0x1e91e { return u32(right) == 0x1e940 }
-		0x1e91f { return u32(right) == 0x1e941 }
-		0x1e920 { return u32(right) == 0x1e942 }
-		0x1e921 { return u32(right) == 0x1e943 }
-		0x1e922 { return u32(right) == 0x1e900 }
-		0x1e923 { return u32(right) == 0x1e901 }
-		0x1e924 { return u32(right) == 0x1e902 }
-		0x1e925 { return u32(right) == 0x1e903 }
-		0x1e926 { return u32(right) == 0x1e904 }
-		0x1e927 { return u32(right) == 0x1e905 }
-		0x1e928 { return u32(right) == 0x1e906 }
-		0x1e929 { return u32(right) == 0x1e907 }
-		0x1e92a { return u32(right) == 0x1e908 }
-		0x1e92b { return u32(right) == 0x1e909 }
-		0x1e92c { return u32(right) == 0x1e90a }
-		0x1e92d { return u32(right) == 0x1e90b }
-		0x1e92e { return u32(right) == 0x1e90c }
-		0x1e92f { return u32(right) == 0x1e90d }
-		0x1e930 { return u32(right) == 0x1e90e }
-		0x1e931 { return u32(right) == 0x1e90f }
-		0x1e932 { return u32(right) == 0x1e910 }
-		0x1e933 { return u32(right) == 0x1e911 }
-		0x1e934 { return u32(right) == 0x1e912 }
-		0x1e935 { return u32(right) == 0x1e913 }
-		0x1e936 { return u32(right) == 0x1e914 }
-		0x1e937 { return u32(right) == 0x1e915 }
-		0x1e938 { return u32(right) == 0x1e916 }
-		0x1e939 { return u32(right) == 0x1e917 }
-		0x1e93a { return u32(right) == 0x1e918 }
-		0x1e93b { return u32(right) == 0x1e919 }
-		0x1e93c { return u32(right) == 0x1e91a }
-		0x1e93d { return u32(right) == 0x1e91b }
-		0x1e93e { return u32(right) == 0x1e91c }
-		0x1e93f { return u32(right) == 0x1e91d }
-		0x1e940 { return u32(right) == 0x1e91e }
-		0x1e941 { return u32(right) == 0x1e91f }
-		0x1e942 { return u32(right) == 0x1e920 }
-		0x1e943 { return u32(right) == 0x1e921 }
-		else { return false }
+	folded := unicode_simple_case(left)
+	return (folded.len >= 1 && right == folded.one)
+		|| (folded.len >= 2 && right == folded.two)
+		|| (folded.len >= 3 && right == folded.three)
+}
+
+@[inline]
+fn unicode_simple_case_in_range(value rune, first rune, last rune) bool {
+	if value >= first && value <= last {
+		return true
 	}
+	folded := unicode_simple_case(value)
+	return (folded.len >= 1 && folded.one >= first && folded.one <= last)
+		|| (folded.len >= 2 && folded.two >= first && folded.two <= last)
+		|| (folded.len >= 3 && folded.three >= first && folded.three <= last)
 }

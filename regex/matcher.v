@@ -436,7 +436,7 @@ pub fn (mut builder RegexMatcherBuilder) whole_line(yes bool) &RegexMatcherBuild
 
 /// An implementation of the `Matcher` trait using Rust's standard regex
 /// library.
-pub struct RegexMatcher implements IClone {
+pub struct RegexMatcher implements IClone, Drop {
 	/// The configuration specified by the caller.
 	config Config
 	/// The regular expression compiled from the pattern provided by the
@@ -464,14 +464,50 @@ pub struct RegexMatcher implements IClone {
 // regex-automata's cheap clone semantics in Rust.
 pub fn (re &RegexMatcher) clone() RegexMatcher {
 	return RegexMatcher{
-		config:               re.config
-		regex:                re.regex
-		byte_literal:         re.byte_literal
-		unicode_case_literal: re.unicode_case_literal
-		simple_ascii:         re.simple_ascii
-		fast_line_regex:      re.fast_line_regex
+		config:               re.config.clone()
+		regex:                re.regex.clone()
+		byte_literal:         if bytes := re.byte_literal { bytes.clone() } else { ?[]u8(none) }
+		unicode_case_literal: if literal := re.unicode_case_literal {
+			literal.clone()
+		} else {
+			?string(none)
+		}
+		simple_ascii:         if simple := re.simple_ascii {
+			SimpleAsciiPattern{
+				prefix:    simple.prefix.clone()
+				class:     simple.class.clone()
+				match_len: simple.match_len
+			}
+		} else {
+			?SimpleAsciiPattern(none)
+		}
+		fast_line_regex:      if fast := re.fast_line_regex { fast.clone() } else { ?meta.Regex(none) }
 		non_matching_bytes:   re.non_matching_bytes
 		reject_invalid_empty: re.reject_invalid_empty
+	}
+}
+
+fn (mut re RegexMatcher) drop() {
+	re.regex.drop()
+	if bytes := re.byte_literal {
+		unsafe { bytes.free() }
+		re.byte_literal = none
+	}
+	if literal := re.unicode_case_literal {
+		unsafe { literal.free() }
+		re.unicode_case_literal = none
+	}
+	if simple := re.simple_ascii {
+		unsafe {
+			simple.prefix.free()
+			simple.class.free()
+		}
+		re.simple_ascii = none
+	}
+	if fast := re.fast_line_regex {
+		mut owned := fast
+		owned.drop()
+		re.fast_line_regex = none
 	}
 }
 
@@ -502,12 +538,12 @@ pub fn RegexMatcher.new_line_matcher(pattern string) !RegexMatcher {
 // This implementation just dispatches on the internal matcher impl except
 // for the line terminator optimization, which is possibly executed via
 // `fast_line_regex`.
-pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	found, _ := re.capture_groups_at(haystack, at)!
 	return found
 }
 
-pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
 	if at > haystack.len {
 		return matcher.FallibleMatch.absent(), []string{}
 	}
@@ -571,23 +607,23 @@ pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.Fa
 	return matcher.FallibleMatch.absent(), []string{}
 }
 
-pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
+pub fn (re &RegexMatcher) new_captures() !matcher.NoCaptures {
 	_ = re
 	return matcher.NoCaptures.new()
 }
 
-pub fn (re RegexMatcher) capture_count() usize {
+pub fn (re &RegexMatcher) capture_count() usize {
 	return usize(re.regex.total_groups + 1)
 }
 
-pub fn (re RegexMatcher) capture_index(name string) ?usize {
+pub fn (re &RegexMatcher) capture_index(name string) ?usize {
 	if index := re.regex.group_map[name] {
 		return usize(index + 1)
 	}
 	return none
 }
 
-pub fn (re RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = caps
 	return re.find_at(haystack, at)!.is_some()
 }
@@ -596,11 +632,11 @@ pub fn (re &^a RegexMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	return &re.non_matching_bytes
 }
 
-pub fn (re RegexMatcher) line_terminator() ?matcher.LineTerminator {
+pub fn (re &RegexMatcher) line_terminator() ?matcher.LineTerminator {
 	return re.config.line_terminator
 }
 
-pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
 	if literal := re.byte_literal {
 		found := find_byte_literal_at(haystack, literal, 0)!
 		if found.has_value {
@@ -683,7 +719,7 @@ pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack []u8) !matcher.
 	return re.re.find_candidate_line(haystack)
 }
 
-fn (re RegexMatcher) line_match_kind(pos usize) matcher.FallibleLineMatchKind {
+fn (re &RegexMatcher) line_match_kind(pos usize) matcher.FallibleLineMatchKind {
 	kind := if re.needs_accept_match_confirmation() {
 		matcher.LineMatchKind.candidate(pos)
 	} else {
@@ -692,11 +728,11 @@ fn (re RegexMatcher) line_match_kind(pos usize) matcher.FallibleLineMatchKind {
 	return matcher.FallibleLineMatchKind.some(kind)
 }
 
-fn (re RegexMatcher) needs_accept_match_confirmation() bool {
+fn (re &RegexMatcher) needs_accept_match_confirmation() bool {
 	return re.reject_invalid_empty || re.config.whole_line || re.config.word
 }
 
-fn (re RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
+fn (re &RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
 	if re.reject_invalid_empty && mat.start() == mat.end()
 		&& is_invalid_utf8_at(haystack, mat.start()) {
 		return false

@@ -53,7 +53,11 @@ $if pcre2 ? {
 
 // Return the number of live PCRE2 regex owners allocated by the shim.
 pub fn live_regex_count() usize {
-	return C.rg_pcre2_live_regex_count()
+	$if pcre2 ? {
+		return C.rg_pcre2_live_regex_count()
+	} $else {
+		return 0
+	}
 }
 
 fn pcre2_enabled() bool {

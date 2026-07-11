@@ -14,6 +14,7 @@ $if !windows {
 #include <errno.h>
 
 const standard_stream_block_capacity = 128 * 1024
+const retained_parallel_buffer_capacity = 256 * 1024
 const errno_ebadf = 9
 const errno_eintr = 4
 const errno_epipe = 32
@@ -181,6 +182,12 @@ pub fn (buffer Buffer) is_empty() bool {
 
 /// Clears the contents of this buffer.
 pub fn (mut buffer Buffer) clear() {
+	if buffer.bytes.cap > retained_parallel_buffer_capacity {
+		unsafe { buffer.bytes.free() }
+		buffer.bytes = []u8{}
+		unsafe { buffer.bytes.flags |= .noslices }
+		return
+	}
 	buffer.bytes.clear()
 }
 

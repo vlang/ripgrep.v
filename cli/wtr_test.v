@@ -16,6 +16,17 @@ fn test_buffer_records_plain_bytes_and_clear() {
 	assert buffer.as_slice() == []u8{}
 }
 
+fn test_buffer_clear_releases_oversized_file_output() {
+	wtr := BufferWriter.stdout(.never)
+	mut buffer := wtr.buffer()
+	large := []u8{len: retained_parallel_buffer_capacity + 1}
+	buffer.write(large)!
+	assert buffer.bytes.cap > retained_parallel_buffer_capacity
+	buffer.clear()
+	assert buffer.bytes.len == 0
+	assert buffer.bytes.cap <= retained_parallel_buffer_capacity
+}
+
 fn test_buffer_color_emits_ansi_when_enabled() {
 	wtr := BufferWriter.stdout(.always)
 	mut buffer := wtr.buffer()

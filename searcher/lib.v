@@ -940,7 +940,7 @@ pub fn Searcher.new() Searcher {
 	}
 }
 
-pub fn (s Searcher) multi_line_with_matcher(matcher_ matcher.Matcher) bool {
+pub fn (s Searcher) multi_line_with_matcher(matcher_ &matcher.Matcher) bool {
 	if !s.multi_line() {
 		return false
 	}
@@ -964,7 +964,7 @@ pub fn (s Searcher) multi_line_with_matcher(matcher_ matcher.Matcher) bool {
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_file` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_path[^p](matcher_ matcher.Matcher, path &^p string, write_to Sink) ! {
+pub fn (mut s Searcher) search_path[^p](matcher_ &matcher.Matcher, path &^p string, write_to Sink) ! {
 	mut file := os.open(*path) or { return err }
 	defer {
 		file.close()
@@ -978,11 +978,11 @@ pub fn (mut s Searcher) search_path[^p](matcher_ matcher.Matcher, path &^p strin
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_path` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_file(matcher_ matcher.Matcher, mut file os.File, write_to Sink) ! {
+pub fn (mut s Searcher) search_file(matcher_ &matcher.Matcher, mut file os.File, write_to Sink) ! {
 	s.search_file_maybe_path(matcher_, mut file, '', false, write_to)!
 }
 
-fn (mut s Searcher) search_file_maybe_path(matcher_ matcher.Matcher, mut file os.File, path string, has_path bool, write_to Sink) ! {
+fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file os.File, path string, has_path bool, write_to Sink) ! {
 	$if !macos {
 		if mmap := s.config.mmap.open(mut file, path, has_path) {
 			defer {
@@ -998,7 +998,7 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ matcher.Matcher, mut file os
 	}
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_file(mut file, path, has_path)!
-			mut search := MultiLine.new(s, matcher_ref_value(&matcher_), s.multi_line_buffer,
+			mut search := MultiLine.new(s, matcher_ref_value(matcher_), s.multi_line_buffer,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if needs_transcoding {
@@ -1007,24 +1007,24 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ matcher.Matcher, mut file os
 			decoded.close()
 		}
 		mut rdr := LineBufferReader.new(&decoded, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(&matcher_), rdr,
+			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else {
 		mut rdr := LineBufferReader.new(&file, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(&matcher_), rdr, sink_ref_value(&write_to))
+			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
 		search.run()!
 	}
 }
 
 /// Execute a search over any implementation of `std::io::Read` and write
 /// the results to the given sink.
-pub fn (mut s Searcher) search_reader(matcher_ matcher.Matcher, mut read_from io.Reader, write_to Sink) ! {
+pub fn (mut s Searcher) search_reader(matcher_ &matcher.Matcher, mut read_from io.Reader, write_to Sink) ! {
 	s.check_config(matcher_)!
 
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_reader(mut read_from)!
-			mut search := MultiLine.new(s, matcher_ref_value(&matcher_), s.multi_line_buffer,
+			mut search := MultiLine.new(s, matcher_ref_value(matcher_), s.multi_line_buffer,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if s.config.encoding != none || s.config.bom_sniffing {
@@ -1033,39 +1033,39 @@ pub fn (mut s Searcher) search_reader(matcher_ matcher.Matcher, mut read_from io
 			decoded.close()
 		}
 		mut rdr := LineBufferReader.new(&decoded, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(&matcher_), rdr, sink_ref_value(&write_to))
+			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
 		search.run()!
 	} else {
 		mut rdr := LineBufferReader.new(&read_from, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(&matcher_), rdr, sink_ref_value(&write_to))
+			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
 		search.run()!
 	}
 }
 
 /// Execute a search over the given slice and write the results to the
 /// given sink.
-pub fn (mut s Searcher) search_slice(matcher_ matcher.Matcher, slice []u8, write_to Sink) ! {
+pub fn (mut s Searcher) search_slice(matcher_ &matcher.Matcher, slice []u8, write_to Sink) ! {
 	s.check_config(matcher_)!
 
 	// We can search the slice directly, unless we need to do transcoding.
 	if s.slice_needs_transcoding(slice) {
 		transcoded := s.transcode_slice(slice)!
 		if s.multi_line_with_matcher(matcher_) {
-				mut search := MultiLine.new(s, matcher_ref_value(&matcher_), transcoded,
+				mut search := MultiLine.new(s, matcher_ref_value(matcher_), transcoded,
 					sink_ref_value(&write_to))
 			search.run()!
 		} else {
-				mut search := SliceByLine.new(s, matcher_ref_value(&matcher_), transcoded,
+				mut search := SliceByLine.new(s, matcher_ref_value(matcher_), transcoded,
 					sink_ref_value(&write_to))
 			search.run()!
 		}
 		return
 	}
 	if s.multi_line_with_matcher(matcher_) {
-			mut search := MultiLine.new(s, matcher_ref_value(&matcher_), slice, sink_ref_value(&write_to))
+			mut search := MultiLine.new(s, matcher_ref_value(matcher_), slice, sink_ref_value(&write_to))
 		search.run()!
 	} else {
-			mut search := SliceByLine.new(s, matcher_ref_value(&matcher_), slice,
+			mut search := SliceByLine.new(s, matcher_ref_value(matcher_), slice,
 				sink_ref_value(&write_to))
 		search.run()!
 	}
@@ -1073,7 +1073,7 @@ pub fn (mut s Searcher) search_slice(matcher_ matcher.Matcher, slice []u8, write
 
 /// Check that the searcher's configuration and the matcher are consistent
 /// with each other.
-fn (s Searcher) check_config(matcher_ matcher.Matcher) ! {
+fn (s Searcher) check_config(matcher_ &matcher.Matcher) ! {
 	if limit := s.config.heap_limit {
 		if limit == 0 && !s.config.mmap.is_enabled() {
 			return ConfigError.search_unavailable()
@@ -1425,17 +1425,40 @@ fn (mut rdr TranscodingReader[^r]) decode_stream_chunk(raw []u8, final bool) []u
 			return decode_x_user_defined(raw)
 		}
 		.utf16le {
-			usable := rdr.stream_usable_len(raw, 2, final)
+			usable := rdr.utf16_stream_usable_len(raw, false, final)
 			return decode_utf16(raw[..usable], false)
 		}
 		.utf16be {
-			usable := rdr.stream_usable_len(raw, 2, final)
+			usable := rdr.utf16_stream_usable_len(raw, true, final)
 			return decode_utf16(raw[..usable], true)
 		}
 		else {
 			return raw.clone()
 		}
 	}
+}
+
+// A streaming UTF-16 decoder must retain both an incomplete code unit and a
+// complete high surrogate until the following chunk supplies its low surrogate.
+fn (mut rdr TranscodingReader[^r]) utf16_stream_usable_len(raw []u8, big_endian bool, final bool) int {
+	if final {
+		return raw.len
+	}
+	mut usable := raw.len - (raw.len % 2)
+	if usable >= 2 {
+		last := if big_endian {
+			u16(raw[usable - 2]) << 8 | u16(raw[usable - 1])
+		} else {
+			u16(raw[usable - 1]) << 8 | u16(raw[usable - 2])
+		}
+		if last >= 0xd800 && last <= 0xdbff {
+			usable -= 2
+		}
+	}
+	if usable < raw.len {
+		rdr.raw_tail = raw[usable..].clone()
+	}
+	return usable
 }
 
 fn (mut rdr TranscodingReader[^r]) stream_usable_len(raw []u8, unit int, final bool) int {

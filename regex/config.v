@@ -203,7 +203,9 @@ pub fn (chir &^a ConfiguredHIR) hir[^a]() &^a Hir {
 /// Convert this HIR to a regex that can be used for matching.
 pub fn (chir ConfiguredHIR) to_regex() !meta.Regex {
 	pattern := chir.backend_pattern()
-	return meta.compile(pattern) or { return Error.regex(err.msg()) }
+	return meta.compile_with_size_limit(pattern, chir.config.size_limit) or {
+		return Error.regex(err.msg())
+	}
 }
 
 /// Compute the set of non-matching bytes for this HIR expression.
@@ -1818,6 +1820,10 @@ fn validate_rust_regex_syntax(pattern string, config Config) ! {
 		if ch == `(` {
 			if i + 1 >= pattern.len || pattern[i + 1] != `?` {
 				groups << i
+				if u32(groups.len - 1) > config.nest_limit {
+					return regex_parse_error(pattern, [RegexErrorSpan{i, i + 1}],
+						'exceed the maximum number of nested parentheses/brackets (${config.nest_limit})')
+				}
 				i++
 				can_repeat = false
 				continue
@@ -1843,6 +1849,10 @@ fn validate_rust_regex_syntax(pattern string, config Config) ! {
 				}
 				validate_capture_name(pattern, name_start, name_end, mut names)!
 				groups << i
+				if u32(groups.len - 1) > config.nest_limit {
+					return regex_parse_error(pattern, [RegexErrorSpan{i, name_end + 1}],
+						'exceed the maximum number of nested parentheses/brackets (${config.nest_limit})')
+				}
 				i = name_end + 1
 				can_repeat = false
 				continue
@@ -1854,12 +1864,20 @@ fn validate_rust_regex_syntax(pattern string, config Config) ! {
 				}
 				validate_capture_name(pattern, name_start, name_end, mut names)!
 				groups << i
+				if u32(groups.len - 1) > config.nest_limit {
+					return regex_parse_error(pattern, [RegexErrorSpan{i, name_end + 1}],
+						'exceed the maximum number of nested parentheses/brackets (${config.nest_limit})')
+				}
 				i = name_end + 1
 				can_repeat = false
 				continue
 			}
 			if kind == `:` {
 				groups << i
+				if u32(groups.len - 1) > config.nest_limit {
+					return regex_parse_error(pattern, [RegexErrorSpan{i, i + 3}],
+						'exceed the maximum number of nested parentheses/brackets (${config.nest_limit})')
+				}
 				i += 3
 				can_repeat = false
 				continue
@@ -1883,6 +1901,10 @@ fn validate_rust_regex_syntax(pattern string, config Config) ! {
 			}
 			if pattern[j] == `:` {
 				groups << i
+				if u32(groups.len - 1) > config.nest_limit {
+					return regex_parse_error(pattern, [RegexErrorSpan{i, j + 1}],
+						'exceed the maximum number of nested parentheses/brackets (${config.nest_limit})')
+				}
 				can_repeat = false
 			} else {
 				can_repeat = false

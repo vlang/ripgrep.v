@@ -705,7 +705,7 @@ pub fn default_line_terminator() ?LineTerminator {
 
 /// By default, this never returns a candidate match, and always either
 /// returns a confirmed match or no match at all.
-pub fn default_find_candidate_line(matcher_ MatchFinder, haystack []u8) !FallibleLineMatchKind {
+pub fn default_find_candidate_line(matcher_ &MatchFinder, haystack []u8) !FallibleLineMatchKind {
 	maybe_mat := matcher_.find_at(haystack, 0)!
 	if !maybe_mat.has_value {
 		return FallibleLineMatchKind.absent()
@@ -715,14 +715,14 @@ pub fn default_find_candidate_line(matcher_ MatchFinder, haystack []u8) !Fallibl
 
 /// Returns the start and end byte range of the first match in `haystack`.
 /// If no match exists, then `none` is returned.
-pub fn find(matcher_ MatchFinder, haystack []u8) !FallibleMatch {
+pub fn find(matcher_ &MatchFinder, haystack []u8) !FallibleMatch {
 	return matcher_.find_at(haystack, 0)!
 }
 
 /// Executes the given function over successive non-overlapping matches
 /// in `haystack`. If no match exists, then the given function is never
 /// called. If the function returns `false`, then iteration stops.
-pub fn find_iter(matcher_ MatchFinder, haystack []u8, matched fn (Match) bool) ! {
+pub fn find_iter(matcher_ &MatchFinder, haystack []u8, matched fn (Match) bool) ! {
 	find_iter_at(matcher_, haystack, 0, matched)!
 }
 
@@ -733,7 +733,7 @@ pub fn find_iter(matcher_ MatchFinder, haystack []u8, matched fn (Match) bool) !
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn find_iter_at(matcher_ MatchFinder, haystack []u8, at usize, matched fn (Match) bool) ! {
+pub fn find_iter_at(matcher_ &MatchFinder, haystack []u8, at usize, matched fn (Match) bool) ! {
 	try_find_iter_at(matcher_, haystack, at, fn [matched] (mat Match) !bool {
 		return matched(mat)
 	})!
@@ -746,7 +746,7 @@ pub fn find_iter_at(matcher_ MatchFinder, haystack []u8, at usize, matched fn (M
 /// the error is yielded.
 ///
 /// In this port, callback errors and matcher errors share V's `!` channel.
-pub fn try_find_iter(matcher_ MatchFinder, haystack []u8, matched fn (Match) !bool) ! {
+pub fn try_find_iter(matcher_ &MatchFinder, haystack []u8, matched fn (Match) !bool) ! {
 	try_find_iter_at(matcher_, haystack, 0, matched)!
 }
 
@@ -761,7 +761,7 @@ pub fn try_find_iter(matcher_ MatchFinder, haystack []u8, matched fn (Match) !bo
 /// match when `at == 0`.
 ///
 /// In this port, callback errors and matcher errors share V's `!` channel.
-pub fn try_find_iter_at(matcher_ MatchFinder, haystack []u8, at usize, matched fn (Match) !bool) ! {
+pub fn try_find_iter_at(matcher_ &MatchFinder, haystack []u8, at usize, matched fn (Match) !bool) ! {
 	mut last_end := at
 	mut has_last_match := false
 	mut last_match_end := usize(0)
@@ -797,7 +797,7 @@ pub fn try_find_iter_at(matcher_ MatchFinder, haystack []u8, at usize, matched f
 
 /// Populates the first set of capture group matches from `haystack` into
 /// `caps`. If no match exists, then `false` is returned.
-pub fn captures[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T) !bool {
+pub fn captures[T](matcher_ &CaptureFinder[T], haystack []u8, mut caps T) !bool {
 	return matcher_.captures_at(haystack, 0, mut caps)
 }
 
@@ -805,7 +805,7 @@ pub fn captures[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T) !bool {
 /// in `haystack` with capture groups extracted from each match. If no
 /// match exists, then the given function is never called. If the function
 /// returns `false`, then iteration stops.
-pub fn captures_iter[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T, matched fn (&T) bool) ! {
+pub fn captures_iter[T](matcher_ &CaptureFinder[T], haystack []u8, mut caps T, matched fn (&T) bool) ! {
 	captures_iter_at(matcher_, haystack, 0, mut caps, matched)!
 }
 
@@ -817,7 +817,7 @@ pub fn captures_iter[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T, ma
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn captures_iter_at[T](matcher_ CaptureFinder[T], haystack []u8, at usize, mut caps T, matched fn (&T) bool) ! {
+pub fn captures_iter_at[T](matcher_ &CaptureFinder[T], haystack []u8, at usize, mut caps T, matched fn (&T) bool) ! {
 	try_captures_iter_at(matcher_, haystack, at, mut caps, fn [matched] (caps &T) !bool {
 		return matched(caps)
 	})!
@@ -830,7 +830,7 @@ pub fn captures_iter_at[T](matcher_ CaptureFinder[T], haystack []u8, at usize, m
 /// returns an error then iteration stops and the error is yielded.
 ///
 /// In this port, callback errors and matcher errors share V's `!` channel.
-pub fn try_captures_iter[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T, matched fn (&T) !bool) ! {
+pub fn try_captures_iter[T](matcher_ &CaptureFinder[T], haystack []u8, mut caps T, matched fn (&T) !bool) ! {
 	try_captures_iter_at(matcher_, haystack, 0, mut caps, matched)!
 }
 
@@ -845,7 +845,7 @@ pub fn try_captures_iter[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T
 /// match when `at == 0`.
 ///
 /// In this port, callback errors and matcher errors share V's `!` channel.
-pub fn try_captures_iter_at[T](matcher_ CaptureFinder[T], haystack []u8, at usize, mut caps T, matched fn (&T) !bool) ! {
+pub fn try_captures_iter_at[T](matcher_ &CaptureFinder[T], haystack []u8, at usize, mut caps T, matched fn (&T) !bool) ! {
 	mut last_end := at
 	mut has_last_match := false
 	mut last_match_end := usize(0)
@@ -883,7 +883,7 @@ pub fn try_captures_iter_at[T](matcher_ CaptureFinder[T], haystack []u8, at usiz
 /// a handle to the `dst` buffer provided.
 ///
 /// If the given `append` function returns `false`, then replacement stops.
-pub fn replace(matcher_ MatchFinder, haystack []u8, mut dst []u8, append fn (Match, mut []u8) bool) ! {
+pub fn replace(matcher_ &MatchFinder, haystack []u8, mut dst []u8, append fn (Match, mut []u8) bool) ! {
 	mut last_match := usize(0)
 	find_iter(matcher_, haystack, fn [haystack, mut dst, append, mut last_match] (mat Match) bool {
 		append_slice(mut dst, haystack[last_match..mat.start()])
@@ -897,7 +897,7 @@ pub fn replace(matcher_ MatchFinder, haystack []u8, mut dst []u8, append fn (Mat
 /// `append` with the matching capture groups.
 ///
 /// If the given `append` function returns `false`, then replacement stops.
-pub fn replace_with_captures[T](matcher_ CaptureFinder[T], haystack []u8, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
+pub fn replace_with_captures[T](matcher_ &CaptureFinder[T], haystack []u8, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
 	replace_with_captures_at(matcher_, haystack, 0, mut caps, mut dst, append)!
 }
 
@@ -909,7 +909,7 @@ pub fn replace_with_captures[T](matcher_ CaptureFinder[T], haystack []u8, mut ca
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn replace_with_captures_at[T](matcher_ CaptureFinder[T], haystack []u8, at usize, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
+pub fn replace_with_captures_at[T](matcher_ &CaptureFinder[T], haystack []u8, at usize, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
 	mut last_match := at
 	captures_iter_at(matcher_, haystack, at, mut caps, fn [haystack, mut dst, append, mut last_match] (caps &T) bool {
 		mat := capture_match_or_panic(caps, 0)
@@ -937,7 +937,7 @@ fn append_slice(mut dst []u8, bytes []u8) {
 /// Returns true if and only if the matcher matches the given haystack.
 ///
 /// By default, this method is implemented by calling `shortest_match`.
-pub fn is_match(matcher_ MatchFinder, haystack []u8) !bool {
+pub fn is_match(matcher_ &MatchFinder, haystack []u8) !bool {
 	return is_match_at(matcher_, haystack, 0)
 }
 
@@ -949,7 +949,7 @@ pub fn is_match(matcher_ MatchFinder, haystack []u8) !bool {
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn is_match_at(matcher_ MatchFinder, haystack []u8, at usize) !bool {
+pub fn is_match_at(matcher_ &MatchFinder, haystack []u8, at usize) !bool {
 	return shortest_match_at(matcher_, haystack, at)!.has_value
 }
 
@@ -967,7 +967,7 @@ pub fn is_match_at(matcher_ MatchFinder, haystack []u8, at usize) !bool {
 /// a faster implementation of this than what `find` does.
 ///
 /// By default, this method is implemented by calling `find`.
-pub fn shortest_match(matcher_ MatchFinder, haystack []u8) !FallibleUsize {
+pub fn shortest_match(matcher_ &MatchFinder, haystack []u8) !FallibleUsize {
 	// V-specific: inline `shortest_match_at(..., 0)` to avoid V2 missing a
 	// nested generic specialization for the default helper path.
 	maybe_mat := matcher_.find_at(haystack, 0)!
@@ -995,7 +995,7 @@ pub fn shortest_match(matcher_ MatchFinder, haystack []u8) !FallibleUsize {
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn shortest_match_at(matcher_ MatchFinder, haystack []u8, at usize) !FallibleUsize {
+pub fn shortest_match_at(matcher_ &MatchFinder, haystack []u8, at usize) !FallibleUsize {
 	maybe_mat := matcher_.find_at(haystack, at)!
 	if !maybe_mat.has_value {
 		return FallibleUsize.absent()

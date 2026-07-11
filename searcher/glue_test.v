@@ -55,11 +55,23 @@ fn (mut rdr GlueByteSliceReader) read(mut buf []u8) !int {
 /// determines whether the line terminator optimization is enabled. (In reality
 /// this optimization is detected automatically by inspecting and possibly
 /// modifying the regex itself.)
-struct RegexMatcher implements IClone {
+struct RegexMatcher implements IClone, Drop {
 	regex regex.RegexMatcher
 mut:
 	line_term               ?matcher.LineTerminator
 	every_line_is_candidate bool
+}
+
+fn (m &RegexMatcher) clone() RegexMatcher {
+	return RegexMatcher{
+		regex:                   m.regex.clone()
+		line_term:               m.line_term
+		every_line_is_candidate: m.every_line_is_candidate
+	}
+}
+
+fn (mut m RegexMatcher) drop() {
+	m.regex.drop()
 }
 
 /// Create a new regex matcher.
@@ -90,27 +102,27 @@ fn (mut m RegexMatcher) every_line_is_candidate(yes bool) &RegexMatcher {
 	return m
 }
 
-fn (m RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+fn (m &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	return m.regex.find_at(haystack, at)!
 }
 
-fn (m RegexMatcher) new_captures() !matcher.NoCaptures {
+fn (m &RegexMatcher) new_captures() !matcher.NoCaptures {
 	_ = m
 	return matcher.NoCaptures.new()
 }
 
-fn (m RegexMatcher) capture_count() usize {
+fn (m &RegexMatcher) capture_count() usize {
 	_ = m
 	return 0
 }
 
-fn (m RegexMatcher) capture_index(name string) ?usize {
+fn (m &RegexMatcher) capture_index(name string) ?usize {
 	_ = m
 	_ = name
 	return none
 }
 
-fn (m RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m &RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	_ = haystack
 	_ = at
@@ -123,11 +135,11 @@ fn (m &^a RegexMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	return none
 }
 
-fn (m RegexMatcher) line_terminator() ?matcher.LineTerminator {
+fn (m &RegexMatcher) line_terminator() ?matcher.LineTerminator {
 	return m.line_term
 }
 
-fn (m RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+fn (m &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
 	if m.every_line_is_candidate {
 		line_term := m.line_term or { panic('line terminator required') }
 		if haystack.len == 0 {

@@ -531,6 +531,53 @@ fn test_rust_regex_unicode_escape_forms() {
 	}
 }
 
+fn test_rust_regex_ascii_control_escapes() {
+	patterns := [r'\a', r'\f', r'\v', r'[\a]', r'[\f]', r'[\v]']
+	controls := [[u8(0x07)], [u8(0x0c)], [u8(0x0b)], [u8(0x07)], [u8(0x0c)],
+		[u8(0x0b)]]
+	for i, pattern in patterns {
+		matcher_ := RegexMatcherBuilder.new().build(pattern)!
+		assert matcher.is_match(matcher_, controls[i])!
+		assert !matcher.is_match(matcher_, pattern[1..2].bytes())!
+	}
+}
+
+fn test_regex_vm_grows_backtracking_workspace_without_false_negative() {
+	pattern := '^' + 'a?'.repeat(1300) + 'b$'
+	matcher_ := RegexMatcherBuilder.new().build(pattern)!
+	assert matcher.is_match(matcher_, ('a'.repeat(1300) + 'b').bytes())!
+}
+
+fn test_regex_unicode_ranges_remain_compact_and_case_fold() {
+	matcher_ := RegexMatcherBuilder.new().build(r'(?i)[Α-Ω]+') or { panic(err.msg()) }
+	assert matcher.is_match(matcher_, 'δ'.bytes())!
+	assert !matcher.is_match(matcher_, 'я'.bytes())!
+	broad := RegexMatcherBuilder.new().build('[ -😀]') or { panic(err.msg()) }
+	assert matcher.is_match(broad, '😀'.bytes())!
+}
+
+fn test_regex_compile_size_and_nest_limits_are_enforced() {
+	mut size_builder := RegexMatcherBuilder.new()
+	size_builder.size_limit(1024)
+	if _ := size_builder.build('a{1000}') {
+		panic('expected compiled regex size limit error')
+	} else {
+		assert err.msg().contains('compiled regex exceeds size limit of 1024')
+	}
+	mut nest_builder := RegexMatcherBuilder.new()
+	nest_builder.nest_limit(2)
+	if _ := nest_builder.build('(((a)))') {
+		panic('expected regex nest limit error')
+	} else {
+		assert err.msg().contains('exceed the maximum number of nested parentheses/brackets (2)')
+	}
+}
+
+fn test_regex_vm_memoizes_ambiguous_repetition_states() {
+	matcher_ := RegexMatcherBuilder.new().build(r'^(a|aa)*b$')!
+	assert !matcher.is_match(matcher_, 'a'.repeat(40).bytes())!
+}
+
 fn test_rust_regex_parse_errors_reject_invalid_captures_ranges_and_properties() {
 	invalid := {
 		r'(?<1>a)':            'invalid capture group character'

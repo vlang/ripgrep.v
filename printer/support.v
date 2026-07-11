@@ -22,17 +22,17 @@ pub struct PrinterMatcher implements IClone, Drop {
 	pcre2 pcre2.RegexMatcher
 }
 
-pub fn PrinterMatcher.rust_regex(matcher_ regex.RegexMatcher) PrinterMatcher {
+pub fn PrinterMatcher.rust_regex(matcher_ &regex.RegexMatcher) PrinterMatcher {
 	return PrinterMatcher{
 		kind:  .rust_regex
-		regex: matcher_
+		regex: matcher_.clone()
 	}
 }
 
-pub fn PrinterMatcher.pcre2(matcher_ pcre2.RegexMatcher) PrinterMatcher {
+pub fn PrinterMatcher.pcre2(matcher_ &pcre2.RegexMatcher) PrinterMatcher {
 	return PrinterMatcher{
 		kind:  .pcre2
-		pcre2: matcher_
+		pcre2: matcher_.clone()
 	}
 }
 
@@ -54,8 +54,9 @@ pub fn (pm &PrinterMatcher) clone() PrinterMatcher {
 }
 
 fn (mut pm PrinterMatcher) drop() {
-	if pm.kind == .pcre2 {
-		pm.pcre2.drop()
+	match pm.kind {
+		.rust_regex { pm.regex.drop() }
+		.pcre2 { pm.pcre2.drop() }
 	}
 }
 

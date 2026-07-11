@@ -174,7 +174,7 @@ fn test_hiargs_builds_search_worker_components() {
 	searcher_ := hi.searcher() or { panic(err.msg()) }
 	printer_ := hi.printer(.standard, HiArgsBufferWriter{})
 	mut worker := hi.search_worker(matcher_, searcher_, printer_) or { panic(err.msg()) }
-	result := worker.search_path(path) or { panic(err.msg()) }
+	result := worker.search_path(&path) or { panic(err.msg()) }
 
 	assert result.has_match()
 	stats := result.stats() or { panic('missing stats') }

@@ -477,6 +477,26 @@ fn test_search_reader_explicit_utf16le_encoding() {
 	assert sink.byte_count == 8
 }
 
+fn test_search_reader_utf16le_preserves_surrogate_pair_across_stream_chunk() {
+	mut haystack := []u8{cap: 8200}
+	for _ in 0 .. 4096 {
+		haystack << [u8(`x`), 0]
+	}
+	// U+1F600 encoded as a UTF-16LE surrogate pair. The first internal read ends
+	// after the high surrogate (and one byte of the low surrogate).
+	haystack << [u8(0x3d), 0xd8, 0x00, 0xde, `\n`, 0]
+	mut source := ByteSliceReaderForSearch.new_bytes(haystack)
+	mut builder := SearcherBuilder.new()
+	encoding := Encoding.new('utf-16le')!
+	builder.encoding(encoding)
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_reader(LiteralMatcher.new('😀'), mut source, &sink)!
+
+	assert sink.matches.len == 1
+	assert sink.matches[0].contains('😀')
+}
+
 fn test_search_reader_explicit_utf16le_streams_until_quit() {
 	mut haystack := [u8(`f`), 0, `o`, 0, `o`, 0, `\n`, 0]
 	for _ in 0 .. 256 {

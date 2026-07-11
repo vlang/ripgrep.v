@@ -220,21 +220,47 @@ end
 
 if case_output
   cases = []
-  cases << 'module pcre'
+  cases << 'module meta'
   cases << ''
   cases << '// Generated from regex-syntax 0.8.8 Unicode 16.0.0 CASE_FOLDING_SIMPLE.'
+  cases << 'struct UnicodeSimpleCase {'
+  cases << "\tone rune"
+  cases << "\ttwo rune"
+  cases << "\tthree rune"
+  cases << "\tlen u8"
+  cases << '}'
+  cases << ''
+  cases << '@[inline]'
+  cases << 'fn unicode_simple_case(value rune) UnicodeSimpleCase {'
+  cases << "\tmatch u32(value) {"
+  case_folding.each do |source, values|
+    fields = values.each_with_index.map { |value, i| "#{%w[one two three][i]}: 0x#{value.to_s(16)}" }.join(', ')
+    cases << "\t\t0x#{source.to_s(16)} { return UnicodeSimpleCase{#{fields}, len: #{values.length}} }"
+  end
+  cases << "\t\telse { return UnicodeSimpleCase{} }"
+  cases << "\t}"
+  cases << '}'
+  cases << ''
   cases << '@[inline]'
   cases << 'fn unicode_simple_case_equal(left rune, right rune) bool {'
   cases << "\tif left == right {"
   cases << "\t\treturn true"
   cases << "\t}"
-  cases << "\tmatch u32(left) {"
-  case_folding.each do |source, values|
-    condition = values.map { |value| "u32(right) == 0x#{value.to_s(16)}" }.join(' || ')
-    cases << "\t\t0x#{source.to_s(16)} { return #{condition} }"
-  end
-  cases << "\t\telse { return false }"
+  cases << "\tfolded := unicode_simple_case(left)"
+  cases << "\treturn (folded.len >= 1 && right == folded.one)"
+  cases << "\t\t|| (folded.len >= 2 && right == folded.two)"
+  cases << "\t\t|| (folded.len >= 3 && right == folded.three)"
+  cases << '}'
+  cases << ''
+  cases << '@[inline]'
+  cases << 'fn unicode_simple_case_in_range(value rune, first rune, last rune) bool {'
+  cases << "\tif value >= first && value <= last {"
+  cases << "\t\treturn true"
   cases << "\t}"
+  cases << "\tfolded := unicode_simple_case(value)"
+  cases << "\treturn (folded.len >= 1 && folded.one >= first && folded.one <= last)"
+  cases << "\t\t|| (folded.len >= 2 && folded.two >= first && folded.two <= last)"
+  cases << "\t\t|| (folded.len >= 3 && folded.three >= first && folded.three <= last)"
   cases << '}'
   cases << ''
   File.write(case_output, cases.join("\n"))

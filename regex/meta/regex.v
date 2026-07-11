@@ -27,11 +27,6 @@ Features:
    - '(?m)' Multiline (anchors match newlines).
    - '(?s)' Dot-all (dot matches newline).
 
-Configuration:
- - `max_stack_depth`: Controls the dynamic growth limit of the backtracking stack.
-    Default is 2048. Increase this value if you encounter complex patterns failing
-    on deep recursions/backtracking, or decrease it to limit memory usage.
-
 Functions:
  - `compile(pattern) !Regex` -> Compiles a pattern into a Regex object.
  - `(r Regex) find(text) ?Match` -> Finds the first match in a string.
@@ -59,6 +54,7 @@ module meta
 
 import strconv
 import strings
+import sync.stdatomic
 
 /******************************************************************************
 *
@@ -94,7 +90,7 @@ enum WordBoundaryKind as u8 {
 
 // Inst represents a single bytecode instruction.
 // Packed for memory locality.
-struct Inst {
+struct Inst implements IClone {
 mut:
 	typ          InstType
 	val          rune   // Used by .char
@@ -104,6 +100,7 @@ mut:
 	target_y     int    // Backtrack target for .split
 	group_idx    int    // Capture group index for .save
 	char_class   []rune // Literal runes for character classes
+	char_ranges  []RuneRange // Inclusive ranges retained in compact form.
 	bitmap       [4]u32 // 128-bit bitset for ASCII character classes
 	inverted     bool   // Negation flag for classes
 	ignore_case  bool   // Case-insensitive flag
@@ -114,23 +111,132 @@ mut:
 	word_unicode bool
 }
 
+fn (inst &Inst) clone() Inst {
+	return Inst{
+		typ:          inst.typ
+		val:          inst.val
+		val_str:      inst.val_str.clone()
+		val_len:      inst.val_len
+		target_x:     inst.target_x
+		target_y:     inst.target_y
+		group_idx:    inst.group_idx
+		char_class:   inst.char_class.clone()
+		char_ranges:  inst.char_ranges.clone()
+		bitmap:       inst.bitmap
+		inverted:     inst.inverted
+		ignore_case:  inst.ignore_case
+		unicode_case: inst.unicode_case
+		unicode:      inst.unicode
+		dot_all:      inst.dot_all
+		word_kind:    inst.word_kind
+		word_unicode: inst.word_unicode
+	}
+}
+
+fn (mut inst Inst) free() {
+	unsafe {
+		inst.val_str.free()
+		inst.char_class.free()
+		inst.char_ranges.free()
+	}
+	inst.val_str = ''
+	inst.char_class = []rune{}
+	inst.char_ranges = []RuneRange{}
+}
+
+struct RuneRange {
+	start rune
+	end   rune
+}
+
 // Machine provides a workspace for VM execution.
 // To ensure thread safety, this is created per top-level API call.
 pub struct Machine {
 mut:
-	stack    [2048]int // Backtracking stack stores: [capture_states..., string_ptr, next_pc]
-	captures []int // Flat array of [start, end] byte indices for groups
+	inline_stack [2048]int // Common-case backtracking workspace.
+	grown_stack  []int // Overflow workspace for deeper valid expressions.
+	captures     []int // Flat array of [start, end] byte indices for groups
+	seen_keys    []u64 // Lazily allocated memoization hash table keys.
+	seen_marks   []u32 // Generation stamps for occupied memoization slots.
+	seen_generation u32
+	seen_count      int
 }
 
 fn (mut m Machine) free() {
 	unsafe {
+		m.grown_stack.free()
 		m.captures.free()
+		m.seen_keys.free()
+		m.seen_marks.free()
 	}
+	m.grown_stack = []int{}
 	m.captures = []int{}
+	m.seen_keys = []u64{}
+	m.seen_marks = []u32{}
+}
+
+fn (mut m Machine) begin_memo() {
+	m.seen_generation++
+	m.seen_count = 0
+	if m.seen_generation == 0 {
+		for i in 0 .. m.seen_marks.len {
+			m.seen_marks[i] = 0
+		}
+		m.seen_generation = 1
+	}
+}
+
+fn (mut m Machine) grow_memo() {
+	old_keys := m.seen_keys
+	old_marks := m.seen_marks
+	old_generation := m.seen_generation
+	new_len := if old_keys.len == 0 { 256 } else { old_keys.len * 2 }
+	m.seen_keys = []u64{len: new_len}
+	m.seen_marks = []u32{len: new_len}
+	unsafe {
+		m.seen_keys.flags |= .noslices
+		m.seen_marks.flags |= .noslices
+	}
+	mask := u64(new_len - 1)
+	for i in 0 .. old_keys.len {
+		if old_marks[i] != old_generation {
+			continue
+		}
+		key := old_keys[i]
+		mut slot := int((key * u64(0x9e3779b97f4a7c15)) & mask)
+		for m.seen_marks[slot] == old_generation {
+			slot = (slot + 1) & (new_len - 1)
+		}
+		m.seen_keys[slot] = key
+		m.seen_marks[slot] = old_generation
+	}
+	unsafe {
+		old_keys.free()
+		old_marks.free()
+	}
+}
+
+// Returns true when this state was already reached in the current VM run.
+fn (mut m Machine) memo_seen(key u64) bool {
+	if m.seen_keys.len == 0 || (m.seen_count + 1) * 10 >= m.seen_keys.len * 7 {
+		m.grow_memo()
+	}
+	mask := u64(m.seen_keys.len - 1)
+	mut slot := int((key * u64(0x9e3779b97f4a7c15)) & mask)
+	for m.seen_marks[slot] == m.seen_generation {
+		if m.seen_keys[slot] == key {
+			return true
+		}
+		slot = (slot + 1) & (m.seen_keys.len - 1)
+	}
+	m.seen_keys[slot] = key
+	m.seen_marks[slot] = m.seen_generation
+	m.seen_count++
+	return false
 }
 
 // Regex is the compiled regular expression object.
-pub struct Regex {
+pub struct Regex implements IClone, Drop {
 pub:
 	pattern      string         // The original regex string
 	prog         []Inst         // Compiled bytecode
@@ -139,8 +245,47 @@ pub:
 	prefix_lit   string         // Pre-calculated literal prefix for fast-skip optimization
 	has_prefix   bool           // Whether a literal prefix exists
 	anchored     bool           // True if pattern starts with '^' (optimization hint)
-pub mut:
-	max_stack_depth int // User-defined stack limit hint
+	needs_memo   bool           // True when the program contains branching states.
+mut:
+	refs &stdatomic.AtomicVal[int] = unsafe { nil }
+}
+
+pub fn (re &Regex) clone() Regex {
+	if !isnil(re.refs) {
+		re.refs.add(1)
+	}
+	return Regex{
+		pattern:      re.pattern
+		prog:         re.prog
+		total_groups: re.total_groups
+		group_map:    re.group_map
+		prefix_lit:   re.prefix_lit
+		has_prefix:   re.has_prefix
+		anchored:     re.anchored
+		needs_memo:   re.needs_memo
+		refs:         re.refs
+	}
+}
+
+fn (mut re Regex) drop() {
+	if isnil(re.refs) {
+		return
+	}
+	if re.refs.sub(1) != 1 {
+		re.refs = unsafe { nil }
+		return
+	}
+	unsafe {
+		re.pattern.free()
+		for mut inst in re.prog {
+			inst.free()
+		}
+		re.prog.free()
+		re.group_map.free()
+		re.prefix_lit.free()
+		free(re.refs)
+	}
+	re.refs = unsafe { nil }
 }
 
 // Match contains the results of a successful regex match.
@@ -198,6 +343,7 @@ mut:
 	alternatives        [][]Node
 	group_capture_index int = -1
 	char_set            []rune
+	char_ranges         []RuneRange
 	inverted            bool
 	ignore_case         bool
 	unicode_case        bool
@@ -302,6 +448,12 @@ fn set_bitmap(mut bitmap [4]u32, r rune) {
 
 // compile transforms a regex pattern string into a Regex object.
 pub fn compile(pattern string) !Regex {
+	return compile_with_size_limit(pattern, ~usize(0))
+}
+
+// compile_with_size_limit rejects a compiled program whose approximate heap
+// footprint exceeds `size_limit`.
+pub fn compile_with_size_limit(pattern string, size_limit usize) !Regex {
 	mut group_map := map[string]int{}
 	initial_flags := Flags{
 		unicode: true
@@ -325,16 +477,27 @@ pub fn compile(pattern string) !Regex {
 
 	// Phase 3: Optimization
 	optimized_prog := compiler.optimize()
+	compiler.free()
+	mut compiled_size := usize(optimized_prog.len) * usize(sizeof(Inst))
+	for inst in optimized_prog {
+		compiled_size += usize(inst.val_str.len)
+		compiled_size += usize(inst.char_class.len) * usize(sizeof(rune))
+		compiled_size += usize(inst.char_ranges.len) * usize(sizeof(RuneRange))
+	}
+	if compiled_size > size_limit {
+		return error('compiled regex exceeds size limit of ${size_limit}')
+	}
 
 	// Detect Prefix and Anchor optimizations
 	mut prefix := ''
 	mut has_prefix := false
 	mut anchored := false
+	mut needs_memo := false
 
 	if optimized_prog.len > 0 {
 		first := optimized_prog[0]
 		if first.typ == .string {
-			prefix = first.val_str
+			prefix = first.val_str.clone()
 			has_prefix = true
 		} else if first.typ == .char && !first.ignore_case && first.val < 128 {
 			prefix = unsafe { u8(first.val).ascii_str() }
@@ -343,9 +506,14 @@ pub fn compile(pattern string) !Regex {
 			anchored = true
 		}
 	}
+	for inst in optimized_prog {
+		if inst.typ == .split {
+			needs_memo = true
+			break
+		}
+	}
 
 	return Regex{
-		max_stack_depth: 2048
 		pattern:         pattern
 		prog:            optimized_prog
 		total_groups:    final_group_count
@@ -353,22 +521,39 @@ pub fn compile(pattern string) !Regex {
 		prefix_lit:      prefix
 		has_prefix:      has_prefix
 		anchored:        anchored
+		needs_memo:      needs_memo
+		refs:            stdatomic.new_atomic(1)
 	}
 }
 
 // new_machine allocates a new VM state machine.
 // This isolates the runtime memory (stack/captures) from the compiled regex, allowing thread-safe usage.
 pub fn (r &Regex) new_machine() Machine {
-	// Pre-allocate enough space for stack and captures to avoid re-allocation in hot path
-	return Machine{
+	// Keep the common path allocation-free, but grow for valid expressions instead
+	// of turning workspace exhaustion into a false negative.
+	mut machine := Machine{
 		captures: []int{len: r.total_groups * 2}
 	}
+	unsafe {
+		machine.captures.flags |= .noslices
+	}
+	return machine
 }
 
 // Compiler holds the state for generating the bytecode instructions.
 struct Compiler {
 mut:
 	prog []Inst
+}
+
+fn (mut c Compiler) free() {
+	unsafe {
+		for mut inst in c.prog {
+			inst.free()
+		}
+		c.prog.free()
+	}
+	c.prog = []Inst{}
 }
 
 // emit appends an instruction to the program and returns its index.
@@ -423,7 +608,7 @@ fn (mut c Compiler) optimize() []Inst {
 				continue
 			}
 		}
-		new_prog << inst
+		new_prog << inst.clone()
 		i++
 	}
 	idx_map[c.prog.len] = new_prog.len
@@ -443,6 +628,7 @@ fn (mut c Compiler) optimize() []Inst {
 fn (mut c Compiler) emit_class(node Node) {
 	mut bitmap := [4]u32{}
 	mut char_class := node.char_set.clone()
+	char_ranges := node.char_ranges.clone()
 	mut inverted := node.inverted
 
 	// Pre-compile common classes into the bitmap for O(1) lookups
@@ -515,6 +701,20 @@ fn (mut c Compiler) emit_class(node Node) {
 					}
 				}
 			}
+			for range_ in node.char_ranges {
+				first := if range_.start < 0 { rune(0) } else { range_.start }
+				last := if range_.end > 127 { rune(127) } else { range_.end }
+				for r := first; r <= last; r++ {
+					set_bitmap(mut bitmap, r)
+					if node.ignore_case {
+						if r >= `a` && r <= `z` {
+							set_bitmap(mut bitmap, r - 32)
+						} else if r >= `A` && r <= `Z` {
+							set_bitmap(mut bitmap, r + 32)
+						}
+					}
+				}
+			}
 		}
 		else {}
 	}
@@ -522,6 +722,7 @@ fn (mut c Compiler) emit_class(node Node) {
 	c.emit(Inst{
 		typ:          .class
 		char_class:   char_class
+		char_ranges:  char_ranges
 		bitmap:       bitmap
 		inverted:     inverted
 		ignore_case:  node.ignore_case
@@ -867,14 +1068,16 @@ fn parse_nodes(pattern string, pos_start int, terminator rune, group_counter_sta
 				pos = end + 1
 				inv := content.len > 0 && content[0] == `^`
 				mut set := []rune{}
+				mut ranges := []RuneRange{}
 				mut i := if inv { 1 } else { 0 }
 				for i < content.len {
 					c, next_i := parse_class_rune(content, i)!
 					if next_i < content.len && content[next_i] == `-` && next_i + 1 < content.len {
 						ec, after_end := parse_class_rune(content, next_i + 1)!
-						for r := c; r <= ec; r++ {
-							set << r
+						if ec < c {
+							return error('Invalid character class range')
 						}
+						ranges << RuneRange{c, ec}
 						i = after_end
 					} else {
 						set << c
@@ -884,6 +1087,7 @@ fn parse_nodes(pattern string, pos_start int, terminator rune, group_counter_sta
 				parsed_nodes << Node{
 					typ:          .char_class
 					char_set:     set
+					char_ranges:  ranges
 					inverted:     inv
 					ignore_case:  current_flags.ignore_case
 					unicode_case: current_flags.unicode_case
@@ -975,7 +1179,29 @@ fn parse_nodes(pattern string, pos_start int, terminator rune, group_counter_sta
 					}
 					`a` {
 						parsed_nodes << Node{
-							typ: .lowercase_char
+							typ:          .chr
+							chr:          `\a`
+							ignore_case:  current_flags.ignore_case
+							unicode_case: current_flags.unicode_case
+							unicode:      current_flags.unicode
+						}
+					}
+					`f` {
+						parsed_nodes << Node{
+							typ:          .chr
+							chr:          `\f`
+							ignore_case:  current_flags.ignore_case
+							unicode_case: current_flags.unicode_case
+							unicode:      current_flags.unicode
+						}
+					}
+					`v` {
+						parsed_nodes << Node{
+							typ:          .chr
+							chr:          `\v`
+							ignore_case:  current_flags.ignore_case
+							unicode_case: current_flags.unicode_case
+							unicode:      current_flags.unicode
 						}
 					}
 					`A` {
@@ -1135,6 +1361,12 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 	}
 	escape := content[start + 1]
 	match escape {
+		`a` {
+			return `\a`, start + 2
+		}
+		`f` {
+			return `\f`, start + 2
+		}
 		`n` {
 			return `\n`, start + 2
 		}
@@ -1143,6 +1375,9 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 		}
 		`t` {
 			return `\t`, start + 2
+		}
+		`v` {
+			return `\v`, start + 2
 		}
 		`x` {
 			if start + 4 > content.len {
@@ -1163,6 +1398,20 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 	}
 }
 
+@[inline]
+fn rune_ranges_contain(ranges []RuneRange, value rune, ignore_case bool, unicode_case bool) bool {
+	for range_ in ranges {
+		if if ignore_case && unicode_case {
+			unicode_simple_case_in_range(value, range_.start, range_.end)
+		} else {
+			value >= range_.start && value <= range_.end
+		} {
+			return true
+		}
+	}
+	return false
+}
+
 /******************************************************************************
 *
 * Virtual Machine Execution Engine (Highly Optimized)
@@ -1174,6 +1423,9 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 @[direct_array_access]
 fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 	unsafe {
+		if r.needs_memo {
+			m.begin_memo()
+		}
 		// Optimization: Cast voidptr to typed pointer for direct indexing
 		mut cap_ptr := &int(m.captures.data)
 		cap_len := m.captures.len
@@ -1196,11 +1448,23 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 		str_ptr := text.str
 		str_len := text.len
 
-		// Cache stack data pointer (cast to typed pointer)
-		stack_data := &m.stack[0]
-		stack_max := r.max_stack_depth
+		// Cache stack data pointer (cast to typed pointer). It is refreshed after
+		// growth because reallocating the backing array may move it.
+		mut stack_data := &m.inline_stack[0]
+		mut stack_len := 2048
+		if m.grown_stack.len > 0 {
+			stack_data = &int(m.grown_stack.data)
+			stack_len = m.grown_stack.len
+		}
 
 		for {
+			if r.needs_memo {
+				pc := u64((usize(inst_ptr) - usize(prog_start)) / usize(sizeof(Inst)))
+				state := (u64(sp) << 32) | pc
+				if m.memo_seen(state) {
+					goto backtrack
+				}
+			}
 			// Check if we walked off the program (should be caught by match inst)
 			// Using pointer arithmetic: offset = (inst_ptr - prog_start)
 
@@ -1323,6 +1587,10 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 								}
 							}
 						}
+						if !matched {
+							matched = rune_ranges_contain(inst_ptr.char_ranges, rune(c_byte), false,
+								false)
+						}
 						if matched != inst_ptr.inverted {
 							sp++
 							inst_ptr++
@@ -1344,6 +1612,10 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 								}
 							}
 						}
+						if !matched {
+							matched = rune_ranges_contain(inst_ptr.char_ranges, rune(c_byte),
+								inst_ptr.ignore_case, inst_ptr.unicode_case)
+						}
 					} else {
 						rn, l := read_rune_at(str_ptr, str_len, sp)
 						if l == 0 {
@@ -1359,6 +1631,10 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 								matched = true
 								break
 							}
+						}
+						if !matched {
+							matched = rune_ranges_contain(inst_ptr.char_ranges, rn, inst_ptr.ignore_case,
+								inst_ptr.unicode_case)
 						}
 					}
 
@@ -1394,8 +1670,23 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 					inst_ptr++
 				}
 				.split {
-					if stack_ptr + frame_size >= stack_max {
-						goto backtrack
+					required := stack_ptr + frame_size
+					if required > stack_len {
+						mut new_len := stack_len * 2
+						if new_len < required {
+							new_len = required
+						}
+						if m.grown_stack.len == 0 {
+							m.grown_stack = []int{len: new_len}
+							m.grown_stack.flags |= .noslices
+							for i in 0 .. stack_ptr {
+								m.grown_stack[i] = stack_data[i]
+							}
+						} else {
+							m.grown_stack.grow_len(new_len - m.grown_stack.len)
+						}
+						stack_data = &int(m.grown_stack.data)
+						stack_len = new_len
 					}
 
 					// Optimization: Unrolled stack push
