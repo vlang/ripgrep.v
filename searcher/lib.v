@@ -940,6 +940,16 @@ pub fn Searcher.new() Searcher {
 	}
 }
 
+// V-specific: release reusable search buffers when a worker is retired.
+pub fn (mut s Searcher) free() {
+	unsafe {
+		s.line_buffer.buf.free()
+		s.multi_line_buffer.free()
+	}
+	s.line_buffer.buf = []u8{}
+	s.multi_line_buffer = []u8{}
+}
+
 pub fn (s Searcher) multi_line_with_matcher(matcher_ &matcher.Matcher) bool {
 	if !s.multi_line() {
 		return false

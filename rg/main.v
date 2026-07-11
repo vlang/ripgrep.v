@@ -272,6 +272,13 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		printer_ := args.printer_buffer(mode, bufwtr.buffer())
 		workers << args.search_worker_buffer(matcher_, searcher_, printer_)!
 	}
+	defer {
+		for mut worker in workers {
+			worker.printer().get_mut().free()
+			worker.free()
+		}
+		unsafe { workers.free() }
+	}
 	stats := args.stats()
 	mut shared_value := SearchParallelShared{
 		output_lock:        sync.new_mutex()
@@ -384,6 +391,10 @@ fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.Wa
 		return .quit
 	}
 	return .continue_
+}
+
+fn (mut visitor SearchParallelVisitor) free() {
+	unsafe { free(&visitor) }
 }
 
 fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {

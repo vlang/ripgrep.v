@@ -69,6 +69,10 @@ fn (mut collector ParallelCollector) visit(result WalkResult) WalkState {
 	return .continue_
 }
 
+fn (mut collector ParallelCollector) free() {
+	unsafe { free(&collector) }
+}
+
 struct ParallelCollectorFactory {
 	state &ParallelCollectorState
 }
@@ -115,6 +119,10 @@ fn (mut collector ParallelSkipCollector) visit(result WalkResult) WalkState {
 		return .skip
 	}
 	return .continue_
+}
+
+fn (mut collector ParallelSkipCollector) free() {
+	unsafe { free(&collector) }
 }
 
 struct ParallelSkipCollectorFactory {
@@ -661,6 +669,10 @@ fn (mut visitor QuitParallelVisitor) visit(_result WalkResult) WalkState {
 	return .quit
 }
 
+fn (mut visitor QuitParallelVisitor) free() {
+	unsafe { free(&visitor) }
+}
+
 struct QuitParallelVisitorFactory {
 	visits  &stdatomic.AtomicVal[int]
 	created &stdatomic.AtomicVal[int]
@@ -711,6 +723,32 @@ fn test_parallel_stream_collects_single_root_children() {
 	want := mkpaths(['a', 'a/b', 'a/b/foo', 'x', 'x/y', 'x/y/bar'])
 	if got != want {
 		panic('stream got ${got}, want ${want}')
+	}
+}
+
+fn test_parallel_wide_and_deep_tree_matches_serial() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	for i in 0 .. 128 {
+		dir := os.join_path(td.path(), 'wide-${i:03}')
+		mkdirp(dir)
+		wfile(os.join_path(dir, 'file'), '')
+	}
+	mut deep := os.join_path(td.path(), 'deep')
+	for i in 0 .. 24 {
+		deep = os.join_path(deep, 'level-${i:02}')
+	}
+	mkdirp(deep)
+	wfile(os.join_path(deep, 'file'), '')
+
+	serial := walk_collect(td.path(), WalkBuilder.new(td.path()))
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	parallel := walk_collect_parallel(td.path(), builder)
+	if parallel != serial {
+		panic('wide/deep parallel traversal differs from serial traversal')
 	}
 }
 

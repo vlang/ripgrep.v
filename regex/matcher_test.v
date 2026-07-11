@@ -533,13 +533,88 @@ fn test_rust_regex_unicode_escape_forms() {
 
 fn test_rust_regex_ascii_control_escapes() {
 	patterns := [r'\a', r'\f', r'\v', r'[\a]', r'[\f]', r'[\v]']
-	controls := [[u8(0x07)], [u8(0x0c)], [u8(0x0b)], [u8(0x07)], [u8(0x0c)],
-		[u8(0x0b)]]
+	controls := [[u8(0x07)], [u8(0x0c)], [u8(0x0b)], [u8(0x07)],
+		[u8(0x0c)], [u8(0x0b)]]
 	for i, pattern in patterns {
 		matcher_ := RegexMatcherBuilder.new().build(pattern)!
 		assert matcher.is_match(matcher_, controls[i])!
 		assert !matcher.is_match(matcher_, pattern[1..2].bytes())!
 	}
+}
+
+fn test_rust_regex_character_class_escapes() {
+	tests := {
+		r'[\d]':        ['5']
+		r'[^\d]':       ['a']
+		r'[\w]':        ['_', 'α']
+		r'[\W]':        [' ']
+		r'[\s]':        [' ', '\t']
+		r'[\S]':        ['a']
+		r'[\p{Greek}]': ['α', 'Δ']
+		r'[\P{Greek}]': ['a']
+	}
+	for pattern, haystacks in tests {
+		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
+		for haystack in haystacks {
+			assert matcher.is_match(matcher_, haystack.bytes())!
+		}
+	}
+	for pattern in [r'[\b]', r'[\B]', r'[\A]', r'[\z]'] {
+		if _ := RegexMatcherBuilder.new().build(pattern) {
+			panic('expected character class escape rejection for ${pattern}')
+		} else {
+			assert err.msg().contains('invalid escape sequence found in character class')
+		}
+	}
+	punctuation := {
+		r'[]a]': [']', 'a']
+		r'[-a]': ['-', 'a']
+		r'[a-]': ['a', '-']
+		r'[\-]': ['-']
+	}
+	for pattern, haystacks in punctuation {
+		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
+		for haystack in haystacks {
+			assert matcher.is_match(matcher_, haystack.bytes())!
+		}
+	}
+}
+
+fn test_default_regex_skips_malformed_utf8_in_unicode_mode() {
+	haystack := [u8(`A`), 0x80, `B`, 0xc0, 0xaf, `C`, 0xe0, 0x80, 0x80, `D`, 0xed, 0xa0, 0x80,
+		`E`, 0xf4, 0x90, 0x80, 0x80, `F`, 0xc2, 0xa2, `G`]
+	unicode_dot := RegexMatcherBuilder.new().build('.') or { panic(err.msg()) }
+	expected := [
+		matcher.Match.new(usize(0), usize(1)),
+		matcher.Match.new(usize(2), usize(3)),
+		matcher.Match.new(usize(5), usize(6)),
+		matcher.Match.new(usize(9), usize(10)),
+		matcher.Match.new(usize(13), usize(14)),
+		matcher.Match.new(usize(18), usize(19)),
+		matcher.Match.new(usize(19), usize(21)),
+		matcher.Match.new(usize(21), usize(22)),
+	]
+	mut at := usize(0)
+	for expected_match in expected {
+		actual := unicode_dot.find_at(haystack, at)!.get() or {
+			panic('expected Unicode dot match')
+		}
+		assert actual == expected_match
+		at = actual.end()
+	}
+	assert (unicode_dot.find_at(haystack, at)!).is_none()
+
+	non_x := RegexMatcherBuilder.new().build('[^x]') or { panic(err.msg()) }
+	for start in [usize(1), 3, 6, 10, 14] {
+		actual := non_x.find_at(haystack, start)!.get() or {
+			panic('expected valid match after malformed UTF-8')
+		}
+		assert actual.start() > start
+	}
+
+	byte_dot := RegexMatcherBuilder.new().build(r'(?-u:.)') or { panic(err.msg()) }
+	invalid := byte_dot.find_at(haystack, 1)!.get() or { panic('expected byte-mode dot match') }
+	assert invalid == matcher.Match.new(usize(1), usize(2))
 }
 
 fn test_regex_vm_grows_backtracking_workspace_without_false_negative() {
@@ -574,8 +649,10 @@ fn test_regex_compile_size_and_nest_limits_are_enforced() {
 }
 
 fn test_regex_vm_memoizes_ambiguous_repetition_states() {
-	matcher_ := RegexMatcherBuilder.new().build(r'^(a|aa)*b$')!
-	assert !matcher.is_match(matcher_, 'a'.repeat(40).bytes())!
+	mut builder := RegexMatcherBuilder.new()
+	builder.dfa_size_limit(0)
+	matcher_ := builder.build(r'^(a|aa)*b$')!
+	assert !matcher.is_match(matcher_, 'a'.repeat(20_000).bytes())!
 }
 
 fn test_rust_regex_parse_errors_reject_invalid_captures_ranges_and_properties() {

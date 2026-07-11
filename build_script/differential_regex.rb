@@ -34,6 +34,12 @@ patterns = [
   "\\D+",
   "\\s+",
   "\\S+",
+  "[\\d]+",
+  "[^\\d]+",
+  "[\\w]+",
+  "[\\W]+",
+  "[\\s]+",
+  "[\\S]+",
   "\\p{Greek}+",
   "\\p{Script=Han}+",
   "\\p{General_Category=Uppercase_Letter}+",
@@ -46,6 +52,8 @@ patterns = [
   "[a-c~~b-d]+",
   "[\\x00-\\x7F]+",
   "[\\p{Greek}&&[^Δ]]+",
+  "[\\p{Greek}]+",
+  "[\\P{Greek}]+",
   "\\u{03B1}+",
   "\\u03B1+",
   "\\U000003B1+",
@@ -60,6 +68,10 @@ patterns = [
   "(?:abc|)",
   "()",
   "[.]",
+  "[\\b]",
+  "[\\B]",
+  "[\\A]",
+  "[\\z]",
 ]
 
 # Exercise combinations as well as hand-picked syntax. Keep this deterministic
@@ -107,6 +119,14 @@ contents = [
   "a\r\nc\n",
 ].join.b
 contents << [0xff, 0xfe, 0x00, 0x61, 0x0a].pack("C*")
+contents << [
+  0x41, 0x80, 0x42,
+  0xC0, 0xAF, 0x43,
+  0xE0, 0x80, 0x80, 0x44,
+  0xED, 0xA0, 0x80, 0x45,
+  0xF4, 0x90, 0x80, 0x80, 0x46,
+  0xC2, 0xA2, 0x47, 0x0A,
+].pack("C*")
 
 modes = [
   ["-n"],

@@ -93,20 +93,20 @@ enum WordBoundaryKind as u8 {
 struct Inst implements IClone {
 mut:
 	typ          InstType
-	val          rune   // Used by .char
-	val_str      string // Used by .string
-	val_len      int    // Byte length of val_str
-	target_x     int    // Primary jump/split target
-	target_y     int    // Backtrack target for .split
-	group_idx    int    // Capture group index for .save
-	char_class   []rune // Literal runes for character classes
+	val          rune        // Used by .char
+	val_str      string      // Used by .string
+	val_len      int         // Byte length of val_str
+	target_x     int         // Primary jump/split target
+	target_y     int         // Backtrack target for .split
+	group_idx    int         // Capture group index for .save
+	char_class   []rune      // Literal runes for character classes
 	char_ranges  []RuneRange // Inclusive ranges retained in compact form.
-	bitmap       [4]u32 // 128-bit bitset for ASCII character classes
-	inverted     bool   // Negation flag for classes
-	ignore_case  bool   // Case-insensitive flag
-	unicode_case bool   // Whether case-insensitive matching uses Unicode simple folding.
-	unicode      bool   // Whether consuming instructions decode UTF-8 runes.
-	dot_all      bool   // Whether '.' matches '\n'
+	bitmap       [4]u32      // 128-bit bitset for ASCII character classes
+	inverted     bool        // Negation flag for classes
+	ignore_case  bool        // Case-insensitive flag
+	unicode_case bool        // Whether case-insensitive matching uses Unicode simple folding.
+	unicode      bool        // Whether consuming instructions decode UTF-8 runes.
+	dot_all      bool        // Whether '.' matches '\n'
 	word_kind    WordBoundaryKind
 	word_unicode bool
 }
@@ -153,36 +153,64 @@ struct RuneRange {
 // To ensure thread safety, this is created per top-level API call.
 pub struct Machine {
 mut:
-	inline_stack [2048]int // Common-case backtracking workspace.
-	grown_stack  []int // Overflow workspace for deeper valid expressions.
-	captures     []int // Flat array of [start, end] byte indices for groups
-	seen_keys    []u64 // Lazily allocated memoization hash table keys.
-	seen_marks   []u32 // Generation stamps for occupied memoization slots.
-	seen_generation u32
-	seen_count      int
+	inline_stack        [2048]int // Common-case backtracking workspace.
+	grown_stack         []int     // Overflow workspace for deeper valid expressions.
+	captures            []int     // Flat array of [start, end] byte indices for groups
+	dense_seen_bits     []u64     // Direct state memo for bounded haystack/program products.
+	dense_touched_words []u32     // Bitmap words to clear before the next VM attempt.
+	dense_prog_len      int
+	seen_keys           []u64 // Lazily allocated memoization hash table keys.
+	seen_marks          []u32 // Generation stamps for occupied memoization slots.
+	seen_generation     u32
+	seen_count          int
 }
 
 fn (mut m Machine) free() {
 	unsafe {
 		m.grown_stack.free()
 		m.captures.free()
+		m.dense_seen_bits.free()
+		m.dense_touched_words.free()
 		m.seen_keys.free()
 		m.seen_marks.free()
 	}
 	m.grown_stack = []int{}
 	m.captures = []int{}
+	m.dense_seen_bits = []u64{}
+	m.dense_touched_words = []u32{}
+	m.dense_prog_len = 0
 	m.seen_keys = []u64{}
 	m.seen_marks = []u32{}
 }
 
-fn (mut m Machine) begin_memo() {
+fn (mut m Machine) begin_memo(text_len int, prog_len int) {
 	m.seen_generation++
 	m.seen_count = 0
+	for word in m.dense_touched_words {
+		m.dense_seen_bits[word] = 0
+	}
+	m.dense_touched_words.clear()
 	if m.seen_generation == 0 {
 		for i in 0 .. m.seen_marks.len {
 			m.seen_marks[i] = 0
 		}
 		m.seen_generation = 1
+	}
+	positions := usize(text_len) + 1
+	program_states := usize(prog_len)
+	max_states := usize(64 * (1 << 20)) * 8
+	if program_states > 0 && positions <= max_states / program_states {
+		required_words := int((positions * program_states + 63) / 64)
+		if m.dense_seen_bits.len != required_words {
+			unsafe { m.dense_seen_bits.free() }
+			m.dense_seen_bits = []u64{len: required_words}
+			unsafe {
+				m.dense_seen_bits.flags |= .noslices
+			}
+		}
+		m.dense_prog_len = prog_len
+	} else {
+		m.dense_prog_len = 0
 	}
 }
 
@@ -203,7 +231,7 @@ fn (mut m Machine) grow_memo() {
 			continue
 		}
 		key := old_keys[i]
-		mut slot := int((key * u64(0x9e3779b97f4a7c15)) & mask)
+		mut slot := int(memo_hash(key) & mask)
 		for m.seen_marks[slot] == old_generation {
 			slot = (slot + 1) & (new_len - 1)
 		}
@@ -217,12 +245,26 @@ fn (mut m Machine) grow_memo() {
 }
 
 // Returns true when this state was already reached in the current VM run.
-fn (mut m Machine) memo_seen(key u64) bool {
+fn (mut m Machine) memo_seen(sp int, pc int) bool {
+	if m.dense_prog_len > 0 {
+		index := sp * m.dense_prog_len + pc
+		word := index >> 6
+		bit := u64(1) << u32(index & 63)
+		if m.dense_seen_bits[word] & bit != 0 {
+			return true
+		}
+		if m.dense_seen_bits[word] == 0 {
+			m.dense_touched_words << u32(word)
+		}
+		m.dense_seen_bits[word] |= bit
+		return false
+	}
+	key := (u64(sp) << 32) | u64(pc)
 	if m.seen_keys.len == 0 || (m.seen_count + 1) * 10 >= m.seen_keys.len * 7 {
 		m.grow_memo()
 	}
 	mask := u64(m.seen_keys.len - 1)
-	mut slot := int((key * u64(0x9e3779b97f4a7c15)) & mask)
+	mut slot := int(memo_hash(key) & mask)
 	for m.seen_marks[slot] == m.seen_generation {
 		if m.seen_keys[slot] == key {
 			return true
@@ -233,6 +275,14 @@ fn (mut m Machine) memo_seen(key u64) bool {
 	m.seen_marks[slot] = m.seen_generation
 	m.seen_count++
 	return false
+}
+
+@[inline]
+fn memo_hash(key u64) u64 {
+	mut hash := key
+	hash = (hash ^ (hash >> 30)) * u64(0xbf58476d1ce4e5b9)
+	hash = (hash ^ (hash >> 27)) * u64(0x94d049bb133111eb)
+	return hash ^ (hash >> 31)
 }
 
 // Regex is the compiled regular expression object.
@@ -360,7 +410,7 @@ mut:
 *
 ******************************************************************************/
 
-// read_rune_at decodes a UTF-8 rune from a byte pointer safely.
+// read_rune_at decodes one valid UTF-8 scalar value from a byte pointer.
 // Marked inline to be embedded directly into the VM loop.
 @[inline]
 fn read_rune_at(str &u8, len int, index int) (rune, int) {
@@ -368,23 +418,37 @@ fn read_rune_at(str &u8, len int, index int) (rune, int) {
 		if index >= len {
 			return 0, 0
 		}
-		b0 := u32(str[index])
+		b0 := str[index]
 		if b0 < 0x80 {
 			return rune(b0), 1
 		}
-		if (b0 & 0xE0) == 0xC0 && index + 1 < len {
-			return rune(((b0 & 0x1F) << 6) | (u32(str[index + 1]) & 0x3F)), 2
+		if b0 >= 0xc2 && b0 <= 0xdf && index + 1 < len && is_utf8_continuation_byte(str[index + 1]) {
+			return rune((u32(b0 & 0x1f) << 6) | u32(str[index + 1] & 0x3f)), 2
 		}
-		if (b0 & 0xF0) == 0xE0 && index + 2 < len {
-			return rune(((b0 & 0x0F) << 12) | ((u32(str[index + 1]) & 0x3F) << 6) | (u32(str[
-				index + 2]) & 0x3F)), 3
+		if index + 2 < len && is_utf8_continuation_byte(str[index + 1])
+			&& is_utf8_continuation_byte(str[index + 2]) {
+			if b0 == 0xe0 && str[index + 1] >= 0xa0 || b0 >= 0xe1 && b0 <= 0xec
+				|| b0 == 0xed && str[index + 1] <= 0x9f || b0 >= 0xee && b0 <= 0xef {
+				return rune((u32(b0 & 0x0f) << 12) | (u32(str[index + 1] & 0x3f) << 6) | u32(str[
+					index + 2] & 0x3f)), 3
+			}
 		}
-		if (b0 & 0xF8) == 0xF0 && index + 3 < len {
-			return rune(((b0 & 0x07) << 18) | ((u32(str[index + 1]) & 0x3F) << 12) | ((u32(str[
-				index + 2]) & 0x3F) << 6) | (u32(str[index + 3]) & 0x3F)), 4
+		if index + 3 < len && is_utf8_continuation_byte(str[index + 1])
+			&& is_utf8_continuation_byte(str[index + 2])
+			&& is_utf8_continuation_byte(str[index + 3]) {
+			if b0 == 0xf0 && str[index + 1] >= 0x90 || b0 >= 0xf1 && b0 <= 0xf3
+				|| b0 == 0xf4 && str[index + 1] <= 0x8f {
+				return rune((u32(b0 & 0x07) << 18) | (u32(str[index + 1] & 0x3f) << 12) | (u32(str[
+					index + 2] & 0x3f) << 6) | u32(str[index + 3] & 0x3f)), 4
+			}
 		}
 	}
 	return 0, 0
+}
+
+@[inline]
+fn is_utf8_continuation_byte(byte u8) bool {
+	return byte & 0xc0 == 0x80
 }
 
 // is_ascii_word_char returns true for alphanumeric ASCII characters and underscore.
@@ -514,15 +578,15 @@ pub fn compile_with_size_limit(pattern string, size_limit usize) !Regex {
 	}
 
 	return Regex{
-		pattern:         pattern
-		prog:            optimized_prog
-		total_groups:    final_group_count
-		group_map:       group_map
-		prefix_lit:      prefix
-		has_prefix:      has_prefix
-		anchored:        anchored
-		needs_memo:      needs_memo
-		refs:            stdatomic.new_atomic(1)
+		pattern:      pattern
+		prog:         optimized_prog
+		total_groups: final_group_count
+		group_map:    group_map
+		prefix_lit:   prefix
+		has_prefix:   has_prefix
+		anchored:     anchored
+		needs_memo:   needs_memo
+		refs:         stdatomic.new_atomic(1)
 	}
 }
 
@@ -1424,7 +1488,7 @@ fn rune_ranges_contain(ranges []RuneRange, value rune, ignore_case bool, unicode
 fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 	unsafe {
 		if r.needs_memo {
-			m.begin_memo()
+			m.begin_memo(text.len, r.prog.len)
 		}
 		// Optimization: Cast voidptr to typed pointer for direct indexing
 		mut cap_ptr := &int(m.captures.data)
@@ -1459,9 +1523,8 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 
 		for {
 			if r.needs_memo {
-				pc := u64((usize(inst_ptr) - usize(prog_start)) / usize(sizeof(Inst)))
-				state := (u64(sp) << 32) | pc
-				if m.memo_seen(state) {
+				pc := int((usize(inst_ptr) - usize(prog_start)) / usize(sizeof(Inst)))
+				if m.memo_seen(sp, pc) {
 					goto backtrack
 				}
 			}
@@ -1588,8 +1651,8 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 							}
 						}
 						if !matched {
-							matched = rune_ranges_contain(inst_ptr.char_ranges, rune(c_byte), false,
-								false)
+							matched = rune_ranges_contain(inst_ptr.char_ranges, rune(c_byte),
+								false, false)
 						}
 						if matched != inst_ptr.inverted {
 							sp++
@@ -1633,8 +1696,8 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 							}
 						}
 						if !matched {
-							matched = rune_ranges_contain(inst_ptr.char_ranges, rn, inst_ptr.ignore_case,
-								inst_ptr.unicode_case)
+							matched = rune_ranges_contain(inst_ptr.char_ranges, rn,
+								inst_ptr.ignore_case, inst_ptr.unicode_case)
 						}
 					}
 

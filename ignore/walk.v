@@ -384,6 +384,8 @@ pub type FilterFn = fn (DirEntry) bool
 pub interface ParallelVisitor {
 mut:
 	visit(entry WalkResult) WalkState
+	// V-specific ownership hook for visitor boxes returned by a factory.
+	free()
 }
 
 // Creates one independent visitor for each parallel traversal worker.
@@ -392,11 +394,20 @@ mut:
 	create() ParallelVisitor
 }
 
+fn free_parallel_visitor(visitor ParallelVisitor) {
+	mut owned := visitor
+	owned.free()
+}
+
 struct NoopParallelVisitor {}
 
 fn (mut visitor NoopParallelVisitor) visit(entry WalkResult) WalkState {
 	_ = entry
 	return .continue_
+}
+
+fn (mut visitor NoopParallelVisitor) free() {
+	unsafe { free(&visitor) }
 }
 
 // Handle used for path equality checks, for example when skipping stdout.
@@ -1362,11 +1373,13 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 	if worker_count <= 1 {
 		mut visitor := factory.create()
 		wp.visit_serial(mut visitor)
+		free_parallel_visitor(visitor)
 		return
 	}
 	mut first_visitor := factory.create()
 	mut initial := wp.initial_work(mut first_visitor)
 	if initial.len == 0 {
+		free_parallel_visitor(first_visitor)
 		return
 	}
 	stacks := WorkStealingStacks.new(worker_count, mut initial)
@@ -1414,7 +1427,8 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &std
 		results: results
 		stop:    stop
 	}
-	mut initial := wp.initial_work(mut initial_visitor)
+	mut initial_visitor_box := ParallelVisitor(&initial_visitor)
+	mut initial := wp.initial_work(mut initial_visitor_box)
 	if initial.len == 0 {
 		results <- WalkParallelStreamResult{
 			done: true
@@ -1445,11 +1459,12 @@ fn (wp WalkParallel) stream_serial(results chan WalkParallelStreamResult, stop &
 		results: results
 		stop:    stop
 	}
+	mut visitor_box := ParallelVisitor(&visitor)
 	for path in wp.paths {
 		if stop.load() {
 			break
 		}
-		state := walk.visit_root_path(mut visitor, path)
+		state := walk.visit_root_path(mut visitor_box, path)
 		if state.is_quit() {
 			break
 		}
@@ -1737,6 +1752,9 @@ fn take_work(stacks &WorkStealingStacks, active_workers &stdatomic.AtomicVal[int
 fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visitor_in ParallelVisitor, stop &stdatomic.AtomicVal[bool], active_workers &stdatomic.AtomicVal[int], worker_index int) bool {
 	mut walk := wp.new_walk()
 	mut visitor := visitor_in
+	defer {
+		free_parallel_visitor(visitor)
+	}
 	for !stop.load() {
 		work := take_work(stacks, active_workers, stop, worker_index) or { break }
 		state := walk_stealing_run_one(mut walk, stacks, worker_index, mut visitor, work)
@@ -1754,9 +1772,10 @@ fn walk_stealing_stream_worker(wp WalkParallel, stacks &WorkStealingStacks, resu
 		results: results
 		stop:    stop
 	}
+	mut sender_box := ParallelVisitor(&sender)
 	for !stop.load() {
 		work := take_work(stacks, active_workers, stop, worker_index) or { break }
-		state := walk_stealing_run_one(mut walk, stacks, worker_index, mut sender, work)
+		state := walk_stealing_run_one(mut walk, stacks, worker_index, mut sender_box, work)
 		if state.is_quit() {
 			stop.store(true)
 			break
@@ -1790,12 +1809,14 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	defer {
 		dent.free()
 	}
+	mut descend := true
 	if work.has_root_device {
-		same_fs := is_same_file_system(work.root_device, dent.path()) or {
-			return visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
-		}
-		if !same_fs {
-			return .continue_
+		descend = is_same_file_system(work.root_device, dent.path()) or {
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+			if state.is_quit() {
+				return state
+			}
+			false
 		}
 	}
 	mut child_ignore, has_child_err, child_err := work.ig.add_child(dent.path())
@@ -1817,6 +1838,9 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 		if state.is_quit() || state == .skip {
 			return state
 		}
+	}
+	if !descend {
+		return .skip
 	}
 	if max_depth := walk.max_depth {
 		if usize(dent.depth()) >= max_depth {
@@ -1894,6 +1918,10 @@ fn (mut visitor WalkParallelStreamVisitor) visit(result WalkResult) WalkState {
 	return .continue_
 }
 
+fn (mut visitor WalkParallelStreamVisitor) free() {
+	_ = visitor
+}
+
 fn prepare_root_entry(path string, follow_links bool) (DirEntry, IgnoreError) {
 	link_root := follow_links || os.is_file(path)
 	mut raw := DirEntryRaw.from_path(0, path, link_root) or {
@@ -1937,8 +1965,8 @@ fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth int) ?Ign
 	hchild := Handle.from_path(child_path) or {
 		return io_error(err).with_path(child_path).with_depth(child_depth)
 	}
-	for i := ig_parent.nodes.len - 1; i >= 0; i-- {
-		node := ig_parent.nodes[i]
+	mut node := ig_parent.node
+	for !isnil(node) {
 		if node.is_absolute_parent {
 			break
 		}
@@ -1948,6 +1976,7 @@ fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth int) ?Ign
 		if h.same_file(hchild) {
 			return loop_error(node.dir, child_path).with_depth(child_depth)
 		}
+		node = node.parent
 	}
 	return none
 }

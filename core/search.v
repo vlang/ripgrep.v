@@ -437,6 +437,12 @@ fn (mut worker SearchWorker[W]) drop() {
 	worker.matcher.drop()
 }
 
+// V-specific: release resources owned by this worker once parallel search has joined it.
+pub fn (mut worker SearchWorker[W]) free() {
+	worker.drop()
+	worker.searcher.free()
+}
+
 /// Execute a search over the given haystack.
 pub fn (mut worker SearchWorker[W]) search(haystack &Haystack) !SearchResult {
 	bin := if haystack.is_explicit() {

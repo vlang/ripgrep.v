@@ -352,6 +352,12 @@ fn normalize_backend_pattern(pattern string, config Config, explicit_line_anchor
 			continue
 		}
 		if !escaped && !in_class && ch == `[` {
+			if replacement := normalize_unicode_class_at(pattern, i, effective_config) {
+				out << replacement.text.bytes()
+				i = replacement.next
+				escaped = false
+				continue
+			}
 			if replacement := normalize_posix_alpha_class_at(pattern, i, effective_config) {
 				out << replacement.text.bytes()
 				i = replacement.next
@@ -1617,6 +1623,10 @@ fn validate_rust_escape(pattern string, start int, end int, in_class bool, confi
 		return regex_parse_error(pattern, [RegexErrorSpan{-3, -2}], 'unclosed group')
 	}
 	next := pattern[start + 1]
+	if in_class && next in [`A`, `B`, `b`, `z`] {
+		return regex_parse_error(pattern, [RegexErrorSpan{start, start + 2}],
+			'invalid escape sequence found in character class')
+	}
 	if next == `p` || next == `P` {
 		property_escape := rust_property_escape_at(pattern, start) or {
 			return regex_parse_error(pattern, [RegexErrorSpan{start, start + 2}],
@@ -2180,6 +2190,31 @@ fn normalize_class_set_operation_at(pattern string, start int, config Config) ?P
 	}
 }
 
+fn normalize_unicode_class_at(pattern string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || pattern[start] != `[` {
+		return none
+	}
+	end := find_class_end_nested(pattern, start) or { return none }
+	class_set, ok, next := parse_unicode_class_set_expression(pattern, start + 1, end,
+		config)
+	if !ok || next != end {
+		return none
+	}
+	mut stripped := class_set.clone()
+	if line_term := config.line_terminator {
+		terminators := if line_term.is_crlf() {
+			[UnicodeRange{`\r`, `\r`}, UnicodeRange{`\n`, `\n`}]
+		} else {
+			[UnicodeRange{rune(line_term.as_byte()), rune(line_term.as_byte())}]
+		}
+		stripped = subtract_unicode_ranges(stripped, terminators)
+	}
+	return PatternReplacement{
+		text: if stripped.len == 0 { r'(?:a^)' } else { '[${ranges_backend_class_body(stripped)}]' }
+		next: end + 1
+	}
+}
+
 fn parse_unicode_class_set_expression(pattern string, start int, end int, config Config) ([]UnicodeRange, bool, int) {
 	mut i := start
 	mut negated := false
@@ -2234,7 +2269,7 @@ fn parse_unicode_class_union_until_operation(pattern string, start int, end int,
 			return ranges, false, i
 		}
 		saw_atom = true
-		if i < end && pattern[i] == `-` && !(i + 1 < end && pattern[i + 1] == `-`) {
+		if i + 1 < end && pattern[i] == `-` && pattern[i + 1] != `-` {
 			i++
 			end_atom, after_end := parse_unicode_class_atom(pattern, i, end, config)
 			i = after_end
@@ -2491,6 +2526,9 @@ fn find_class_end_nested(pattern string, start int) ?int {
 	}
 	mut i := start + 1
 	if i < pattern.len && pattern[i] == `^` {
+		i++
+	}
+	if i < pattern.len && pattern[i] == `]` {
 		i++
 	}
 	for i < pattern.len {
@@ -3276,9 +3314,12 @@ fn append_escaped_byte(mut out []u8, byte u8) {
 
 fn escaped_byte(byte u8) ?u8 {
 	return match byte {
+		`a` { u8(`\a`) }
+		`f` { u8(`\f`) }
 		`n` { u8(`\n`) }
 		`r` { u8(`\r`) }
 		`t` { u8(`\t`) }
+		`v` { u8(`\v`) }
 		else { none }
 	}
 }
