@@ -277,7 +277,7 @@ fn (candidate Candidate[^a]) path_prefix[^a](max usize) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
-	return candidate.path_[..int(max)]
+	return unsafe { candidate.path_.substr_unsafe(0, int(max)) }
 }
 
 fn (candidate Candidate[^a]) path_suffix[^a](max usize) string {
@@ -285,7 +285,7 @@ fn (candidate Candidate[^a]) path_suffix[^a](max usize) string {
 		return candidate.path_
 	}
 	start := candidate.path_.len - int(max)
-	return candidate.path_[start..]
+	return unsafe { candidate.path_.substr_unsafe(start, candidate.path_.len) }
 }
 
 type GlobSetMatchStrategy = BasenameLiteralStrategy | BasenamePrefixStrategy | BasenameSuffixStrategy | ExtensionStrategy | LiteralStrategy | PathHasSlashStrategy | PrefixStrategy | RegexSetStrategy | RequiredExtensionStrategy | SuffixStrategy
@@ -548,11 +548,23 @@ struct RegexSetEntry implements IClone {
 }
 
 struct RegexSetStrategy implements IClone {
-	entries []RegexSetEntry
+	entries     []RegexSetEntry
+	ascii_bytes bool
 }
 
 fn (s RegexSetStrategy) is_match[^a](candidate Candidate[^a]) bool {
-	text := candidate.path_.runes()
+	if s.ascii_bytes && candidate.path_.is_ascii() {
+		for entry in s.entries {
+			if glob_matches_candidate_ascii(entry.matcher.pat, candidate) {
+				return true
+			}
+		}
+		return false
+	}
+	mut text := candidate.path_.runes()
+	defer {
+		unsafe { text.free() }
+	}
 	for entry in s.entries {
 		if glob_matches_candidate_runes(entry.matcher.pat, candidate, text) {
 			return true
@@ -562,7 +574,18 @@ fn (s RegexSetStrategy) is_match[^a](candidate Candidate[^a]) bool {
 }
 
 fn (s RegexSetStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
-	text := candidate.path_.runes()
+	if s.ascii_bytes && candidate.path_.is_ascii() {
+		for entry in s.entries {
+			if glob_matches_candidate_ascii(entry.matcher.pat, candidate) {
+				matches << entry.global_index
+			}
+		}
+		return
+	}
+	mut text := candidate.path_.runes()
+	defer {
+		unsafe { text.free() }
+	}
 	for entry in s.entries {
 		if glob_matches_candidate_runes(entry.matcher.pat, candidate, text) {
 			matches << entry.global_index
@@ -716,14 +739,17 @@ fn (b MultiStrategyBuilder) basename_suffix() BasenameSuffixStrategy {
 
 fn (b MultiStrategyBuilder) regex_set(globs []Glob) RegexSetStrategy {
 	mut entries := []RegexSetEntry{}
+	mut ascii_bytes := true
 	for i, glob in globs {
+		ascii_bytes = ascii_bytes && glob.can_match_ascii_bytes()
 		entries << RegexSetEntry{
 			global_index: b.map_[i]
 			matcher:      glob.compile_matcher()
 		}
 	}
 	return RegexSetStrategy{
-		entries: entries
+		entries:     entries
+		ascii_bytes: ascii_bytes
 	}
 }
 

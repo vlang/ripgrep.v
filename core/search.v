@@ -543,17 +543,14 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 
 	/// Search the contents of the given file path.
 	pub fn (mut worker SearchWorker[W]) search_path(mut path string) !SearchResult {
-		defer {
-			unsafe { path.free() }
-		}
 		return match worker.matcher.kind {
 			.rust_regex {
 				worker.search_path_with_regex_matcher(worker.matcher.regex.clone(),
-					printer.PrinterMatcher.rust_regex(worker.matcher.regex.clone()), path.clone())
+					printer.PrinterMatcher.rust_regex(worker.matcher.regex.clone()), path)
 			}
 			.pcre2 {
 				worker.search_path_with_pcre2_matcher(&worker.matcher.pcre2,
-					printer.PrinterMatcher.pcre2(worker.matcher.pcre2.clone()), path.clone())
+					printer.PrinterMatcher.pcre2(worker.matcher.pcre2.clone()), path)
 			}
 		}
 	}
@@ -590,21 +587,24 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 		return match worker.printer.kind {
 			.standard {
 				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
-				worker.searcher.search_path(matcher_ref, path.clone(), &sink) or {
+				defer { sink.free() }
+				worker.searcher.search_path(matcher_ref, &path, &sink) or {
 					return normalize_searcher_error(err)
 				}
 				SearchResult.new(sink.has_match(), stats_clone(sink.stats()))
 			}
 			.summary {
 				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
-				worker.searcher.search_path(matcher_ref, path.clone(), &sink) or {
+				defer { sink.free() }
+				worker.searcher.search_path(matcher_ref, &path, &sink) or {
 					return normalize_searcher_error(err)
 				}
 				SearchResult.new(sink.has_match(), stats_clone((&sink).stats()))
 			}
 			.json {
 				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
-				worker.searcher.search_path(matcher_ref, path.clone(), &sink) or {
+				defer { sink.free() }
+				worker.searcher.search_path(matcher_ref, &path, &sink) or {
 					return normalize_searcher_error(err)
 				}
 				SearchResult.new(sink.has_match(), (&sink).stats().clone())
@@ -620,21 +620,24 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 		return match worker.printer.kind {
 			.standard {
 				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
-				worker.searcher.search_path(matcher_ref, path.clone(), &sink) or {
+				defer { sink.free() }
+				worker.searcher.search_path(matcher_ref, &path, &sink) or {
 					return normalize_searcher_error(err)
 				}
 				SearchResult.new(sink.has_match(), stats_clone(sink.stats()))
 			}
 			.summary {
 				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
-				worker.searcher.search_path(matcher_ref, path.clone(), &sink) or {
+				defer { sink.free() }
+				worker.searcher.search_path(matcher_ref, &path, &sink) or {
 					return normalize_searcher_error(err)
 				}
 				SearchResult.new(sink.has_match(), stats_clone((&sink).stats()))
 			}
 			.json {
 				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
-				worker.searcher.search_path(matcher_ref, path.clone(), &sink) or {
+				defer { sink.free() }
+				worker.searcher.search_path(matcher_ref, &path, &sink) or {
 					return normalize_searcher_error(err)
 				}
 				SearchResult.new(sink.has_match(), (&sink).stats().clone())
@@ -649,6 +652,7 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 		return match worker.printer.kind {
 			.standard {
 				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
+				defer { sink.free() }
 				worker.searcher.search_reader(matcher_ref, mut rdr, &sink) or {
 					return normalize_searcher_error(err)
 				}
@@ -656,6 +660,7 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 			}
 			.summary {
 				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
+				defer { sink.free() }
 				worker.searcher.search_reader(matcher_ref, mut rdr, &sink) or {
 					return normalize_searcher_error(err)
 				}
@@ -663,6 +668,7 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 			}
 			.json {
 				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
+				defer { sink.free() }
 				worker.searcher.search_reader(matcher_ref, mut rdr, &sink) or {
 					return normalize_searcher_error(err)
 				}
@@ -676,6 +682,7 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 		return match worker.printer.kind {
 			.standard {
 				mut sink := worker.printer.standard.sink_with_path(printer_matcher, &path)
+				defer { sink.free() }
 				worker.searcher.search_reader(matcher_ref, mut rdr, &sink) or {
 					return normalize_searcher_error(err)
 				}
@@ -683,6 +690,7 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 			}
 			.summary {
 				mut sink := worker.printer.summary.sink_with_path(printer_matcher, &path)
+				defer { sink.free() }
 				worker.searcher.search_reader(matcher_ref, mut rdr, &sink) or {
 					return normalize_searcher_error(err)
 				}
@@ -690,6 +698,7 @@ fn (mut worker SearchWorker[W]) search_decompression_reader(path string, rdr &cl
 			}
 			.json {
 				mut sink := worker.printer.json.sink_with_path(printer_matcher, &path)
+				defer { sink.free() }
 				worker.searcher.search_reader(matcher_ref, mut rdr, &sink) or {
 					return normalize_searcher_error(err)
 				}

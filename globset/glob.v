@@ -1052,20 +1052,137 @@ fn is_separator(ch rune) bool {
 }
 
 fn glob_matches_candidate[^a](glob Glob, candidate Candidate[^a]) bool {
-	path := if glob.opts.case_insensitive {
+	mut path := if glob.opts.case_insensitive {
 		candidate.path_.to_lower()
 	} else {
 		candidate.path_
 	}
-	return glob_match_tokens(glob.tokens.tokens, glob.opts, path.runes())
+	mut text := path.runes()
+	result := glob_match_tokens(glob.tokens.tokens, glob.opts, text)
+	unsafe { text.free() }
+	if glob.opts.case_insensitive {
+		unsafe { path.free() }
+	}
+	return result
 }
 
 fn glob_matches_candidate_runes[^a](glob Glob, candidate Candidate[^a], text []rune) bool {
 	if glob.opts.case_insensitive {
-		path := candidate.path_.to_lower()
-		return glob_match_tokens(glob.tokens.tokens, glob.opts, path.runes())
+		mut path := candidate.path_.to_lower()
+		mut folded := path.runes()
+		result := glob_match_tokens(glob.tokens.tokens, glob.opts, folded)
+		unsafe {
+			folded.free()
+			path.free()
+		}
+		return result
 	}
 	return glob_match_tokens(glob.tokens.tokens, glob.opts, text)
+}
+
+fn (glob Glob) can_match_ascii_bytes() bool {
+	for tok in glob.tokens.tokens {
+		if tok.kind == .alternates || tok.ch > 0x7F {
+			return false
+		}
+		for rng in tok.ranges {
+			if rng.start > 0x7F || rng.end > 0x7F {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+fn glob_matches_candidate_ascii[^a](glob Glob, candidate Candidate[^a]) bool {
+	return glob_match_tokens_ascii(glob.tokens.tokens, glob.opts, candidate.path_, 0, 0)
+}
+
+fn glob_match_tokens_ascii(tokens []Token, opts GlobOptions, text string, pi int, ti int) bool {
+	if pi >= tokens.len {
+		return ti >= text.len
+	}
+	tok := tokens[pi]
+	match tok.kind {
+		.literal {
+			return ti < text.len && tok.ch == rune(glob_ascii_byte(text[ti], opts.case_insensitive))
+				&& glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1)
+		}
+		.any {
+			if ti >= text.len || (opts.literal_separator && text[ti] == `/`) {
+				return false
+			}
+			return glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1)
+		}
+		.zero_or_more {
+			mut j := ti
+			for {
+				if glob_match_tokens_ascii(tokens, opts, text, pi + 1, j) {
+					return true
+				}
+				if j >= text.len || (opts.literal_separator && text[j] == `/`) {
+					break
+				}
+				j++
+			}
+			return false
+		}
+		.recursive_prefix {
+			if pi == tokens.len - 1 || glob_match_tokens_ascii(tokens, opts, text, pi + 1,
+				ti) {
+				return true
+			}
+			for j := ti; j < text.len; j++ {
+				if text[j] == `/` && glob_match_tokens_ascii(tokens, opts, text, pi + 1, j + 1) {
+					return true
+				}
+			}
+			return false
+		}
+		.recursive_suffix {
+			if ti >= text.len || text[ti] != `/` {
+				return false
+			}
+			if pi == tokens.len - 1 {
+				return true
+			}
+			for j := ti + 1; j <= text.len; j++ {
+				if glob_match_tokens_ascii(tokens, opts, text, pi + 1, j) {
+					return true
+				}
+			}
+			return false
+		}
+		.recursive_zero_or_more {
+			if ti >= text.len || text[ti] != `/` {
+				return false
+			}
+			if glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1) {
+				return true
+			}
+			for j := ti + 1; j < text.len; j++ {
+				if text[j] == `/` && glob_match_tokens_ascii(tokens, opts, text, pi + 1, j + 1) {
+					return true
+				}
+			}
+			return false
+		}
+		.class {
+			return ti < text.len
+				&& glob_class_matches(tok, rune(glob_ascii_byte(text[ti], opts.case_insensitive)))
+				&& glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1)
+		}
+		.alternates {
+			return false
+		}
+	}
+}
+
+fn glob_ascii_byte(byte u8, case_insensitive bool) u8 {
+	if case_insensitive && byte >= `A` && byte <= `Z` {
+		return byte + 32
+	}
+	return byte
 }
 
 fn glob_match_tokens(tokens []Token, opts GlobOptions, text []rune) bool {

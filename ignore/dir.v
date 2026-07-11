@@ -459,7 +459,7 @@ fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] 
 fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
 	mut path_value := path
 	if path_value.starts_with('./') {
-		path_value = path_value[2..]
+		path_value = unsafe { path_value.substr_unsafe(2, path_value.len) }
 	}
 	if !ig.overrides.is_empty() {
 		mat := match_from_override(ig.overrides.matched(path_value, is_dir))
@@ -528,27 +528,30 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 	}
 	if ig.opts.parents {
 		if absolute_base := ig.absolute_base() {
-			absolute_path := parent_absolute_match_path(*absolute_base,
+			mut absolute_path := parent_absolute_match_path(*absolute_base,
 				ig.first_relative_dir_after_absolute_path(), path)
+			defer {
+				unsafe { absolute_path.free() }
+			}
 			for i := ig.nodes.len - 1; i >= 0; i-- {
 				node := ig.nodes[i]
 				if !node.is_absolute_parent {
 					continue
 				}
 					if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
-						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(absolute_path.clone(),
+						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 					if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
-						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(absolute_path.clone(),
+						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 					if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
-						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(absolute_path.clone(),
+						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 					if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
-						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(absolute_path.clone(),
+						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 				saw_git = saw_git || node.has_git
@@ -963,13 +966,13 @@ fn strip_if_is_prefix[^a](prefix string, path &^a string) string {
 	value := *path
 	if prefix == './' {
 		if value.starts_with('./') {
-			return value[2..]
+			return unsafe { value.substr_unsafe(2, value.len) }
 		}
 		return value
 	}
 	if prefix == os.path_separator.str() {
 		if value.starts_with(prefix) {
-			return value[prefix.len..]
+			return unsafe { value.substr_unsafe(prefix.len, value.len) }
 		}
 		return value
 	}
@@ -978,7 +981,7 @@ fn strip_if_is_prefix[^a](prefix string, path &^a string) string {
 	}
 	prefix_with_sep := prefix + os.path_separator.str()
 	if value.starts_with(prefix_with_sep) {
-		return value[prefix_with_sep.len..]
+		return unsafe { value.substr_unsafe(prefix_with_sep.len, value.len) }
 	}
 	return strip_prefix(value, prefix)
 }
@@ -987,7 +990,7 @@ fn parent_absolute_match_path(absolute_base string, relative_base string, path s
 	mut path_to_join := path
 	if relative_base != '' && relative_base != '.' {
 		without_dot_slash := if relative_base.starts_with('./') {
-			relative_base[2..]
+			unsafe { relative_base.substr_unsafe(2, relative_base.len) }
 		} else {
 			relative_base
 		}
@@ -995,7 +998,7 @@ fn parent_absolute_match_path(absolute_base string, relative_base string, path s
 			path_to_join = ''
 		} else if path.len > without_dot_slash.len && path.starts_with(without_dot_slash)
 			&& path[without_dot_slash.len] == os.path_separator[0] {
-			path_to_join = path[without_dot_slash.len + 1..]
+			path_to_join = unsafe { path.substr_unsafe(without_dot_slash.len + 1, path.len) }
 		} else {
 			relative_path := strip_if_is_prefix(without_dot_slash, &path)
 			path_to_join = strip_if_is_prefix('/', &relative_path)

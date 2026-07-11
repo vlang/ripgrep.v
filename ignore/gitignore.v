@@ -301,13 +301,13 @@ fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool
 fn (gi &Gitignore) strip(path string) string {
 	mut stripped := path
 	if stripped.starts_with('./') {
-		stripped = stripped[2..]
+		stripped = unsafe { stripped.substr_unsafe(2, stripped.len) }
 	}
 	if gi.root != '' && gi.root != '.' {
 		if stripped.starts_with(gi.root) {
-			stripped = stripped[gi.root.len..]
+			stripped = unsafe { stripped.substr_unsafe(gi.root.len, stripped.len) }
 			if stripped.starts_with('/') {
-				stripped = stripped[1..]
+				stripped = unsafe { stripped.substr_unsafe(1, stripped.len) }
 			}
 		}
 	}

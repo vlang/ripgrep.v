@@ -144,9 +144,13 @@ pub fn (mut wtr BufferWriter) separator(separator ?[]u8) {
 
 /// Creates a new empty buffer.
 pub fn (wtr BufferWriter) buffer() Buffer {
+	mut bytes := []u8{}
+	// `Buffer` has Rust `Vec<u8>` ownership: shared views cannot coexist with
+	// mutation. Let array growth release its previous backing allocation.
+	unsafe { bytes.flags |= .noslices }
 	return Buffer{
 		color_choice: wtr.color_choice
-		bytes:        []u8{}
+		bytes:        bytes
 	}
 }
 
@@ -184,6 +188,7 @@ pub fn (mut buffer Buffer) clear() {
 pub fn (mut buffer Buffer) free() {
 	unsafe { buffer.bytes.free() }
 	buffer.bytes = []u8{}
+	unsafe { buffer.bytes.flags |= .noslices }
 }
 
 /// Moves the current contents into a new buffer and leaves this buffer empty.
@@ -193,6 +198,7 @@ pub fn (mut buffer Buffer) take() Buffer {
 		bytes:        buffer.bytes
 	}
 	buffer.bytes = []u8{}
+	unsafe { buffer.bytes.flags |= .noslices }
 	return taken
 }
 

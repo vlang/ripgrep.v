@@ -964,15 +964,12 @@ pub fn (s Searcher) multi_line_with_matcher(matcher_ matcher.Matcher) bool {
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_file` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_path(matcher_ matcher.Matcher, mut path string, write_to Sink) ! {
-	defer {
-		unsafe { path.free() }
-	}
-	mut file := os.open(path) or { return err }
+pub fn (mut s Searcher) search_path[^p](matcher_ matcher.Matcher, path &^p string, write_to Sink) ! {
+	mut file := os.open(*path) or { return err }
 	defer {
 		file.close()
 	}
-	s.search_file_maybe_path(matcher_, mut file, path, true, write_to)!
+	s.search_file_maybe_path(matcher_, mut file, *path, true, write_to)!
 }
 
 /// Execute a search over a file and write the results to the given sink.
@@ -1115,6 +1112,7 @@ fn file_needs_transcoding(config Config, mut file os.File, path string, has_path
 
 fn file_has_bom(mut file os.File) bool {
 	mut prefix := []u8{len: 3}
+	defer { unsafe { prefix.free() } }
 	nread := file.read(mut prefix) or { return false }
 	return slice_has_bom(prefix[..nread])
 }
@@ -1129,6 +1127,7 @@ fn file_has_bom_at(mut file os.File, pos i64) bool {
 		current := file.tell() or { return false }
 		file.seek(pos, .start) or { return false }
 		mut prefix := []u8{len: 3}
+		defer { unsafe { prefix.free() } }
 		nread := file.read(mut prefix) or {
 			file.seek(current, .start) or {}
 			return false
@@ -1137,6 +1136,7 @@ fn file_has_bom_at(mut file os.File, pos i64) bool {
 		return slice_has_bom(prefix[..nread])
 	} $else {
 		mut prefix := []u8{len: 3}
+		defer { unsafe { prefix.free() } }
 		nread := C.pread(file.fd, prefix.data, u64(prefix.len), pos)
 		if nread <= 0 {
 			return false

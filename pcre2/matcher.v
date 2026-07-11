@@ -176,7 +176,9 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 			}
 		}
 		capture_count_value := usize(C.rg_pcre2_capture_count(code)) + 1
-		capture_names := pcre2_capture_names(code)
+		capture_names := &CaptureNames{
+			values: pcre2_capture_names(code)
+		}
 		mut use_match_context := false
 		mut max_stack := usize(0)
 		if stack_size := builder.max_jit_stack_size {
@@ -187,6 +189,10 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 		}
 		inner := C.rg_pcre2_regex_new(code, if use_match_context { 1 } else { 0 }, max_stack)
 		if isnil(inner) {
+			unsafe {
+				capture_names.values.free()
+				free(capture_names)
+			}
 			return Error.regex_message('failed to allocate PCRE2 regex')
 		}
 		return RegexMatcher{
@@ -420,7 +426,13 @@ pub struct RegexMatcher implements IClone, Drop {
 	inner               voidptr
 	refs                &stdatomic.AtomicVal[int]
 	capture_count_value usize
-	capture_names       map[string]usize
+	capture_names       &CaptureNames = unsafe { nil }
+}
+
+@[heap]
+struct CaptureNames {
+mut:
+	values map[string]usize
 }
 
 /// Create a new matcher from the given pattern using the default
@@ -432,6 +444,9 @@ pub fn RegexMatcher.new(pattern string) !RegexMatcher {
 pub fn (re &RegexMatcher) clone() RegexMatcher {
 	mut inner := re.inner
 	mut refs := re.refs
+	mut capture_names := &CaptureNames{
+		values: map[string]usize{}
+	}
 	$if pcre2 ? {
 		if !isnil(re.inner) {
 			inner = C.rg_pcre2_regex_clone(re.inner)
@@ -441,11 +456,20 @@ pub fn (re &RegexMatcher) clone() RegexMatcher {
 			refs = stdatomic.new_atomic(1)
 		}
 	}
+	if !isnil(re.capture_names) {
+		unsafe {
+			capture_names.values.free()
+			free(capture_names)
+		}
+		capture_names = &CaptureNames{
+			values: re.capture_names.values.clone()
+		}
+	}
 	return RegexMatcher{
 		inner:               inner
 		refs:                refs
 		capture_count_value: re.capture_count_value
-		capture_names:       re.capture_names.clone()
+		capture_names:       capture_names
 	}
 }
 
@@ -461,6 +485,14 @@ pub fn (mut re RegexMatcher) drop() {
 			re.inner = voidptr(0)
 			re.refs = unsafe { nil }
 		}
+	}
+	if !isnil(re.capture_names) {
+		unsafe {
+			mut names := re.capture_names
+			names.values.free()
+			free(names)
+		}
+		re.capture_names = unsafe { nil }
 	}
 }
 
@@ -536,7 +568,10 @@ pub fn (re &RegexMatcher) capture_count() usize {
 }
 
 pub fn (re &RegexMatcher) capture_index(name string) ?usize {
-	if index := re.capture_names[name] {
+	if isnil(re.capture_names) {
+		return none
+	}
+	if index := re.capture_names.values[name] {
 		return index
 	}
 	return none

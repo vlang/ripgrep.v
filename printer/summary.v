@@ -380,6 +380,11 @@ fn (mut sink SummarySink[^p, ^s, W]) drop[^p, ^s]() {
 	}
 }
 
+/// Release resources owned by this sink once its search is complete.
+pub fn (mut sink SummarySink[^p, ^s, W]) free[^p, ^s]() {
+	sink.drop()
+}
+
 /// Returns true if and only if this printer received a match in the
 /// previous search.
 ///

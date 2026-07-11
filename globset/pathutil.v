@@ -10,7 +10,9 @@ fn file_name(path string) ?string {
 	}
 	last_slash := path.last_index_u8(`/`)
 	start := if last_slash < 0 { 0 } else { last_slash + 1 }
-	got := path[start..]
+	// This is a borrowed view into `path`, just like Rust's `Path::file_name`.
+	// Using `substr` here allocates one string for every glob candidate.
+	got := unsafe { path.substr_unsafe(start, path.len) }
 	if got == '..' {
 		return none
 	}
@@ -41,7 +43,7 @@ fn file_name_ext(name string) ?string {
 	if last_dot_at < 0 {
 		return none
 	}
-	return name[last_dot_at..]
+	return unsafe { name.substr_unsafe(last_dot_at, name.len) }
 }
 
 /// Normalizes a path to use `/` as a separator everywhere, even on platforms

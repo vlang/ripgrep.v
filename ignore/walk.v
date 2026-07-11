@@ -1383,6 +1383,12 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 	for thread in threads {
 		thread.wait()
 	}
+	unsafe { threads.free() }
+	stacks.free()
+	unsafe {
+		free(quit_now)
+		free(active_workers)
+	}
 }
 
 // A result emitted by unordered parallel traversal.
@@ -1425,6 +1431,9 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &std
 	for thread in threads {
 		thread.wait()
 	}
+	unsafe { threads.free() }
+	stacks.free()
+	unsafe { free(active_workers) }
 	results <- WalkParallelStreamResult{
 		done: true
 	}
@@ -1558,19 +1567,89 @@ struct WalkStealingWork {
 @[heap]
 struct WorkStealingStacks {
 	mutex  &sync.Mutex
-	queues [][]WalkStealingWork
+	queues []WorkStealingQueue
+}
+
+struct WorkStealingQueue {
+mut:
+	items []WalkStealingWork
+	head  int
+}
+
+fn WorkStealingQueue.new() WorkStealingQueue {
+	mut items := []WalkStealingWork{}
+	unsafe { items.flags |= .noslices }
+	return WorkStealingQueue{
+		items: items
+	}
+}
+
+fn (queue &WorkStealingQueue) len() int {
+	return queue.items.len - queue.head
+}
+
+fn (mut queue WorkStealingQueue) push(work WalkStealingWork) {
+	queue.items << work
+}
+
+fn (mut queue WorkStealingQueue) pop_back() ?WalkStealingWork {
+	if queue.len() == 0 {
+		return none
+	}
+	work := queue.items.pop()
+	if queue.items.len == queue.head {
+		queue.items.clear()
+		queue.head = 0
+	}
+	return work
+}
+
+fn (mut queue WorkStealingQueue) pop_front() ?WalkStealingWork {
+	if queue.len() == 0 {
+		return none
+	}
+	work := queue.items[queue.head]
+	queue.head++
+	if queue.items.len == queue.head {
+		queue.items.clear()
+		queue.head = 0
+	}
+	return work
+}
+
+fn (mut queue WorkStealingQueue) free() {
+	unsafe { queue.items.free() }
+	queue.items = []WalkStealingWork{}
+	queue.head = 0
 }
 
 fn WorkStealingStacks.new(worker_count int, mut initial []WalkStealingWork) &WorkStealingStacks {
-	mut queues := [][]WalkStealingWork{len: worker_count}
+	mut queues := []WorkStealingQueue{len: worker_count}
+	for i in 0 .. queues.len {
+		queues[i] = WorkStealingQueue.new()
+	}
 	mut worker_index := 0
 	for initial.len > 0 {
-		queues[worker_index] << initial.pop()
+		queues[worker_index].push(initial.pop())
 		worker_index = (worker_index + 1) % worker_count
 	}
+	unsafe { initial.free() }
 	return &WorkStealingStacks{
 		mutex: sync.new_mutex()
 		queues: queues
+	}
+}
+
+fn (stacks &WorkStealingStacks) free() {
+	unsafe {
+		mut owned := &WorkStealingStacks(stacks)
+		for i in 0 .. owned.queues.len {
+			owned.queues[i].free()
+		}
+		owned.queues.free()
+		owned.mutex.destroy()
+		free(owned.mutex)
+		free(owned)
 	}
 }
 
@@ -1578,7 +1657,7 @@ fn (stacks &WorkStealingStacks) push(worker_index int, work WalkStealingWork) {
 	stacks.mutex.lock()
 	unsafe {
 		mut mutable_stacks := &WorkStealingStacks(stacks)
-		mutable_stacks.queues[worker_index] << work
+		mutable_stacks.queues[worker_index].push(work)
 	}
 	stacks.mutex.unlock()
 }
@@ -1590,23 +1669,21 @@ fn (stacks &WorkStealingStacks) take(worker_index int) ?WalkStealingWork {
 	}
 	unsafe {
 		mut mutable_stacks := &WorkStealingStacks(stacks)
-		if mutable_stacks.queues[worker_index].len > 0 {
-			return mutable_stacks.queues[worker_index].pop()
+		if work := mutable_stacks.queues[worker_index].pop_back() {
+			return work
 		}
 		for offset in 1 .. mutable_stacks.queues.len {
 			victim_index := (worker_index + offset) % mutable_stacks.queues.len
-			victim_len := mutable_stacks.queues[victim_index].len
+			victim_len := mutable_stacks.queues[victim_index].len()
 			if victim_len == 0 {
 				continue
 			}
 			steal_count := if victim_len == 1 { 1 } else { victim_len / 2 }
-			mut stolen := []WalkStealingWork{cap: steal_count}
-			for _ in 0 .. steal_count {
-				stolen << mutable_stacks.queues[victim_index][0]
-				mutable_stacks.queues[victim_index].delete(0)
+			work := mutable_stacks.queues[victim_index].pop_front() or { continue }
+			for _ in 1 .. steal_count {
+				stolen := mutable_stacks.queues[victim_index].pop_front() or { break }
+				mutable_stacks.queues[worker_index].push(stolen)
 			}
-			work := stolen.pop()
-			mutable_stacks.queues[worker_index] << stolen
 			return work
 		}
 	}
