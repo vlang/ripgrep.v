@@ -180,17 +180,16 @@ pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 	if command.has_env {
 		process.set_environment(command.env)
 	}
+	$if windows {
+		if command.has_stdin_path {
+			process.set_stdin_path(command.stdin_path)
+		}
+	}
 	process.set_redirect_stdio()
 	process.run()
 	if process.err.len > 0 {
 		process.close()
 		return error(CommandError.io(error(process.err)).msg())
-	}
-	if command.has_stdin_path {
-		builder.write_buffered_stdin(mut process, command.stdin_path) or {
-			process.close()
-			return err
-		}
 	}
 	stderr := if builder.async_stderr {
 		StderrReader.new_async(mut process)
@@ -259,68 +258,6 @@ fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !Comman
 		process:     process
 		has_process: true
 		stderr:      stderr
-	}
-}
-
-fn (builder CommandReaderBuilder) write_buffered_stdin(mut process os.Process, path string) ! {
-	_ = builder
-	mut file := os.open(path) or { return error(CommandError.io(err).msg()) }
-	defer {
-		file.close()
-	}
-	mut buf := []u8{len: 32 * 1024}
-	for {
-		nread := file.read(mut buf) or {
-			if err is io.Eof {
-				break
-			}
-			return error(CommandError.io(err).msg())
-		}
-		if nread <= 0 {
-			break
-		}
-		write_process_stdin(mut process, buf[..nread])!
-	}
-	close_process_pipe(mut process, .stdin)
-}
-
-fn write_process_stdin(mut process os.Process, buf []u8) ! {
-	if buf.len == 0 {
-		return
-	}
-	$if !windows {
-		fd := process.stdio_fd[int(os.ChildProcessPipeKind.stdin)]
-		if fd == -1 {
-			return error(CommandError.io(error_with_code(os.posix_get_error_msg(errno_ebadf),
-				errno_ebadf)).msg())
-		}
-		mut written_total := 0
-		for written_total < buf.len {
-			ptr := unsafe { voidptr(usize(buf.data) + usize(written_total)) }
-			C.errno = 0
-			written := int(C.write(fd, ptr, buf.len - written_total))
-			if written < 0 {
-				mut code := int(C.errno)
-				if code == 0 {
-					code = errno_epipe
-				}
-				if code == errno_eintr {
-					continue
-				}
-				return error(CommandError.io(error_with_code(os.posix_get_error_msg(code),
-					code)).msg())
-			}
-			if written == 0 {
-				return error(CommandError.io(error('failed writing to child stdin: wrote zero bytes')).msg())
-			}
-			written_total += written
-		}
-	} $else {
-		// V-specific: `os.Process.stdin_write` has no error return, so a
-		// failed write to child stdin cannot be detected here. A child that
-		// fails because of missing input still surfaces its error through
-		// its exit status when the reader is closed.
-		process.stdin_write(buf.bytestr())
 	}
 }
 
@@ -443,7 +380,7 @@ pub fn (mut builder CommandReaderBuilder) async_stderr(yes bool) &CommandReaderB
 /// rdr.read_to_end(&mut contents)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
-pub struct CommandReader {
+pub struct CommandReader implements Drop {
 mut:
 	process       os.Process
 	has_process   bool
@@ -490,8 +427,6 @@ pub fn CommandReader.new(command Command) !CommandReader {
 /// if your code always calls `read` to EOF, as `read` takes care of
 /// calling `close` in this case.
 ///
-/// V-specific: Rust also calls `close` from `Drop`. This port provides a
-/// `free` method as a last line of defense for V-managed values.
 pub fn (mut reader CommandReader) close() ! {
 	if reader.closed {
 		if msg := reader.close_error {
@@ -534,9 +469,13 @@ pub fn (mut reader CommandReader) close() ! {
 	return error(msg)
 }
 
+fn (mut reader CommandReader) drop() {
+	reader.close() or {}
+}
+
 @[unsafe]
 pub fn (mut reader CommandReader) free() {
-	reader.close() or {}
+	reader.drop()
 }
 
 pub fn (mut reader CommandReader) read(mut buf []u8) !int {
@@ -584,9 +523,7 @@ fn (mut reader CommandReader) read_impl(mut buf []u8, report_close_error bool) !
 			if !report_close_error {
 				return io.Eof{}
 			}
-			reader.close() or {
-				return error(err.msg())
-			}
+			reader.close() or { return error(err.msg()) }
 			return io.Eof{}
 		}
 		time.sleep(10 * time.millisecond)

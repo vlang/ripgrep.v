@@ -42,6 +42,25 @@ pub fn (err IgnoreError) clone() IgnoreError {
 	}
 }
 
+// V-specific: releases storage owned by this translated error value.
+pub fn (mut err IgnoreError) free() {
+	for mut nested in err.nested {
+		nested.free()
+	}
+	unsafe {
+		err.message.free()
+		err.path.free()
+		err.ancestor.free()
+		err.child.free()
+		err.nested.free()
+	}
+	err.message = ''
+	err.path = ''
+	err.ancestor = ''
+	err.child = ''
+	err.nested = []IgnoreError{}
+}
+
 pub fn io_error(err IError) IgnoreError {
 	return IgnoreError{
 		kind: .io

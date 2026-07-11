@@ -167,7 +167,7 @@ pub fn (mut wtr BufferWriter) print(buffer &Buffer) ! {
 
 /// Returns the contents of this buffer.
 pub fn (buffer Buffer) as_slice() []u8 {
-	return buffer.bytes.clone()
+	return buffer.bytes
 }
 
 /// Returns true when this buffer is empty.
@@ -177,6 +177,12 @@ pub fn (buffer Buffer) is_empty() bool {
 
 /// Clears the contents of this buffer.
 pub fn (mut buffer Buffer) clear() {
+	buffer.bytes.clear()
+}
+
+/// Releases the allocation owned by this buffer.
+pub fn (mut buffer Buffer) free() {
+	unsafe { buffer.bytes.free() }
 	buffer.bytes = []u8{}
 }
 
@@ -345,13 +351,8 @@ pub fn (mut stream StandardStream) write(buf []u8) !int {
 
 pub fn (mut stream StandardStream) flush() ! {
 	if stream.buffer.len > 0 {
-		buffer := stream.buffer
-		stream.buffer = if stream.kind == .block_buffered {
-			[]u8{cap: standard_stream_block_capacity}
-		} else {
-			[]u8{}
-		}
-		stream.write_direct(buffer)!
+		stream.write_direct(stream.buffer)!
+		stream.buffer.clear()
 	}
 	flush_stdout()
 }

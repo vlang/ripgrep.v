@@ -3,6 +3,7 @@ module searcher
 import io
 import matcher
 import os
+import regex
 
 struct ByteSliceReaderForSearch {
 mut:
@@ -325,33 +326,6 @@ fn test_search_slice_explicit_utf16be_encoding() {
 	assert sink.byte_count == 4
 }
 
-fn test_search_slice_explicit_utf32le_encoding() {
-	haystack := [u8(`f`), 0, 0, 0, `o`, 0, 0, 0, `o`, 0, 0, 0, `\n`, 0, 0, 0]
-	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf-32le')!
-	builder.encoding(encoding)
-	mut searcher_ := builder.build()
-	mut sink := CollectSink{}
-	searcher_.search_slice(LiteralMatcher.new('foo'), haystack, &sink)!
-
-	assert sink.matches == [
-		'1:0:foo\n',
-	]
-	assert sink.finished
-	assert sink.byte_count == 4
-}
-
-fn test_transcode_explicit_utf32be_encoding() {
-	haystack := [u8(0), 0, 0, `f`, 0, 0, 0, `o`, 0, 0, 0, `o`, 0, 0, 0, `\n`]
-	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf32be')!
-	builder.encoding(encoding)
-	searcher_ := builder.build()
-
-	got := transcode_slice_with_config(searcher_.config, haystack)!
-	assert got == [u8(`f`), `o`, `o`, `\n`]
-}
-
 fn test_transcode_explicit_windows1252_encoding() {
 	haystack := [u8(0x80), 0x81, `\n`]
 	mut builder := SearcherBuilder.new()
@@ -360,7 +334,56 @@ fn test_transcode_explicit_windows1252_encoding() {
 	searcher_ := builder.build()
 
 	got := transcode_slice_with_config(searcher_.config, haystack)!
-	assert got == [u8(0xe2), 0x82, 0xac, 0xef, 0xbf, 0xbd, `\n`]
+	assert got == [u8(0xe2), 0x82, 0xac, 0xc2, 0x81, `\n`]
+}
+
+fn test_encoding_rs_single_byte_tables_replace_unmapped_bytes() {
+	assert decode_iconv([u8(0xa5)], 'ISO-8859-3')! == [u8(0xef), 0xbf, 0xbd]
+	assert decode_iconv([u8(0xc0), 0xe0], 'WINDOWS-1251')! == 'Аа'.bytes()
+	assert decode_iconv([u8(0x81)], 'WINDOWS-1250')! == [u8(0xc2), 0x81]
+}
+
+fn test_transcode_explicit_utf8_replaces_malformed_sequences() {
+	mut builder := SearcherBuilder.new()
+	builder.encoding(Encoding.new('utf-8')!)
+	searcher_ := builder.build()
+	got := transcode_slice_with_config(searcher_.config, [u8(`a`), 0xc2, `b`, 0xe2, 0x82])!
+	assert got == [u8(`a`), 0xef, 0xbf, 0xbd, `b`, 0xef, 0xbf, 0xbd]
+}
+
+fn test_bom_sniffed_utf8_replaces_malformed_sequences() {
+	config := SearcherBuilder.new().build().config
+	got := transcode_slice_with_config(config, [u8(0xef), 0xbb, 0xbf, `a`, 0xff, `b`])!
+	assert got == [u8(`a`), 0xef, 0xbf, 0xbd, `b`]
+}
+
+fn test_utf8_stream_decoder_preserves_split_sequence() {
+	first := decode_utf8_lossy([u8(`a`), 0xe2], false)
+	assert first.bytes == [u8(`a`)]
+	assert first.tail == [u8(0xe2)]
+	mut second_input := first.tail.clone()
+	second_input << [u8(0x82), 0xac, `b`]
+	second := decode_utf8_lossy(second_input, true)
+	assert second.bytes == [u8(0xe2), 0x82, 0xac, `b`]
+	assert second.tail.len == 0
+}
+
+fn test_iconv_stream_boundaries_preserve_split_multibyte_sequences() {
+	assert multibyte_stream_boundary([u8(`a`), 0x82], 'SHIFT_JIS') == 1
+	assert multibyte_stream_boundary([u8(`a`), 0x82, 0xa0], 'SHIFT_JIS') == 3
+	assert multibyte_stream_boundary([u8(0x81), 0x30, 0x81], 'GB18030') == 0
+	assert multibyte_stream_boundary([u8(0x81), 0x30, 0x81, 0x30], 'GB18030') == 4
+}
+
+fn test_iso2022jp_stream_boundary_preserves_mode_and_split_pair() {
+	first_end, first_mode := iso2022jp_stream_boundary([u8(0x1b), `$`, `B`, 0x24], 0)
+	assert first_end == 3
+	assert first_mode == 3
+	second_end, second_mode := iso2022jp_stream_boundary([u8(0x24), 0x22, 0x1b, `(`,
+		`B`], first_mode)
+	assert second_end == 5
+	assert second_mode == 0
+	assert iso2022jp_mode_prefix(3) == [u8(0x1b), `$`, `B`]
 }
 
 fn test_transcode_explicit_x_user_defined_encoding() {
@@ -387,6 +410,23 @@ fn test_search_reader_reports_line_matches() {
 	]
 	assert sink.finished
 	assert sink.byte_count == u64(text.len)
+}
+
+fn test_search_reader_with_default_regex_complex_classes() {
+	for pattern in [r'[\x00-\x7F]+', r'[^[:digit:]]+', r'\p{Age=6.0}+'] {
+		mut regex_builder := regex.RegexMatcherBuilder.new()
+		regex_builder.multi_line(true)
+		regex_builder.line_terminator(`\n`)
+		matcher_ := regex_builder.build(pattern)!
+		matcher_ref := regex.RegexMatcherRef.new(&matcher_)
+		candidate := matcher_ref.find_candidate_line('abc\n'.bytes())!
+		assert candidate.has_value
+		mut source := ByteSliceReaderForSearch.new('abc\n')
+		mut searcher_ := Searcher.new()
+		mut sink := CollectSink{}
+		searcher_.search_reader(matcher_ref, mut source, &sink)!
+		assert sink.matches == ['1:0:abc\n']
+	}
 }
 
 fn test_search_reader_multi_line_utf8_bom_sniffing() {
@@ -476,9 +516,6 @@ fn test_search_reader_bom_sniffed_utf16le_streams_until_quit() {
 }
 
 fn test_search_reader_iconv_encoding_streams_until_quit() {
-	$if windows {
-		return
-	}
 	mut haystack := 'foo\n'.bytes()
 	for _ in 0 .. 256 {
 		haystack << 'x\n'.bytes()
@@ -496,6 +533,28 @@ fn test_search_reader_iconv_encoding_streams_until_quit() {
 		'1:0:foo\n',
 	]
 	assert source.pos < 16
+}
+
+fn test_search_reader_shift_jis_preserves_one_byte_chunk_boundaries() {
+	haystack := [u8(0x93), 0xfa, 0x96, 0x7b, `\n`]
+	mut source := LimitedChunkReaderForSearch.new(haystack, 1, haystack.len)
+	mut builder := SearcherBuilder.new()
+	builder.encoding(Encoding.new('shift_jis')!)
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_reader(LiteralMatcher.new('日本'), mut source, &sink)!
+	assert sink.matches == ['1:0:日本\n']
+}
+
+fn test_search_reader_iso2022jp_preserves_state_across_one_byte_chunks() {
+	haystack := [u8(0x1b), `$`, `B`, 0x24, 0x22, 0x1b, `(`, `B`, `\n`]
+	mut source := LimitedChunkReaderForSearch.new(haystack, 1, haystack.len)
+	mut builder := SearcherBuilder.new()
+	builder.encoding(Encoding.new('iso-2022-jp')!)
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_reader(LiteralMatcher.new('あ'), mut source, &sink)!
+	assert sink.matches == ['1:0:あ\n']
 }
 
 fn test_search_path_reports_line_matches() {

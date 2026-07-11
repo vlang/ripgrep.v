@@ -162,6 +162,10 @@ fn escape_debug(bytes []u8) string {
 	mut out := []u8{}
 	for byte in bytes {
 		match byte {
+			0 {
+				out << `\\`
+				out << `0`
+			}
 			`\n` {
 				out << `\\`
 				out << `n`

@@ -1,7 +1,7 @@
 module regex
 
 import matcher
-import regex.pcre
+import regex.meta
 
 $if !windows {
 	#include <string.h>
@@ -20,9 +20,10 @@ $if !windows {
 /// The syntax supported is documented as part of the regex crate:
 /// <https://docs.rs/regex/#syntax>.
 ///
-/// V-specific: matching is currently implemented with V's `regex.pcre`
-/// backend plus translated HIR/literal analysis. This is not a full semantic
-/// replacement for Rust ripgrep's `regex-automata::meta::Regex` backend.
+/// V-specific: matching is implemented by the pure-V `regex.meta`
+/// non-backtracking automata VM plus translated HIR/literal analysis. Its
+/// bytes, Unicode, capture and empty-match behavior is kept aligned with
+/// Rust ripgrep's `regex-automata::meta::Regex` by differential tests.
 pub struct RegexMatcherBuilder implements IClone {
 mut:
 	config Config
@@ -55,7 +56,7 @@ pub fn (builder RegexMatcherBuilder) build(pattern string) !RegexMatcher {
 pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher {
 	if patterns.len == 0 {
 		mut config := builder.config.clone()
-		never := pcre.compile(r'\b\B') or { return Error.regex(err.msg()) }
+		never := meta.compile(r'\b\B') or { return Error.regex(err.msg()) }
 		config.line_terminator = builder.config.line_terminator
 		return RegexMatcher{
 			config:               config
@@ -69,19 +70,20 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 		}
 	}
 	needs_backend_normalization := patterns_need_backend_normalization(patterns.clone())
-	reject_invalid_empty := builder.config.unicode
-		&& patterns_can_report_backend_invalid_empty(patterns.clone())
-	byte_literal := if needs_backend_normalization {
+	allow_fast_line_regex := patterns_allow_fast_line_regex(patterns.clone())
+	allow_exact_shortcuts := !builder.config.word && !builder.config.whole_line
+	reject_invalid_empty := false
+	byte_literal := if needs_backend_normalization || !allow_exact_shortcuts {
 		?[]u8(none)
 	} else {
 		byte_literal_from_patterns(patterns.clone(), builder.config)
 	}
-	unicode_case_literal := if needs_backend_normalization {
+	unicode_case_literal := if needs_backend_normalization || !allow_exact_shortcuts {
 		?string(none)
 	} else {
 		unicode_case_literal_from_patterns(patterns.clone(), builder.config)
 	}
-	simple_ascii := if needs_backend_normalization {
+	simple_ascii := if needs_backend_normalization || !allow_exact_shortcuts {
 		?SimpleAsciiPattern(none)
 	} else {
 		simple_ascii_from_patterns(patterns.clone(), builder.config)
@@ -106,11 +108,11 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 	// regex engine is likely to handle this case for us since it's so
 	// simple, but the idea applies.)
 	//
-	mut fast_line_regex := ?pcre.Regex(none)
-	if !needs_backend_normalization {
+	mut fast_line_regex := ?meta.Regex(none)
+	if !needs_backend_normalization && allow_fast_line_regex {
 		fast := InnerLiterals.new(&chir, &regex).one_regex()!
 		if fast.has_value {
-			fast_line_regex = ?pcre.Regex(fast.value)
+			fast_line_regex = ?meta.Regex(fast.value)
 		}
 	}
 	// We override the line terminator in case the configured HIR doesn't
@@ -132,18 +134,29 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 fn patterns_need_backend_normalization(patterns []string) bool {
 	for pattern in patterns {
 		if pattern.contains('(?x)') || pattern.contains('(?-i)') || pattern.contains('(?R)')
-			|| pattern.contains('(?-R)') || pattern.contains('(?U)') || pattern.contains('(?i-m)')
+			|| pattern.contains('(?-R)') || pattern.contains('(?U)') || pattern.contains('(?U:')
+			|| pattern.contains('(?-U') || pattern.contains('(?i-m)')
 			|| pattern.contains('(?x:') || pattern.contains('(?-x:') || pattern.contains('(?-i:')
 			|| pattern.contains('(?R:') || pattern.contains('(?<') || pattern.contains(r'\b{')
 			|| pattern.contains(r'\A') || pattern.contains(r'\z') || pattern.contains(r'\<')
 			|| pattern.contains(r'\>') || pattern.contains(r'\W') || pattern.contains(r'\D')
-			|| pattern.contains('[[:alpha:]]') || pattern.contains('[^[:alpha:]]')
-			|| pattern.contains(r'\p') || pattern.contains(r'\P') || pattern.contains('&&')
+			|| pattern.contains('[:')
+			|| pattern.contains(r'\p') || pattern.contains(r'\P') || pattern.contains(r'\x{')
+			|| pattern.contains(r'\u') || pattern.contains(r'\U') || pattern.contains('&&')
 			|| pattern.contains('--') || pattern.contains('~~') {
 			return true
 		}
 	}
 	return false
+}
+
+fn patterns_allow_fast_line_regex(patterns []string) bool {
+	for pattern in patterns {
+		if pattern.contains(r'\x') || pattern.contains(r'\u') || pattern.contains(r'\U') {
+			return false
+		}
+	}
+	return true
 }
 
 fn patterns_can_report_backend_invalid_empty(patterns []string) bool {
@@ -428,7 +441,7 @@ pub struct RegexMatcher implements IClone {
 	config Config
 	/// The regular expression compiled from the pattern provided by the
 	/// caller.
-	regex pcre.Regex
+	regex meta.Regex
 	/// A raw byte literal matcher used for simple non-Unicode byte patterns.
 	byte_literal ?[]u8
 	/// A Unicode literal matcher used when the backend cannot case fold
@@ -440,11 +453,26 @@ pub struct RegexMatcher implements IClone {
 	/// positives that is believed to be capable of being matched more quickly
 	/// than `regex`. Typically, this is a single literal or an alternation
 	/// of literals.
-	fast_line_regex ?pcre.Regex
+	fast_line_regex ?meta.Regex
 	/// A set of bytes that will never appear in a match.
 	non_matching_bytes matcher.ByteSet
 	/// Whether to reject zero-width backend matches at invalid UTF-8 bytes.
 	reject_invalid_empty bool
+}
+
+// The compiled automata are immutable and shared by worker clones, matching
+// regex-automata's cheap clone semantics in Rust.
+pub fn (re &RegexMatcher) clone() RegexMatcher {
+	return RegexMatcher{
+		config:               re.config
+		regex:                re.regex
+		byte_literal:         re.byte_literal
+		unicode_case_literal: re.unicode_case_literal
+		simple_ascii:         re.simple_ascii
+		fast_line_regex:      re.fast_line_regex
+		non_matching_bytes:   re.non_matching_bytes
+		reject_invalid_empty: re.reject_invalid_empty
+	}
 }
 
 /// Create a new matcher from the given pattern using the default
@@ -609,6 +637,52 @@ pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLin
 	return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(end))
 }
 
+/// A borrowed matcher adapter for APIs that currently use V interface values.
+///
+/// The interface contains this pointer-only adapter instead of copying the
+/// owning compiled regex value.
+pub struct RegexMatcherRef[^a] {
+	re &^a RegexMatcher
+}
+
+pub fn RegexMatcherRef.new[^a](re &^a RegexMatcher) RegexMatcherRef[^a] {
+	return RegexMatcherRef[^a]{
+		re: re
+	}
+}
+
+pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.FallibleMatch {
+	return re.re.find_at(haystack, at)
+}
+
+pub fn (re RegexMatcherRef[^a]) new_captures[^a]() !matcher.NoCaptures {
+	return re.re.new_captures()
+}
+
+pub fn (re RegexMatcherRef[^a]) capture_count[^a]() usize {
+	return re.re.capture_count()
+}
+
+pub fn (re RegexMatcherRef[^a]) capture_index[^a](name string) ?usize {
+	return re.re.capture_index(name)
+}
+
+pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+	return re.re.captures_at(haystack, at, mut caps)
+}
+
+pub fn (re RegexMatcherRef[^a]) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
+	return re.re.non_matching_bytes()
+}
+
+pub fn (re RegexMatcherRef[^a]) line_terminator[^a]() ?matcher.LineTerminator {
+	return re.re.line_terminator()
+}
+
+pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack []u8) !matcher.FallibleLineMatchKind {
+	return re.re.find_candidate_line(haystack)
+}
+
 fn (re RegexMatcher) line_match_kind(pos usize) matcher.FallibleLineMatchKind {
 	kind := if re.needs_accept_match_confirmation() {
 		matcher.LineMatchKind.candidate(pos)
@@ -630,7 +704,7 @@ fn (re RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
 	if re.config.whole_line && !is_whole_line_match(re.config, haystack, mat) {
 		return false
 	}
-	if re.config.word && !is_word_match(haystack, mat) {
+	if re.config.word && !is_word_match(re.config, haystack, mat) {
 		return false
 	}
 	return true
@@ -707,17 +781,91 @@ fn config_line_byte(config Config) u8 {
 	return `\n`
 }
 
-fn is_word_match(haystack []u8, mat matcher.Match) bool {
+fn is_word_match(config Config, haystack []u8, mat matcher.Match) bool {
 	start := mat.start()
 	end := mat.end()
-	left_ok := start == 0 || !is_word_byte(haystack[start - 1])
-	right_ok := end >= haystack.len || !is_word_byte(haystack[end])
-	return left_ok && right_ok
+	if !config.unicode {
+		left_ok := start == 0 || !is_word_byte(haystack[start - 1])
+		right_ok := end >= haystack.len || !is_word_byte(haystack[end])
+		return left_ok && right_ok
+	}
+	left_word, left_valid := unicode_word_before(haystack, start)
+	right_word, right_valid := unicode_word_at(haystack, end)
+	return left_valid && !left_word && right_valid && !right_word
 }
 
 fn is_word_byte(byte u8) bool {
 	return (byte >= `A` && byte <= `Z`) || (byte >= `a` && byte <= `z`)
 		|| (byte >= `0` && byte <= `9`) || byte == `_`
+}
+
+fn unicode_word_before(haystack []u8, offset usize) (bool, bool) {
+	if offset == 0 {
+		return false, true
+	}
+	if offset > haystack.len {
+		return false, false
+	}
+	mut start := offset - 1
+	mut continuation_count := 0
+	for start > 0 && is_utf8_continuation(haystack[start]) && continuation_count < 3 {
+		start--
+		continuation_count++
+	}
+	r, width := strict_utf8_rune_at(haystack, start)
+	if width == 0 || start + usize(width) != offset {
+		return false, false
+	}
+	return meta.is_unicode_word_char(r), true
+}
+
+fn unicode_word_at(haystack []u8, offset usize) (bool, bool) {
+	if offset == haystack.len {
+		return false, true
+	}
+	if offset > haystack.len {
+		return false, false
+	}
+	r, width := strict_utf8_rune_at(haystack, offset)
+	if width == 0 {
+		return false, false
+	}
+	return meta.is_unicode_word_char(r), true
+}
+
+fn strict_utf8_rune_at(haystack []u8, offset usize) (rune, int) {
+	if offset >= haystack.len {
+		return rune(0), 0
+	}
+	b0 := haystack[offset]
+	if b0 < 0x80 {
+		return rune(b0), 1
+	}
+	if b0 >= 0xc2 && b0 <= 0xdf && offset + 1 < haystack.len
+		&& is_utf8_continuation(haystack[offset + 1]) {
+		return rune((u32(b0 & 0x1f) << 6) | u32(haystack[offset + 1] & 0x3f)), 2
+	}
+	if offset + 2 < haystack.len && is_utf8_continuation(haystack[offset + 1])
+		&& is_utf8_continuation(haystack[offset + 2]) {
+		if b0 == 0xe0 && haystack[offset + 1] >= 0xa0
+			|| b0 >= 0xe1 && b0 <= 0xec
+			|| b0 == 0xed && haystack[offset + 1] <= 0x9f
+			|| b0 >= 0xee && b0 <= 0xef {
+			return rune((u32(b0 & 0x0f) << 12) | (u32(haystack[offset + 1] & 0x3f) << 6)
+				| u32(haystack[offset + 2] & 0x3f)), 3
+		}
+	}
+	if offset + 3 < haystack.len && is_utf8_continuation(haystack[offset + 1])
+		&& is_utf8_continuation(haystack[offset + 2])
+		&& is_utf8_continuation(haystack[offset + 3]) {
+		if b0 == 0xf0 && haystack[offset + 1] >= 0x90
+			|| b0 >= 0xf1 && b0 <= 0xf3
+			|| b0 == 0xf4 && haystack[offset + 1] <= 0x8f {
+			return rune((u32(b0 & 0x07) << 18) | (u32(haystack[offset + 1] & 0x3f) << 12)
+				| (u32(haystack[offset + 2] & 0x3f) << 6) | u32(haystack[offset + 3] & 0x3f)), 4
+		}
+	}
+	return rune(0), 0
 }
 
 struct SimpleAsciiPattern implements IClone {

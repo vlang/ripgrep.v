@@ -1,6 +1,6 @@
 module regex
 
-import regex.pcre
+import regex.meta
 
 /// A type that encapsulates "inner" literal extractiong from a regex.
 ///
@@ -43,7 +43,7 @@ struct InnerLiterals implements IClone {
 /// Note that this requires the actual regex that will be used for a search
 /// because it will query some state about the compiled regex. That state
 /// may influence inner literal extraction.
-fn InnerLiterals.new(chir &ConfiguredHIR, re &pcre.Regex) InnerLiterals {
+fn InnerLiterals.new(chir &ConfiguredHIR, re &meta.Regex) InnerLiterals {
 	_ = re
 	if _ := chir.config().line_terminator {
 	} else {
@@ -102,17 +102,17 @@ fn (lits InnerLiterals) one_regex() !MaybeRegex {
 	} else {
 		'(?:${alts.join('|')})'
 	}
-	regex := pcre.compile(pattern) or { return Error.regex(err.msg()) }
+	regex := meta.compile(pattern) or { return Error.regex(err.msg()) }
 	return MaybeRegex.some(regex)
 }
 
 // V-specific owned return shape for Rust's `Result<Option<Regex>, Error>`.
 struct MaybeRegex {
 	has_value bool
-	value     pcre.Regex
+	value     meta.Regex
 }
 
-fn MaybeRegex.some(value pcre.Regex) MaybeRegex {
+fn MaybeRegex.some(value meta.Regex) MaybeRegex {
 	return MaybeRegex{
 		has_value: true
 		value:     value

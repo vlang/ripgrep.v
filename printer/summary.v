@@ -358,7 +358,7 @@ pub fn (mut summary Summary[W]) into_inner() W {
 /// An implementation of `Sink` associated with a matcher and an optional file
 /// path for the summary printer.
 ///
-pub struct SummarySink[^p, ^s, W] {
+pub struct SummarySink[^p, ^s, W] implements Drop {
 	matcher PrinterMatcher
 mut:
 	summary            &^s Summary[W]
@@ -371,12 +371,21 @@ mut:
 	has_stats          bool
 }
 
+fn (mut sink SummarySink[^p, ^s, W]) drop[^p, ^s]() {
+	sink.matcher.drop()
+	sink.interpolator.free()
+	if mut path := sink.path {
+		path.free()
+		sink.path = ?PrinterPath(none)
+	}
+}
+
 /// Returns true if and only if this printer received a match in the
 /// previous search.
 ///
 /// This is unaffected by the result of searches before the previous
 /// search.
-pub fn (sink SummarySink[^p, ^s, W]) has_match[^p, ^s]() bool {
+pub fn (sink &SummarySink[^p, ^s, W]) has_match[^p, ^s]() bool {
 	return match sink.summary.config.kind {
 		.path_without_match, .quiet_without_match { sink.match_count == 0 }
 		else { sink.match_count > 0 }

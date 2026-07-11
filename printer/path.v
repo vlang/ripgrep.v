@@ -120,7 +120,10 @@ mut:
 /// Write the given path to the underlying writer.
 pub fn (mut printer PathPrinter[W]) write[^p](path &^p string) ! {
 	$if W is WriteColor {
-		ppath := PrinterPath.new(path).with_separator(printer.config.separator)
+		mut ppath := PrinterPath.new(path).with_separator(printer.config.separator)
+		defer {
+			ppath.free()
+		}
 		bytes := ppath.as_bytes()
 		if !printer.wtr.supports_color() {
 			printer.wtr.write(bytes)!

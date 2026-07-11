@@ -6,11 +6,21 @@ import io
 import matcher
 import os
 
+#include "encoding_multibyte_tables.h"
+fn C.rg_index_big5_lookup(pointer int) u32
+fn C.rg_index_euc_kr_lookup(pointer int) u32
+fn C.rg_index_gb18030_lookup(pointer int) u32
+fn C.rg_index_jis0208_lookup(pointer int) u32
+fn C.rg_index_jis0212_lookup(pointer int) u32
+fn C.rg_gb18030_range_lookup(pointer u32) u32
+
 $if !windows {
+	#flag @VMODROOT/searcher/iconv_shim.c
 	#include <sys/mman.h>
 	#include <unistd.h>
 	#include <iconv.h>
 	#include <errno.h>
+	#include "iconv_shim.h"
 	#flag darwin -liconv
 	#flag freebsd -L/usr/local/lib -liconv
 	#flag openbsd -L/usr/local/lib -liconv
@@ -21,10 +31,10 @@ $if !windows {
 	fn C.iconv_open(tocode charptr, fromcode charptr) voidptr
 	fn C.iconv_close(cd voidptr) i32
 	fn C.iconv(cd voidptr, inbuf &charptr, inbytesleft &usize, outbuf &charptr, outbytesleft &usize) usize
+	fn C.rg_iconv_error_illegal_sequence() int
+	fn C.rg_iconv_error_incomplete_sequence() int
+	fn C.rg_iconv_error_output_full() int
 }
-
-const searcher_errno_e2big = 7
-const searcher_errno_einval = 22
 
 interface IClone {}
 
@@ -313,8 +323,6 @@ enum EncodingKind {
 	utf8
 	utf16le
 	utf16be
-	utf32le
-	utf32be
 	windows1252
 	shiftjis
 	eucjp
@@ -330,7 +338,7 @@ enum EncodingKind {
 /// If the given label does not correspond to a valid encoding, then this
 /// returns an error.
 pub fn Encoding.new(label string) !Encoding {
-	normalized := label.trim_space().to_lower()
+	normalized := normalize_encoding_label(label)
 	kind, canonical, iconv_name := encoding_for_label(normalized) or {
 		return ConfigError.unknown_encoding(label.bytes())
 	}
@@ -341,22 +349,37 @@ pub fn Encoding.new(label string) !Encoding {
 	}
 }
 
+fn normalize_encoding_label(label string) string {
+	bytes := label.bytes()
+	mut start := 0
+	mut end := bytes.len
+	for start < end && is_encoding_label_space(bytes[start]) {
+		start++
+	}
+	for end > start && is_encoding_label_space(bytes[end - 1]) {
+		end--
+	}
+	mut normalized := []u8{cap: end - start}
+	for byte in bytes[start..end] {
+		normalized << if byte >= `A` && byte <= `Z` { byte + 32 } else { byte }
+	}
+	return normalized.bytestr()
+}
+
+fn is_encoding_label_space(byte u8) bool {
+	return byte in [`\t`, `\n`, `\f`, `\r`, ` `]
+}
+
 fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 	match label {
 		'unicode-1-1-utf-8', 'unicode11utf8', 'unicode20utf8', 'utf-8', 'utf8', 'x-unicode20utf8' {
-			return EncodingKind.utf8, 'utf-8', ''
+			return EncodingKind.utf8, 'UTF-8', ''
 		}
-		'utf-16', 'utf-16le', 'utf16le' {
-			return EncodingKind.utf16le, 'utf-16le', ''
+		'csunicode', 'iso-10646-ucs-2', 'ucs-2', 'unicode', 'unicodefeff', 'utf-16', 'utf-16le' {
+			return EncodingKind.utf16le, 'UTF-16LE', ''
 		}
-		'unicodefffe', 'utf-16be', 'utf16be' {
-			return EncodingKind.utf16be, 'utf-16be', ''
-		}
-		'utf-32', 'utf-32le', 'utf32le' {
-			return EncodingKind.utf32le, 'utf-32le', ''
-		}
-		'utf-32be', 'utf32be' {
-			return EncodingKind.utf32be, 'utf-32be', ''
+		'unicodefffe', 'utf-16be' {
+			return EncodingKind.utf16be, 'UTF-16BE', ''
 		}
 		'ansi_x3.4-1968', 'ascii', 'cp1252', 'cp819', 'csisolatin1', 'ibm819', 'iso-8859-1', 'iso-ir-100', 'iso8859-1', 'iso88591', 'iso_8859-1', 'iso_8859-1:1987', 'l1', 'latin1', 'us-ascii', 'windows-1252', 'x-cp1252' {
 			return EncodingKind.windows1252, 'windows-1252', ''
@@ -364,7 +387,7 @@ fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 		'csshiftjis', 'ms932', 'ms_kanji', 'shift-jis', 'shift_jis', 'sjis', 'windows-31j', 'x-sjis' {
 			return EncodingKind.shiftjis, 'Shift_JIS', ''
 		}
-		'cseucpkdfmtjapanese', 'euc-jp', 'eucjp', 'x-euc-jp' {
+		'cseucpkdfmtjapanese', 'euc-jp', 'x-euc-jp' {
 			return EncodingKind.eucjp, 'EUC-JP', ''
 		}
 		'x-user-defined' {
@@ -377,109 +400,107 @@ fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 }
 
 fn iconv_encoding_for_label(label string) ?(EncodingKind, string, string) {
-	if label in ['866', 'cp866', 'csibm866', 'ibm866'] {
-		return EncodingKind.iconv, 'IBM866', 'IBM866'
+	match label {
+		'866', 'cp866', 'csibm866', 'ibm866' {
+			return EncodingKind.iconv, 'IBM866', 'IBM866'
+		}
+		'cp1250', 'windows-1250', 'x-cp1250' {
+			return EncodingKind.iconv, 'windows-1250', 'WINDOWS-1250'
+		}
+		'cp1251', 'windows-1251', 'x-cp1251' {
+			return EncodingKind.iconv, 'windows-1251', 'WINDOWS-1251'
+		}
+		'cp1253', 'windows-1253', 'x-cp1253' {
+			return EncodingKind.iconv, 'windows-1253', 'WINDOWS-1253'
+		}
+		'cp1254', 'csisolatin5', 'iso-8859-9', 'iso-ir-148', 'iso8859-9', 'iso88599', 'iso_8859-9', 'iso_8859-9:1989', 'l5', 'latin5', 'windows-1254', 'x-cp1254' {
+			return EncodingKind.iconv, 'windows-1254', 'WINDOWS-1254'
+		}
+		'cp1255', 'windows-1255', 'x-cp1255' {
+			return EncodingKind.iconv, 'windows-1255', 'WINDOWS-1255'
+		}
+		'cp1256', 'windows-1256', 'x-cp1256' {
+			return EncodingKind.iconv, 'windows-1256', 'WINDOWS-1256'
+		}
+		'cp1257', 'windows-1257', 'x-cp1257' {
+			return EncodingKind.iconv, 'windows-1257', 'WINDOWS-1257'
+		}
+		'cp1258', 'windows-1258', 'x-cp1258' {
+			return EncodingKind.iconv, 'windows-1258', 'WINDOWS-1258'
+		}
+		'csisolatin2', 'iso-8859-2', 'iso-ir-101', 'iso8859-2', 'iso88592', 'iso_8859-2', 'iso_8859-2:1987', 'l2', 'latin2' {
+			return EncodingKind.iconv, 'ISO-8859-2', 'ISO-8859-2'
+		}
+		'csisolatin3', 'iso-8859-3', 'iso-ir-109', 'iso8859-3', 'iso88593', 'iso_8859-3', 'iso_8859-3:1988', 'l3', 'latin3' {
+			return EncodingKind.iconv, 'ISO-8859-3', 'ISO-8859-3'
+		}
+		'csisolatin4', 'iso-8859-4', 'iso-ir-110', 'iso8859-4', 'iso88594', 'iso_8859-4', 'iso_8859-4:1988', 'l4', 'latin4' {
+			return EncodingKind.iconv, 'ISO-8859-4', 'ISO-8859-4'
+		}
+		'csisolatincyrillic', 'cyrillic', 'iso-8859-5', 'iso-ir-144', 'iso8859-5', 'iso88595', 'iso_8859-5', 'iso_8859-5:1988' {
+			return EncodingKind.iconv, 'ISO-8859-5', 'ISO-8859-5'
+		}
+		'arabic', 'asmo-708', 'csiso88596e', 'csiso88596i', 'csisolatinarabic', 'ecma-114', 'iso-8859-6', 'iso-8859-6-e', 'iso-8859-6-i', 'iso-ir-127', 'iso8859-6', 'iso88596', 'iso_8859-6', 'iso_8859-6:1987' {
+			return EncodingKind.iconv, 'ISO-8859-6', 'ISO-8859-6'
+		}
+		'csisolatingreek', 'ecma-118', 'elot_928', 'greek', 'greek8', 'iso-8859-7', 'iso-ir-126', 'iso8859-7', 'iso88597', 'iso_8859-7', 'iso_8859-7:1987', 'sun_eu_greek' {
+			return EncodingKind.iconv, 'ISO-8859-7', 'ISO-8859-7'
+		}
+		'csiso88598e', 'csisolatinhebrew', 'hebrew', 'iso-8859-8', 'iso-8859-8-e', 'iso-ir-138', 'iso8859-8', 'iso88598', 'iso_8859-8', 'iso_8859-8:1988', 'visual' {
+			return EncodingKind.iconv, 'ISO-8859-8', 'ISO-8859-8'
+		}
+		'csiso88598i', 'iso-8859-8-i', 'logical' {
+			return EncodingKind.iconv, 'ISO-8859-8-I', 'ISO-8859-8'
+		}
+		'csisolatin6', 'iso-8859-10', 'iso-ir-157', 'iso8859-10', 'iso885910', 'l6', 'latin6' {
+			return EncodingKind.iconv, 'ISO-8859-10', 'ISO-8859-10'
+		}
+		'dos-874', 'iso-8859-11', 'iso8859-11', 'iso885911', 'tis-620', 'windows-874' {
+			return EncodingKind.iconv, 'windows-874', 'WINDOWS-874'
+		}
+		'iso-8859-13', 'iso8859-13', 'iso885913' {
+			return EncodingKind.iconv, 'ISO-8859-13', 'ISO-8859-13'
+		}
+		'iso-8859-14', 'iso8859-14', 'iso885914' {
+			return EncodingKind.iconv, 'ISO-8859-14', 'ISO-8859-14'
+		}
+		'csisolatin9', 'iso-8859-15', 'iso8859-15', 'iso885915', 'iso_8859-15', 'l9' {
+			return EncodingKind.iconv, 'ISO-8859-15', 'ISO-8859-15'
+		}
+		'iso-8859-16' {
+			return EncodingKind.iconv, 'ISO-8859-16', 'ISO-8859-16'
+		}
+		'cskoi8r', 'koi', 'koi8', 'koi8-r', 'koi8_r' {
+			return EncodingKind.iconv, 'KOI8-R', 'KOI8-R'
+		}
+		'koi8-ru', 'koi8-u' {
+			return EncodingKind.iconv, 'KOI8-U', 'KOI8-U'
+		}
+		'csmacintosh', 'mac', 'macintosh', 'x-mac-roman' {
+			return EncodingKind.iconv, 'macintosh', 'MACINTOSH'
+		}
+		'x-mac-cyrillic', 'x-mac-ukrainian' {
+			return EncodingKind.iconv, 'x-mac-cyrillic', 'MAC-CYRILLIC'
+		}
+		'big5', 'big5-hkscs', 'cn-big5', 'csbig5', 'x-x-big5' {
+			return EncodingKind.iconv, 'Big5', 'BIG5'
+		}
+		'chinese', 'csgb2312', 'csiso58gb231280', 'gb2312', 'gb_2312', 'gb_2312-80', 'gbk', 'iso-ir-58', 'x-gbk' {
+			return EncodingKind.iconv, 'GBK', 'GBK'
+		}
+		'gb18030' {
+			return EncodingKind.iconv, 'gb18030', 'GB18030'
+		}
+		'cseuckr', 'csksc56011987', 'euc-kr', 'iso-ir-149', 'korean', 'ks_c_5601-1987', 'ks_c_5601-1989', 'ksc5601', 'ksc_5601', 'windows-949' {
+			return EncodingKind.iconv, 'EUC-KR', 'EUC-KR'
+		}
+		'csiso2022jp', 'iso-2022-jp' {
+			return EncodingKind.iconv, 'ISO-2022-JP', 'ISO-2022-JP'
+		}
+		else {
+			return none
+		}
 	}
-	if label in ['cp1250', 'windows-1250', 'x-cp1250'] {
-		return EncodingKind.iconv, 'windows-1250', 'WINDOWS-1250'
-	}
-	if label in ['cp1251', 'windows-1251', 'x-cp1251'] {
-		return EncodingKind.iconv, 'windows-1251', 'WINDOWS-1251'
-	}
-	if label in ['cp1253', 'windows-1253', 'x-cp1253'] {
-		return EncodingKind.iconv, 'windows-1253', 'WINDOWS-1253'
-	}
-	if label in ['cp1254', 'windows-1254', 'x-cp1254'] {
-		return EncodingKind.iconv, 'windows-1254', 'WINDOWS-1254'
-	}
-	if label in ['cp1255', 'windows-1255', 'x-cp1255'] {
-		return EncodingKind.iconv, 'windows-1255', 'WINDOWS-1255'
-	}
-	if label in ['cp1256', 'windows-1256', 'x-cp1256'] {
-		return EncodingKind.iconv, 'windows-1256', 'WINDOWS-1256'
-	}
-	if label in ['cp1257', 'windows-1257', 'x-cp1257'] {
-		return EncodingKind.iconv, 'windows-1257', 'WINDOWS-1257'
-	}
-	if label in ['cp1258', 'windows-1258', 'x-cp1258'] {
-		return EncodingKind.iconv, 'windows-1258', 'WINDOWS-1258'
-	}
-	if label in ['csisolatin2', 'iso-8859-2', 'iso-ir-101', 'iso8859-2', 'iso88592', 'iso_8859-2', 'iso_8859-2:1987', 'l2', 'latin2'] {
-		return EncodingKind.iconv, 'ISO-8859-2', 'ISO-8859-2'
-	}
-	if label in ['csisolatin3', 'iso-8859-3', 'iso-ir-109', 'iso8859-3', 'iso88593', 'iso_8859-3', 'iso_8859-3:1988', 'l3', 'latin3'] {
-		return EncodingKind.iconv, 'ISO-8859-3', 'ISO-8859-3'
-	}
-	if label in ['csisolatin4', 'iso-8859-4', 'iso-ir-110', 'iso8859-4', 'iso88594', 'iso_8859-4', 'iso_8859-4:1988', 'l4', 'latin4'] {
-		return EncodingKind.iconv, 'ISO-8859-4', 'ISO-8859-4'
-	}
-	if label in ['csisolatincyrillic', 'cyrillic', 'iso-8859-5', 'iso-ir-144', 'iso8859-5', 'iso88595', 'iso_8859-5', 'iso_8859-5:1988'] {
-		return EncodingKind.iconv, 'ISO-8859-5', 'ISO-8859-5'
-	}
-	if label in ['arabic', 'asmo-708', 'csiso88596e', 'csiso88596i', 'csisolatinarabic', 'ecma-114', 'iso-8859-6', 'iso-8859-6-e', 'iso-8859-6-i', 'iso-ir-127', 'iso8859-6', 'iso88596', 'iso_8859-6', 'iso_8859-6:1987'] {
-		return EncodingKind.iconv, 'ISO-8859-6', 'ISO-8859-6'
-	}
-	if label in ['csisolatingreek', 'ecma-118', 'elot_928', 'greek', 'greek8', 'iso-8859-7', 'iso-ir-126', 'iso8859-7', 'iso88597', 'iso_8859-7', 'iso_8859-7:1987', 'sun_eu_greek'] {
-		return EncodingKind.iconv, 'ISO-8859-7', 'ISO-8859-7'
-	}
-	if label in ['csiso88598e', 'csisolatinhebrew', 'hebrew', 'iso-8859-8', 'iso-8859-8-e', 'iso-ir-138', 'iso8859-8', 'iso88598', 'iso_8859-8', 'iso_8859-8:1988', 'visual'] {
-		return EncodingKind.iconv, 'ISO-8859-8', 'ISO-8859-8'
-	}
-	if label in ['csiso88598i', 'iso-8859-8-i', 'logical'] {
-		return EncodingKind.iconv, 'ISO-8859-8-I', 'ISO-8859-8'
-	}
-	if label in ['csisolatin5', 'iso-8859-9', 'iso-ir-148', 'iso8859-9', 'iso88599', 'iso_8859-9', 'iso_8859-9:1989', 'l5', 'latin5'] {
-		return EncodingKind.iconv, 'ISO-8859-9', 'ISO-8859-9'
-	}
-	if label in ['iso-8859-10', 'iso8859-10', 'iso885910', 'l6', 'latin6'] {
-		return EncodingKind.iconv, 'ISO-8859-10', 'ISO-8859-10'
-	}
-	if label in ['dos-874', 'iso-8859-11', 'iso8859-11', 'iso885911', 'tis-620', 'windows-874'] {
-		return EncodingKind.iconv, 'windows-874', 'WINDOWS-874'
-	}
-	if label in ['iso-8859-13', 'iso8859-13', 'iso885913'] {
-		return EncodingKind.iconv, 'ISO-8859-13', 'ISO-8859-13'
-	}
-	if label in ['iso-8859-14', 'iso8859-14', 'iso885914'] {
-		return EncodingKind.iconv, 'ISO-8859-14', 'ISO-8859-14'
-	}
-	if label in ['csisolatin9', 'iso-8859-15', 'iso8859-15', 'iso885915', 'iso_8859-15', 'l9'] {
-		return EncodingKind.iconv, 'ISO-8859-15', 'ISO-8859-15'
-	}
-	if label in ['iso-8859-16'] {
-		return EncodingKind.iconv, 'ISO-8859-16', 'ISO-8859-16'
-	}
-	if label in ['cskoi8r', 'koi', 'koi8', 'koi8-r', 'koi8_r'] {
-		return EncodingKind.iconv, 'KOI8-R', 'KOI8-R'
-	}
-	if label in ['koi8-ru', 'koi8-u'] {
-		return EncodingKind.iconv, 'KOI8-U', 'KOI8-U'
-	}
-	if label in ['csmacintosh', 'mac', 'macintosh', 'x-mac-roman'] {
-		return EncodingKind.iconv, 'macintosh', 'MACINTOSH'
-	}
-	if label in ['x-mac-cyrillic', 'x-mac-ukrainian'] {
-		return EncodingKind.iconv, 'x-mac-cyrillic', 'MAC-CYRILLIC'
-	}
-	if label in ['big5', 'big5-hkscs', 'cn-big5', 'csbig5', 'x-x-big5'] {
-		return EncodingKind.iconv, 'Big5', 'BIG5'
-	}
-	if label in ['chinese', 'csgb2312', 'csiso58gb231280', 'gb2312', 'gb_2312', 'gb_2312-80', 'gbk', 'iso-ir-58', 'x-gbk'] {
-		return EncodingKind.iconv, 'GBK', 'GBK'
-	}
-	if label in ['gb18030'] {
-		return EncodingKind.iconv, 'gb18030', 'GB18030'
-	}
-	if label in ['cseuckr', 'csksc56011987', 'euc-kr', 'iso-ir-149', 'korean', 'ks_c_5601-1987', 'ks_c_5601-1989', 'ksc5601', 'ksc_5601'] {
-		return EncodingKind.iconv, 'EUC-KR', 'EUC-KR'
-	}
-	if label in ['csiso2022jp', 'iso-2022-jp'] {
-		return EncodingKind.iconv, 'ISO-2022-JP', 'ISO-2022-JP'
-	}
-	if label in ['csiso2022kr', 'iso-2022-kr'] {
-		return EncodingKind.iconv, 'ISO-2022-KR', 'ISO-2022-KR'
-	}
-	return none
 }
 
 /// The internal configuration of a searcher. This is shared among several
@@ -943,7 +964,10 @@ pub fn (s Searcher) multi_line_with_matcher(matcher_ matcher.Matcher) bool {
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_file` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_path(matcher_ matcher.Matcher, path string, write_to Sink) ! {
+pub fn (mut s Searcher) search_path(matcher_ matcher.Matcher, mut path string, write_to Sink) ! {
+	defer {
+		unsafe { path.free() }
+	}
 	mut file := os.open(path) or { return err }
 	defer {
 		file.close()
@@ -1128,7 +1152,7 @@ fn (s Searcher) transcode_slice(slice []u8) ![]u8 {
 fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
 	if config.bom_sniffing {
 		if slice_has_utf8_bom(slice) {
-			return slice[3..].clone()
+			return decode_utf8_lossy(slice[3..], true).bytes
 		}
 		if slice_has_utf16le_bom(slice) {
 			return decode_utf16(slice[2..], false)
@@ -1140,19 +1164,13 @@ fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
 	if encoding := config.encoding {
 		match encoding.kind {
 			.utf8 {
-				return slice.clone()
+				return decode_utf8_lossy(slice, true).bytes
 			}
 			.utf16le {
 				return decode_utf16(slice, false)
 			}
 			.utf16be {
 				return decode_utf16(slice, true)
-			}
-			.utf32le {
-				return decode_utf32(slice, false)
-			}
-			.utf32be {
-				return decode_utf32(slice, true)
 			}
 			.windows1252 {
 				return decode_windows1252(slice)
@@ -1175,8 +1193,19 @@ fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
 }
 
 fn decode_iconv(slice []u8, label string) ![]u8 {
-	decoded := iconv.encoding_to_vstring(slice, label)!
-	return decoded.bytes()
+	if decoded := decode_encoding_single_byte(slice, label) {
+		return decoded
+	}
+	$if windows {
+		decoded := iconv.encoding_to_vstring(slice, label)!
+		return decoded.bytes()
+	} $else {
+		mut stream := IconvStream.new(label)!
+		defer {
+			stream.close()
+		}
+		return stream.convert(slice, true)!.bytes
+	}
 }
 
 fn (mut s Searcher) fill_transcoded_buffer_from_file(mut file os.File, path string, has_path bool) ! {
@@ -1266,17 +1295,15 @@ fn (mut rdr TranscodingReader[^r]) initialize[^r]() ! {
 				return
 			}
 			if slice_has_utf8_bom(prefix) {
-				rdr.pending = prefix[3..].clone()
-				rdr.passthrough = true
+				rdr.start_streaming(.utf8, prefix[3..])
 				return
 			}
 		}
 		match encoding.kind {
 			.utf8 {
-				rdr.pending = prefix.clone()
-				rdr.passthrough = true
+				rdr.start_streaming(.utf8, prefix)
 			}
-			.utf16le, .utf16be, .utf32le, .utf32be, .windows1252, .xuserdefined {
+			.utf16le, .utf16be, .windows1252, .xuserdefined {
 				rdr.start_streaming(encoding.kind, prefix)
 			}
 			.shiftjis {
@@ -1310,8 +1337,7 @@ fn (mut rdr TranscodingReader[^r]) initialize[^r]() ! {
 		return
 	}
 	if slice_has_utf8_bom(got) {
-		rdr.pending = got[3..].clone()
-		rdr.passthrough = true
+		rdr.start_streaming(.utf8, got[3..])
 		return
 	}
 	rdr.pending = got.clone()
@@ -1343,15 +1369,9 @@ fn (mut rdr TranscodingReader[^r]) start_streaming(kind EncodingKind, initial []
 }
 
 fn (mut rdr TranscodingReader[^r]) start_iconv_streaming[^r](label string, initial []u8) ! {
-	$if windows {
-		mut raw := initial.clone()
-		read_to_end(mut rdr.rdr, mut raw)!
-		rdr.pending = decode_iconv(raw, label)!
-	} $else {
-		rdr.iconv_stream = IconvStream.new(label)!
-		rdr.iconv_streaming = true
-		rdr.raw_tail = initial.clone()
-	}
+	rdr.iconv_stream = IconvStream.new(label)!
+	rdr.iconv_streaming = true
+	rdr.raw_tail = initial.clone()
 }
 
 fn (mut rdr TranscodingReader[^r]) read_streaming[^r](mut buf []u8) !int {
@@ -1393,6 +1413,11 @@ fn (mut rdr TranscodingReader[^r]) read_streaming[^r](mut buf []u8) !int {
 
 fn (mut rdr TranscodingReader[^r]) decode_stream_chunk(raw []u8, final bool) []u8 {
 	match rdr.stream_kind {
+		.utf8 {
+			decoded := decode_utf8_lossy(raw, final)
+			rdr.raw_tail = decoded.tail
+			return decoded.bytes
+		}
 		.windows1252 {
 			return decode_windows1252(raw)
 		}
@@ -1406,14 +1431,6 @@ fn (mut rdr TranscodingReader[^r]) decode_stream_chunk(raw []u8, final bool) []u
 		.utf16be {
 			usable := rdr.stream_usable_len(raw, 2, final)
 			return decode_utf16(raw[..usable], true)
-		}
-		.utf32le {
-			usable := rdr.stream_usable_len(raw, 4, final)
-			return decode_utf32(raw[..usable], false)
-		}
-		.utf32be {
-			usable := rdr.stream_usable_len(raw, 4, final)
-			return decode_utf32(raw[..usable], true)
 		}
 		else {
 			return raw.clone()
@@ -1480,14 +1497,39 @@ struct IconvConvertResult {
 
 struct IconvStream {
 mut:
-	cd     voidptr = unsafe { nil }
-	active bool
+	cd                   voidptr = unsafe { nil }
+	active               bool
+	single_byte_table    int = -1
+	exact_multibyte_kind int
+	windows_label        string
+	windows_iso2022_mode int
+	iso2022_state        int
+	iso2022_output_state int
+	iso2022_output_flag  bool
 }
 
 fn IconvStream.new(label string) !IconvStream {
+	table_id := encoding_single_byte_table_id(label)
+	if table_id >= 0 {
+		return IconvStream{
+			active:            true
+			single_byte_table: table_id
+		}
+	}
+	exact_kind := exact_multibyte_encoding_kind(label)
+	if exact_kind > 0 {
+		return IconvStream{
+			active:               true
+			exact_multibyte_kind: exact_kind
+		}
+	}
 	$if windows {
-		_ = label
-		return error('iconv streaming is not available on Windows')
+		// The Windows iconv adapter is one-shot, so retain the encoding and
+		// explicitly preserve multibyte boundaries and ISO-2022-JP state.
+		return IconvStream{
+			active:        true
+			windows_label: label.to_owned()
+		}
 	} $else {
 		mut src_encoding := normalize_iconv_encoding(label)
 		dst_encoding := 'UTF-8'
@@ -1532,11 +1574,20 @@ fn (mut stream IconvStream) close() {
 }
 
 fn (mut stream IconvStream) convert(input []u8, final bool) !IconvConvertResult {
+	if stream.single_byte_table >= 0 {
+		return IconvConvertResult{
+			bytes: decode_encoding_single_byte_table(input, stream.single_byte_table)
+			tail:  []u8{}
+		}
+	}
+	if stream.exact_multibyte_kind > 0 {
+		return stream.decode_exact_multibyte(input, final)
+	}
 	$if windows {
-		_ = stream
-		_ = input
-		_ = final
-		return error('iconv streaming is not available on Windows')
+		if !stream.active {
+			return error('iconv stream is closed')
+		}
+		return stream.convert_windows(input, final)
 	} $else {
 		if !stream.active || isnil(stream.cd) {
 			return error('iconv stream is closed')
@@ -1565,13 +1616,13 @@ fn (mut stream IconvStream) convert(input []u8, final bool) !IconvConvertResult 
 				}
 			}
 			c_errno := int(C.errno)
-			if c_errno == searcher_errno_e2big {
+			if c_errno == C.rg_iconv_error_output_full() {
 				if written_total >= out.len {
 					out << []u8{len: 8 * (1 << 10)}
 				}
 				continue
 			}
-			if c_errno == searcher_errno_einval && !final {
+			if c_errno == C.rg_iconv_error_incomplete_sequence() && !final {
 				consumed := input.len - int(src_left)
 				out.trim(written_total)
 				return IconvConvertResult{
@@ -1579,11 +1630,672 @@ fn (mut stream IconvStream) convert(input []u8, final bool) !IconvConvertResult 
 					tail:  input[consumed..].clone()
 				}
 			}
+			if c_errno == C.rg_iconv_error_illegal_sequence()
+				|| (c_errno == C.rg_iconv_error_incomplete_sequence() && final) {
+				if src_left == 0 {
+					out.trim(written_total)
+					return IconvConvertResult{
+						bytes: out
+						tail:  []u8{}
+					}
+				}
+				if out.len - written_total < 3 {
+					out << []u8{len: 8 * (1 << 10)}
+				}
+				out[written_total] = 0xef
+				out[written_total + 1] = 0xbf
+				out[written_total + 2] = 0xbd
+				written_total += 3
+				consume := if c_errno == C.rg_iconv_error_incomplete_sequence() {
+					int(src_left)
+				} else {
+					1
+				}
+				src_ptr = unsafe { charptr(voidptr(usize(src_ptr) + usize(consume))) }
+				src_left -= usize(consume)
+				continue
+			}
 			msg := if c_errno == 0 { 'unknown iconv failure' } else { os.posix_get_error_msg(c_errno) }
 			return error('convert encoding string fail: ${msg}')
 		}
 		return IconvConvertResult{}
 	}
+}
+
+const exact_multibyte_shift_jis = 1
+const exact_multibyte_euc_jp = 2
+const exact_multibyte_big5 = 3
+const exact_multibyte_gbk = 4
+const exact_multibyte_gb18030 = 5
+const exact_multibyte_euc_kr = 6
+const exact_multibyte_iso2022_jp = 7
+
+const iso2022_ascii = 0
+const iso2022_roman = 1
+const iso2022_katakana = 2
+const iso2022_lead = 3
+const iso2022_trail = 4
+const iso2022_escape_start = 5
+const iso2022_escape = 6
+
+fn exact_multibyte_encoding_kind(label string) int {
+	return match label.to_upper() {
+		'SHIFT_JIS' { exact_multibyte_shift_jis }
+		'EUC-JP' { exact_multibyte_euc_jp }
+		'BIG5' { exact_multibyte_big5 }
+		'GBK' { exact_multibyte_gbk }
+		'GB18030' { exact_multibyte_gb18030 }
+		'EUC-KR' { exact_multibyte_euc_kr }
+		'ISO-2022-JP' { exact_multibyte_iso2022_jp }
+		else { 0 }
+	}
+}
+
+fn (mut stream IconvStream) decode_exact_multibyte(input []u8, final bool) !IconvConvertResult {
+	return match stream.exact_multibyte_kind {
+		exact_multibyte_shift_jis { decode_shift_jis_exact(input, final) }
+		exact_multibyte_euc_jp { decode_euc_jp_exact(input, final) }
+		exact_multibyte_big5 { decode_big5_exact(input, final) }
+		exact_multibyte_gbk, exact_multibyte_gb18030 { decode_gb18030_exact(input, final) }
+		exact_multibyte_euc_kr { decode_euc_kr_exact(input, final) }
+		exact_multibyte_iso2022_jp { stream.decode_iso2022_jp_exact(input, final) }
+		else { return error('unknown exact multibyte decoder') }
+	}
+}
+
+fn incomplete_multibyte_result(mut out []u8, input []u8, at int, final bool) IconvConvertResult {
+	if final {
+		append_utf8(mut out, u32(0xfffd))
+		return IconvConvertResult{
+			bytes: out
+			tail:  []u8{}
+		}
+	}
+	return IconvConvertResult{
+		bytes: out
+		tail:  input[at..].clone()
+	}
+}
+
+fn decode_shift_jis_exact(input []u8, final bool) IconvConvertResult {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	for i < input.len {
+		first := input[i]
+		if first < 0x80 || first == 0x80 {
+			append_utf8(mut out, u32(first))
+			i++
+			continue
+		}
+		if first >= 0xa1 && first <= 0xdf {
+			append_utf8(mut out, u32(0xff61) + u32(first - 0xa1))
+			i++
+			continue
+		}
+		if !((first >= 0x81 && first <= 0x9f) || (first >= 0xe0 && first <= 0xfc)) {
+			append_utf8(mut out, u32(0xfffd))
+			i++
+			continue
+		}
+		if i + 1 >= input.len {
+			return incomplete_multibyte_result(mut out, input, i, final)
+		}
+		second := input[i + 1]
+		valid_trail := (second >= 0x40 && second <= 0x7e)
+			|| (second >= 0x80 && second <= 0xfc)
+		mut codepoint := u32(0)
+		if valid_trail {
+			lead_offset := if first <= 0x9f { 0x81 } else { 0xc1 }
+			trail_offset := if second <= 0x7e { 0x40 } else { 0x41 }
+			pointer := (int(first) - lead_offset) * 188 + int(second) - trail_offset
+			codepoint = C.rg_index_jis0208_lookup(pointer)
+			if codepoint == 0 && pointer >= 8836 && pointer <= 10715 {
+				codepoint = u32(0xe000 + pointer - 8836)
+			}
+		}
+		if codepoint != 0 {
+			append_utf8(mut out, codepoint)
+			i += 2
+		} else {
+			append_utf8(mut out, u32(0xfffd))
+			i += if second < 0x80 { 1 } else { 2 }
+		}
+	}
+	return IconvConvertResult{out, []u8{}}
+}
+
+fn decode_euc_jp_exact(input []u8, final bool) IconvConvertResult {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	for i < input.len {
+		first := input[i]
+		if first < 0x80 {
+			append_utf8(mut out, u32(first))
+			i++
+			continue
+		}
+		if first >= 0xa1 && first <= 0xfe {
+			if i + 1 >= input.len {
+				return incomplete_multibyte_result(mut out, input, i, final)
+			}
+			second := input[i + 1]
+			mut codepoint := u32(0)
+			if second >= 0xa1 && second <= 0xfe {
+				pointer := (int(first) - 0xa1) * 94 + int(second) - 0xa1
+				codepoint = C.rg_index_jis0208_lookup(pointer)
+			}
+			if codepoint != 0 {
+				append_utf8(mut out, codepoint)
+				i += 2
+			} else {
+				append_utf8(mut out, u32(0xfffd))
+				i += if second < 0x80 { 1 } else { 2 }
+			}
+			continue
+		}
+		if first == 0x8e {
+			if i + 1 >= input.len {
+				return incomplete_multibyte_result(mut out, input, i, final)
+			}
+			second := input[i + 1]
+			if second >= 0xa1 && second <= 0xdf {
+				append_utf8(mut out, u32(0xff61) + u32(second - 0xa1))
+				i += 2
+			} else {
+				append_utf8(mut out, u32(0xfffd))
+				i += if second < 0x80 { 1 } else { 2 }
+			}
+			continue
+		}
+		if first == 0x8f {
+			if i + 2 >= input.len {
+				return incomplete_multibyte_result(mut out, input, i, final)
+			}
+			second := input[i + 1]
+			if second < 0xa1 || second > 0xfe {
+				append_utf8(mut out, u32(0xfffd))
+				i += if second < 0x80 { 1 } else { 2 }
+				continue
+			}
+			third := input[i + 2]
+			mut codepoint := u32(0)
+			if third >= 0xa1 && third <= 0xfe {
+				pointer := (int(second) - 0xa1) * 94 + int(third) - 0xa1
+				codepoint = C.rg_index_jis0212_lookup(pointer)
+			}
+			if codepoint != 0 {
+				append_utf8(mut out, codepoint)
+				i += 3
+			} else {
+				append_utf8(mut out, u32(0xfffd))
+				i += if third < 0x80 { 2 } else { 3 }
+			}
+			continue
+		}
+		append_utf8(mut out, u32(0xfffd))
+		i++
+	}
+	return IconvConvertResult{out, []u8{}}
+}
+
+fn decode_big5_exact(input []u8, final bool) IconvConvertResult {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	for i < input.len {
+		first := input[i]
+		if first < 0x80 {
+			append_utf8(mut out, u32(first))
+			i++
+			continue
+		}
+		if first < 0x81 || first > 0xfe {
+			append_utf8(mut out, u32(0xfffd))
+			i++
+			continue
+		}
+		if i + 1 >= input.len {
+			return incomplete_multibyte_result(mut out, input, i, final)
+		}
+		second := input[i + 1]
+		mut trail_offset := -1
+		if second >= 0x40 && second <= 0x7e {
+			trail_offset = int(second) - 0x40
+		} else if second >= 0xa1 && second <= 0xfe {
+			trail_offset = int(second) - 0x62
+		}
+		mut codepoint := u32(0)
+		mut pointer := -1
+		if trail_offset >= 0 {
+			pointer = (int(first) - 0x81) * 157 + trail_offset
+			codepoint = C.rg_index_big5_lookup(pointer)
+		}
+		if pointer in [1133, 1135, 1164, 1166] {
+			append_utf8(mut out, if pointer < 1164 { u32(0x00ca) } else { u32(0x00ea) })
+			append_utf8(mut out, if pointer in [1133, 1164] { u32(0x0304) } else { u32(0x030c) })
+			i += 2
+		} else if codepoint != 0 {
+			append_utf8(mut out, codepoint)
+			i += 2
+		} else {
+			append_utf8(mut out, u32(0xfffd))
+			i += if second < 0x80 { 1 } else { 2 }
+		}
+	}
+	return IconvConvertResult{out, []u8{}}
+}
+
+fn decode_euc_kr_exact(input []u8, final bool) IconvConvertResult {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	for i < input.len {
+		first := input[i]
+		if first < 0x80 {
+			append_utf8(mut out, u32(first))
+			i++
+			continue
+		}
+		if first < 0x81 || first > 0xfe {
+			append_utf8(mut out, u32(0xfffd))
+			i++
+			continue
+		}
+		if i + 1 >= input.len {
+			return incomplete_multibyte_result(mut out, input, i, final)
+		}
+		second := input[i + 1]
+		mut codepoint := u32(0)
+		if second >= 0x41 && second <= 0xfe {
+			pointer := (int(first) - 0x81) * 190 + int(second) - 0x41
+			codepoint = C.rg_index_euc_kr_lookup(pointer)
+		}
+		if codepoint != 0 {
+			append_utf8(mut out, codepoint)
+			i += 2
+		} else {
+			append_utf8(mut out, u32(0xfffd))
+			i += if second < 0x80 { 1 } else { 2 }
+		}
+	}
+	return IconvConvertResult{out, []u8{}}
+}
+
+fn decode_gb18030_exact(input []u8, final bool) IconvConvertResult {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	for i < input.len {
+		first := input[i]
+		if first < 0x80 {
+			append_utf8(mut out, u32(first))
+			i++
+			continue
+		}
+		if first == 0x80 {
+			append_utf8(mut out, u32(0x20ac))
+			i++
+			continue
+		}
+		if first < 0x81 || first > 0xfe {
+			append_utf8(mut out, u32(0xfffd))
+			i++
+			continue
+		}
+		if i + 1 >= input.len {
+			return incomplete_multibyte_result(mut out, input, i, final)
+		}
+		second := input[i + 1]
+		if second >= 0x30 && second <= 0x39 {
+			if i + 3 >= input.len {
+				return incomplete_multibyte_result(mut out, input, i, final)
+			}
+			third := input[i + 2]
+			fourth := input[i + 3]
+			if third < 0x81 || third > 0xfe || fourth < 0x30 || fourth > 0x39 {
+				append_utf8(mut out, u32(0xfffd))
+				i++
+				continue
+			}
+			pointer := (u32(first) - 0x81) * (10 * 126 * 10) + (u32(second) - 0x30) * (10 * 126) +
+				(u32(third) - 0x81) * 10 + u32(fourth) - 0x30
+			mut codepoint := u32(0)
+			if pointer <= 39419 {
+				codepoint = if pointer == 7457 { u32(0xe7c7) } else { C.rg_gb18030_range_lookup(pointer) }
+			} else if pointer >= 189000 && pointer <= 1237575 {
+				codepoint = pointer - 189000 + 0x10000
+			}
+			append_utf8(mut out, if codepoint == 0 { u32(0xfffd) } else { codepoint })
+			i += 4
+			continue
+		}
+		mut codepoint := u32(0)
+		mut trail_offset := -1
+		if second >= 0x40 && second <= 0x7e {
+			trail_offset = int(second) - 0x40
+		} else if second >= 0x80 && second <= 0xfe {
+			trail_offset = int(second) - 0x41
+		}
+		if trail_offset >= 0 {
+			pointer := (int(first) - 0x81) * 190 + trail_offset
+			codepoint = C.rg_index_gb18030_lookup(pointer)
+		}
+		if codepoint != 0 {
+			append_utf8(mut out, codepoint)
+			i += 2
+		} else {
+			append_utf8(mut out, u32(0xfffd))
+			i += if second < 0x80 { 1 } else { 2 }
+		}
+	}
+	return IconvConvertResult{out, []u8{}}
+}
+
+fn (mut stream IconvStream) iso2022_output_byte(byte u8, mut out []u8) {
+	stream.iso2022_output_flag = false
+	match stream.iso2022_state {
+		iso2022_ascii {
+			if byte > 0x7f || byte in [u8(0x0e), 0x0f] {
+				append_utf8(mut out, u32(0xfffd))
+			} else {
+				append_utf8(mut out, u32(byte))
+			}
+		}
+		iso2022_roman {
+			if byte == 0x5c {
+				append_utf8(mut out, u32(0x00a5))
+			} else if byte == 0x7e {
+				append_utf8(mut out, u32(0x203e))
+			} else if byte > 0x7f || byte in [u8(0x0e), 0x0f] {
+				append_utf8(mut out, u32(0xfffd))
+			} else {
+				append_utf8(mut out, u32(byte))
+			}
+		}
+		iso2022_katakana {
+			if byte >= 0x21 && byte <= 0x5f {
+				append_utf8(mut out, u32(0xff61) + u32(byte - 0x21))
+			} else {
+				append_utf8(mut out, u32(0xfffd))
+			}
+		}
+		iso2022_lead {
+			if byte >= 0x21 && byte <= 0x7e {
+				stream.windows_iso2022_mode = int(byte)
+				stream.iso2022_state = iso2022_trail
+			} else {
+				append_utf8(mut out, u32(0xfffd))
+			}
+		}
+		else {
+			append_utf8(mut out, u32(0xfffd))
+		}
+	}
+}
+
+fn (mut stream IconvStream) decode_iso2022_jp_exact(input []u8, final bool) IconvConvertResult {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	mut escape_start := -1
+	mut escape_prior_state := stream.iso2022_state
+	mut escape_prior_flag := stream.iso2022_output_flag
+	mut pair_start := -1
+	for i < input.len {
+		byte := input[i]
+		if stream.iso2022_state in [iso2022_ascii, iso2022_roman, iso2022_katakana,
+			iso2022_lead] {
+			if byte == 0x1b {
+				escape_start = i
+				escape_prior_state = stream.iso2022_state
+				escape_prior_flag = stream.iso2022_output_flag
+				stream.iso2022_state = iso2022_escape_start
+				i++
+				continue
+			}
+			if stream.iso2022_state == iso2022_lead && byte >= 0x21 && byte <= 0x7e {
+				pair_start = i
+			}
+			stream.iso2022_output_byte(byte, mut out)
+			i++
+			continue
+		}
+		if stream.iso2022_state == iso2022_trail {
+			lead := u8(stream.windows_iso2022_mode)
+			stream.windows_iso2022_mode = 0
+			stream.iso2022_state = iso2022_lead
+			if byte == 0x1b {
+				append_utf8(mut out, u32(0xfffd))
+				escape_start = i
+				escape_prior_state = iso2022_lead
+				escape_prior_flag = false
+				stream.iso2022_state = iso2022_escape_start
+				pair_start = -1
+				i++
+				continue
+			}
+			mut codepoint := u32(0)
+			if byte >= 0x21 && byte <= 0x7e {
+				pointer := (int(lead) - 0x21) * 94 + int(byte) - 0x21
+				codepoint = C.rg_index_jis0208_lookup(pointer)
+			}
+			append_utf8(mut out, if codepoint == 0 { u32(0xfffd) } else { codepoint })
+			stream.iso2022_output_flag = false
+			pair_start = -1
+			i++
+			continue
+		}
+		if stream.iso2022_state == iso2022_escape_start {
+			if byte in [u8(`$`), `(`] {
+				stream.windows_iso2022_mode = int(byte)
+				stream.iso2022_state = iso2022_escape
+				i++
+				continue
+			}
+			append_utf8(mut out, u32(0xfffd))
+			stream.iso2022_state = stream.iso2022_output_state
+			stream.iso2022_output_flag = false
+			escape_start = -1
+			continue
+		}
+		if stream.iso2022_state == iso2022_escape {
+			lead := u8(stream.windows_iso2022_mode)
+			mut next_state := -1
+			if lead == `(` && byte == `B` {
+				next_state = iso2022_ascii
+			} else if lead == `(` && byte == `J` {
+				next_state = iso2022_roman
+			} else if lead == `(` && byte == `I` {
+				next_state = iso2022_katakana
+			} else if lead == `$` && byte in [u8(`@`), `B`] {
+				next_state = iso2022_lead
+			}
+			if next_state >= 0 {
+				if stream.iso2022_output_flag {
+					append_utf8(mut out, u32(0xfffd))
+				}
+				stream.windows_iso2022_mode = 0
+				stream.iso2022_state = next_state
+				stream.iso2022_output_state = next_state
+				stream.iso2022_output_flag = true
+				escape_start = -1
+				i++
+				continue
+			}
+			append_utf8(mut out, u32(0xfffd))
+			stream.windows_iso2022_mode = 0
+			stream.iso2022_state = stream.iso2022_output_state
+			stream.iso2022_output_flag = false
+			stream.iso2022_output_byte(lead, mut out)
+			escape_start = -1
+			continue
+		}
+	}
+	if !final {
+		if stream.iso2022_state in [iso2022_escape_start, iso2022_escape] && escape_start >= 0 {
+			stream.iso2022_state = escape_prior_state
+			stream.iso2022_output_flag = escape_prior_flag
+			stream.windows_iso2022_mode = 0
+			return IconvConvertResult{
+				bytes: out
+				tail:  input[escape_start..].clone()
+			}
+		}
+		if stream.iso2022_state == iso2022_trail && pair_start >= 0 {
+			stream.iso2022_state = iso2022_lead
+			stream.windows_iso2022_mode = 0
+			return IconvConvertResult{
+				bytes: out
+				tail:  input[pair_start..].clone()
+			}
+		}
+	} else {
+		if stream.iso2022_state == iso2022_trail {
+			append_utf8(mut out, u32(0xfffd))
+			stream.iso2022_state = iso2022_lead
+			stream.windows_iso2022_mode = 0
+		} else if stream.iso2022_state == iso2022_escape_start {
+			append_utf8(mut out, u32(0xfffd))
+			stream.iso2022_state = stream.iso2022_output_state
+			stream.iso2022_output_flag = false
+		} else if stream.iso2022_state == iso2022_escape {
+			lead := u8(stream.windows_iso2022_mode)
+			append_utf8(mut out, u32(0xfffd))
+			stream.iso2022_state = stream.iso2022_output_state
+			stream.iso2022_output_flag = false
+			stream.iso2022_output_byte(lead, mut out)
+			if stream.iso2022_state == iso2022_trail {
+				append_utf8(mut out, u32(0xfffd))
+				stream.iso2022_state = iso2022_lead
+				stream.windows_iso2022_mode = 0
+			}
+		}
+	}
+	return IconvConvertResult{out, []u8{}}
+}
+
+fn (mut stream IconvStream) convert_windows(input []u8, final bool) !IconvConvertResult {
+	mut usable := input.len
+	mut next_mode := stream.windows_iso2022_mode
+	if !final {
+		if stream.windows_label.to_upper() == 'ISO-2022-JP' {
+			usable, next_mode = iso2022jp_stream_boundary(input, stream.windows_iso2022_mode)
+		} else {
+			usable = multibyte_stream_boundary(input, stream.windows_label)
+		}
+	}
+	if usable == 0 {
+		return IconvConvertResult{
+			bytes: []u8{}
+			tail:  input.clone()
+		}
+	}
+	mut source := input[..usable].clone()
+	if stream.windows_label.to_upper() == 'ISO-2022-JP' && source.len > 0 {
+		prefix := iso2022jp_mode_prefix(stream.windows_iso2022_mode)
+		if prefix.len > 0 {
+			source.prepend(prefix)
+		}
+	}
+	bytes := decode_iconv(source, stream.windows_label)!
+	stream.windows_iso2022_mode = next_mode
+	return IconvConvertResult{
+		bytes: bytes
+		tail:  input[usable..].clone()
+	}
+}
+
+// Returns the largest prefix that does not split a character. Single-byte
+// encodings return the complete input. Malformed bytes are left in the prefix
+// so that the platform decoder applies its normal replacement behavior.
+fn multibyte_stream_boundary(input []u8, label string) int {
+	upper := label.to_upper()
+	mut i := 0
+	for i < input.len {
+		byte := input[i]
+		mut width := 1
+		match upper {
+			'SHIFT_JIS' {
+				if (byte >= 0x81 && byte <= 0x9f) || (byte >= 0xe0 && byte <= 0xfc) {
+					width = 2
+				}
+			}
+			'EUC-JP' {
+				if byte == 0x8f {
+					width = 3
+				} else if byte == 0x8e || (byte >= 0xa1 && byte <= 0xfe) {
+					width = 2
+				}
+			}
+			'BIG5', 'GBK', 'EUC-KR' {
+				if byte >= 0x81 && byte <= 0xfe {
+					width = 2
+				}
+			}
+			'GB18030' {
+				if byte >= 0x81 && byte <= 0xfe {
+					if i + 1 >= input.len {
+						return i
+					}
+					width = if input[i + 1] >= 0x30 && input[i + 1] <= 0x39 { 4 } else { 2 }
+				}
+			}
+			else {}
+		}
+		if i + width > input.len {
+			return i
+		}
+		i += width
+	}
+	return i
+}
+
+fn iso2022jp_mode_prefix(mode int) []u8 {
+	return match mode {
+		1 { [u8(0x1b), `(`, `J`] }
+		2 { [u8(0x1b), `(`, `I`] }
+		3 { [u8(0x1b), `$`, `B`] }
+		4 { [u8(0x1b), `$`, `(`, `D`] }
+		else { []u8{} }
+	}
+}
+
+// ISO-2022-JP is stateful. This finds a complete prefix and reports the mode
+// at its end so the next Windows one-shot conversion can resume in that mode.
+fn iso2022jp_stream_boundary(input []u8, initial_mode int) (int, int) {
+	mut mode := initial_mode
+	mut i := 0
+	for i < input.len {
+		if input[i] == 0x1b {
+			if i + 2 >= input.len {
+				return i, mode
+			}
+			if input[i + 1] == `$` && input[i + 2] == `(` {
+				if i + 3 >= input.len {
+					return i, mode
+				}
+				mode = if input[i + 3] == `D` { 4 } else { 0 }
+				i += 4
+				continue
+			}
+			if input[i + 1] == `$` && input[i + 2] in [`@`, `B`] {
+				mode = 3
+			} else if input[i + 1] == `(` && input[i + 2] == `J` {
+				mode = 1
+			} else if input[i + 1] == `(` && input[i + 2] == `I` {
+				mode = 2
+			} else if input[i + 1] == `(` && input[i + 2] == `B` {
+				mode = 0
+			}
+			i += 3
+			continue
+		}
+		if mode in [3, 4] {
+			if i + 1 >= input.len {
+				return i, mode
+			}
+			i += 2
+		} else {
+			i++
+		}
+	}
+	return i, mode
 }
 
 fn read_to_end(mut read_from &io.Reader, mut dst []u8) ! {
@@ -1599,6 +2311,81 @@ fn read_to_end(mut read_from &io.Reader, mut dst []u8) ! {
 			break
 		}
 		dst << scratch[..nread]
+	}
+}
+
+struct DecodedUtf8 {
+	bytes []u8
+	tail  []u8
+}
+
+fn decode_utf8_lossy(input []u8, final bool) DecodedUtf8 {
+	mut out := []u8{cap: input.len}
+	mut i := 0
+	for i < input.len {
+		first := input[i]
+		if first < 0x80 {
+			out << first
+			i++
+			continue
+		}
+		width := if first >= 0xc2 && first <= 0xdf {
+			2
+		} else if first >= 0xe0 && first <= 0xef {
+			3
+		} else if first >= 0xf0 && first <= 0xf4 {
+			4
+		} else {
+			append_utf8(mut out, u32(0xfffd))
+			i++
+			continue
+		}
+		mut valid_prefix := 1
+		mut invalid := false
+		for offset in 1 .. width {
+			if i + offset >= input.len {
+				if !final {
+					return DecodedUtf8{
+						bytes: out
+						tail:  input[i..].clone()
+					}
+				}
+				append_utf8(mut out, u32(0xfffd))
+				i = input.len
+				invalid = true
+				break
+			}
+			byte := input[i + offset]
+			mut lower := u8(0x80)
+			mut upper := u8(0xbf)
+			if offset == 1 {
+				if first == 0xe0 {
+					lower = 0xa0
+				} else if first == 0xed {
+					upper = 0x9f
+				} else if first == 0xf0 {
+					lower = 0x90
+				} else if first == 0xf4 {
+					upper = 0x8f
+				}
+			}
+			if byte < lower || byte > upper {
+				append_utf8(mut out, u32(0xfffd))
+				i += valid_prefix
+				invalid = true
+				break
+			}
+			valid_prefix++
+		}
+		if invalid {
+			continue
+		}
+		out << input[i..i + width]
+		i += width
+	}
+	return DecodedUtf8{
+		bytes: out
+		tail:  []u8{}
 	}
 }
 
@@ -1643,48 +2430,8 @@ fn read_u16(first u8, second u8, big_endian bool) u16 {
 	return (u16(second) << 8) | u16(first)
 }
 
-fn decode_utf32(slice []u8, big_endian bool) []u8 {
-	mut out := []u8{cap: slice.len}
-	mut i := 0
-	for i + 3 < slice.len {
-		codepoint := read_u32(slice[i], slice[i + 1], slice[i + 2], slice[i + 3], big_endian)
-		i += 4
-		if is_valid_unicode_scalar(codepoint) {
-			append_utf8(mut out, codepoint)
-		} else {
-			append_utf8(mut out, u32(0xfffd))
-		}
-	}
-	if i < slice.len {
-		append_utf8(mut out, u32(0xfffd))
-	}
-	return out
-}
-
-fn read_u32(first u8, second u8, third u8, fourth u8, big_endian bool) u32 {
-	if big_endian {
-		return (u32(first) << 24) | (u32(second) << 16) | (u32(third) << 8) | u32(fourth)
-	}
-	return (u32(fourth) << 24) | (u32(third) << 16) | (u32(second) << 8) | u32(first)
-}
-
-fn is_valid_unicode_scalar(codepoint u32) bool {
-	if codepoint > u32(0x10ffff) {
-		return false
-	}
-	return codepoint < u32(0xd800) || codepoint > u32(0xdfff)
-}
-
 fn decode_windows1252(slice []u8) []u8 {
-	mut out := []u8{cap: slice.len}
-	for byte in slice {
-		if byte < 0x80 || byte >= 0xa0 {
-			append_utf8(mut out, u32(byte))
-			continue
-		}
-		append_utf8(mut out, windows1252_codepoint(byte))
-	}
-	return out
+	return decode_encoding_single_byte(slice, 'WINDOWS-1252') or { []u8{} }
 }
 
 fn decode_x_user_defined(slice []u8) []u8 {
@@ -1697,39 +2444,6 @@ fn decode_x_user_defined(slice []u8) []u8 {
 		}
 	}
 	return out
-}
-
-fn windows1252_codepoint(byte u8) u32 {
-	return match byte {
-		0x80 { u32(0x20ac) }
-		0x82 { u32(0x201a) }
-		0x83 { u32(0x0192) }
-		0x84 { u32(0x201e) }
-		0x85 { u32(0x2026) }
-		0x86 { u32(0x2020) }
-		0x87 { u32(0x2021) }
-		0x88 { u32(0x02c6) }
-		0x89 { u32(0x2030) }
-		0x8a { u32(0x0160) }
-		0x8b { u32(0x2039) }
-		0x8c { u32(0x0152) }
-		0x8e { u32(0x017d) }
-		0x91 { u32(0x2018) }
-		0x92 { u32(0x2019) }
-		0x93 { u32(0x201c) }
-		0x94 { u32(0x201d) }
-		0x95 { u32(0x2022) }
-		0x96 { u32(0x2013) }
-		0x97 { u32(0x2014) }
-		0x98 { u32(0x02dc) }
-		0x99 { u32(0x2122) }
-		0x9a { u32(0x0161) }
-		0x9b { u32(0x203a) }
-		0x9c { u32(0x0153) }
-		0x9e { u32(0x017e) }
-		0x9f { u32(0x0178) }
-		else { u32(0xfffd) }
-	}
 }
 
 fn append_utf8(mut bytes []u8, codepoint u32) {
@@ -1912,8 +2626,8 @@ pub fn (finish SinkFinish) with_binary_byte_offset(binary_byte_offset ?u64) Sink
 ///
 /// `'b` refers to the lifetime of the underlying bytes.
 pub struct LineIter implements IClone {
-	// V-specific: Rust stores this as a borrowed `&'b [u8]`; this port stores
-	// an owned slice because `LineIter` values are passed around directly.
+	// V-specific: Rust stores this as a borrowed `&'b [u8]`; V's slice value is
+	// the corresponding non-owning view into the active search buffer.
 	bytes_   []u8
 	stepper_ LineStep
 }
@@ -1922,7 +2636,7 @@ pub struct LineIter implements IClone {
 /// are terminated by `line_term`.
 pub fn LineIter.new(line_term u8, bytes []u8) LineIter {
 	return LineIter{
-		bytes_:   bytes.clone()
+		bytes_:   bytes
 		stepper_: LineStep.new(line_term, 0, bytes.len)
 	}
 }
@@ -1940,15 +2654,15 @@ pub fn (iter LineIter) count() u64 {
 
 pub fn (mut iter LineIter) next() ?[]u8 {
 	m := iter.stepper_.next_match(iter.bytes_) or { return none }
-	return iter.bytes_[m.start()..m.end()].clone()
+	return iter.bytes_[m.start()..m.end()]
 }
 
 /// A type that describes a match reported by a searcher.
 pub struct SinkMatch implements IClone {
 	line_term_             u8 = `\n`
 	// V-specific: Rust stores `bytes` and `buffer` as borrowed `&'b [u8]`.
-	// This port keeps slice views into the active search buffer and clones
-	// only from public accessors that need owned bytes.
+	// V slices are descriptors into the active search buffer, so these fields and
+	// their accessors preserve the same borrowed views without copying bytes.
 	bytes_                 []u8
 	absolute_byte_offset_  u64
 	line_number_           ?u64
@@ -1999,7 +2713,7 @@ pub fn (mat SinkMatch) with_line_term(line_term u8) SinkMatch {
 
 /// Exposes as much of the underlying buffer that was search as possible.
 pub fn (mat SinkMatch) buffer() []u8 {
-	return mat.buffer_.clone()
+	return mat.buffer_
 }
 
 /// Returns a range that corresponds to where [`SinkMatch::bytes`] appears
@@ -2011,7 +2725,7 @@ pub fn (mat SinkMatch) bytes_range_in_buffer() matcher.Match {
 /// Returns the bytes for all matching lines, including the line
 /// terminators, if they exist.
 pub fn (mat SinkMatch) bytes() []u8 {
-	return mat.bytes_.clone()
+	return mat.bytes_
 }
 
 // V-specific: exposes the active search-buffer slice for printer internals
@@ -2243,8 +2957,8 @@ pub struct SinkContext implements IClone {
 	// `SinkContext::lines`, but translated V tests compile as normal module
 	// files and still need it.
 	line_term_             u8 = `\n`
-	// V-specific: Rust stores this as a borrowed `&'b [u8]`; the current V
-	// sink interface passes context values, so this stores an owned slice.
+	// V-specific: Rust stores this as a borrowed `&'b [u8]`; V represents the
+	// same borrow as a slice view into the active search buffer.
 	bytes_                 []u8
 	kind_                  SinkContextKind
 	absolute_byte_offset_  u64
@@ -2253,7 +2967,7 @@ pub struct SinkContext implements IClone {
 
 /// Returns the context bytes, including line terminators.
 pub fn (ctx SinkContext) bytes() []u8 {
-	return ctx.bytes_.clone()
+	return ctx.bytes_
 }
 
 /// Returns the type of context.

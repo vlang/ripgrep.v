@@ -5,6 +5,7 @@ import core
 import core.flags
 import ignore
 import printer
+import sync
 import sync.stdatomic
 import time
 
@@ -143,7 +144,15 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		searcher:         searcher
 		stats:            stats
 	}
-	args.walk_builder()!.build_parallel().run(mut visitor)
+	mut walk := args.walk_builder()!.build()
+	for {
+		mut result := walk.next() or { break }
+		state := visitor.visit(result)
+		result.free()
+		if state == .quit {
+			break
+		}
+	}
 	if err := visitor.err {
 		if cli.is_broken_pipe_error(err) {
 			return visitor.matched
@@ -158,12 +167,9 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		mut wtr := visitor.searcher.printer().get_mut()
 		print_stats(mode, stats_value, started_at, mut wtr) or {}
 	}
-	visitor.searcher.printer().flush() or {
-		if cli.is_broken_pipe_error(err) {
-			return visitor.matched
-		}
-		return err
-	}
+	// Rust flushes the buffered stdout writer when it is dropped and ignores
+	// any error at that point, so the final flush error is ignored here too.
+	visitor.searcher.printer().flush() or {}
 	return visitor.matched
 }
 
@@ -179,14 +185,16 @@ mut:
 }
 
 fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
+	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
 	visitor.searched = true
 	search_result := visitor.searcher.search(&haystack) or {
 		if cli.is_broken_pipe_error(err) {
 			visitor.err = err
+			haystack.free_path_cache()
 			return .quit
 		}
 		core.err_message('${*haystack.path()}: ${err.msg()}')
+		haystack.free_path_cache()
 		return .continue_
 	}
 	visitor.matched = visitor.matched || search_result.has_match()
@@ -195,10 +203,13 @@ fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.Walk
 			visitor.stats = stats_value + *result_stats
 		}
 	}
-	if visitor.matched && visitor.args.quit_after_match() {
-		return .quit
+	state := if visitor.matched && visitor.args.quit_after_match() {
+		ignore.WalkState.quit
+	} else {
+		ignore.WalkState.continue_
 	}
-	return .continue_
+	haystack.free_path_cache()
+	return state
 }
 
 fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
@@ -246,186 +257,137 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 
 /// The top-level entry point for search when multiple threads were requested.
 ///
-/// The parallelism is itself achieved by feeding haystacks from traversal to
-/// search workers. This preserves the existing streaming path for modes that
-/// need early global termination.
+/// The parallelism is itself achieved by the recursive directory traversal.
+/// All we need to do is feed it a worker for performing a search on each file.
 fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
-	mut bufwtr := args.buffer_writer()
-
+	bufwtr := args.buffer_writer()
 	thread_count := parallel_worker_count(args.threads())
-	stop := stdatomic.new_atomic(false)
 	walk := args.walk_builder()!.build_parallel()
+	matcher_template := args.matcher()!
 	mut workers := []core.SearchWorker[cli.Buffer]{cap: thread_count}
 	for _ in 0 .. thread_count {
-		matcher_ := args.matcher()!
+		matcher_ := matcher_template.clone()
 		searcher_ := args.searcher()!
 		printer_ := args.printer_buffer(mode, bufwtr.buffer())
 		workers << args.search_worker_buffer(matcher_, searcher_, printer_)!
 	}
-	jobs := chan SearchParallelJob{cap: parallel_job_queue_capacity}
-	results := chan SearchParallelResult{cap: parallel_job_queue_capacity}
-	mut threads := []thread bool{}
-	for worker_index in 0 .. thread_count {
-		worker := workers[worker_index]
-		threads << spawn search_parallel_worker(worker, jobs, results, args.stats() != none,
-			args.quit_after_match(), stop, worker_index)
+	stats := args.stats()
+	mut shared_value := SearchParallelShared{
+		output_lock:        sync.new_mutex()
+		stats_lock:         sync.new_mutex()
+		bufwtr:             bufwtr
+		matched:            stdatomic.new_atomic(false)
+		searched:           stdatomic.new_atomic(false)
+		output_broken_pipe: stdatomic.new_atomic(false)
+		stats:              stats or { printer.Stats.new() }
+		has_stats:          stats != none
 	}
-	producer := spawn search_parallel_producer(walk, args.haystack_builder(), jobs, thread_count,
-		stop)
-
-	mut matched := false
-	mut stats := args.stats()
-	mut output_err := ?IError(none)
-	mut done_count := 0
-	for done_count < thread_count {
-		result := <-results
-		if result.done {
-			done_count++
-			continue
-		}
-		matched = matched || result.matched
-		if result.matched && args.quit_after_match() {
-			stop.store(true)
-		}
-		for message in result.errors {
-			core.err_message(message)
-		}
-		if output_err == none {
-			bufwtr.print(&result.buffer) or {
-				if cli.is_broken_pipe_error(err) {
-					output_err = err
-					stop.store(true)
-				} else {
-					core.err_message(err.msg())
-				}
-			}
-		}
-		if stats_value := stats {
-			if result_stats := result.stats {
-				stats = stats_value + result_stats
-			}
-		}
+	shared_state := &shared_value
+	mut factory := SearchParallelVisitorFactory{
+		workers:          &workers
+		next_worker:      stdatomic.new_atomic(0)
+		haystack_builder: args.haystack_builder()
+		state:            shared_state
+		quit_after_match: args.quit_after_match()
 	}
-	producer_result := producer.wait()
-	for thread in threads {
-		thread.wait()
+	walk.run(mut factory)
+	matched := shared_state.matched.load()
+	if shared_state.output_broken_pipe.load() {
+		return matched
 	}
-	if err := output_err {
-		if cli.is_broken_pipe_error(err) {
-			return matched
-		}
-		return err
-	}
-	if args.has_implicit_path() && producer_result.haystack_count == 0 {
+	if args.has_implicit_path() && !shared_state.searched.load() {
 		eprint_nothing_searched()
 	}
-	if stats_value := stats {
-		mut wtr := bufwtr.buffer()
-		print_stats(mode, stats_value, started_at, mut wtr) or {}
-		bufwtr.print(&wtr) or {}
+	if shared_state.has_stats {
+		mut wtr := shared_state.bufwtr.buffer()
+		print_stats(mode, shared_state.stats, started_at, mut wtr) or {}
+		shared_state.bufwtr.print(&wtr) or {}
 	}
 	return matched
 }
 
-struct SearchParallelJob {
-	stop     bool
-	haystack core.Haystack
+struct SearchParallelShared {
+	output_lock &sync.Mutex
+	stats_lock  &sync.Mutex
+	matched             &stdatomic.AtomicVal[bool]
+	searched            &stdatomic.AtomicVal[bool]
+	output_broken_pipe  &stdatomic.AtomicVal[bool]
+	has_stats bool
+mut:
+	bufwtr cli.BufferWriter
+	stats  printer.Stats
 }
 
-struct SearchParallelProducerResult {
-	haystack_count int
+struct SearchParallelVisitorFactory {
+	workers          &[]core.SearchWorker[cli.Buffer]
+	next_worker      &stdatomic.AtomicVal[int]
+	haystack_builder core.HaystackBuilder
+	state            &SearchParallelShared
+	quit_after_match bool
 }
 
-struct SearchParallelResult {
-	index    int
-	done     bool
-	matched  bool
-	stats    ?printer.Stats
-	buffer   cli.Buffer
-	errors   []string
+fn (mut factory SearchParallelVisitorFactory) create() ignore.ParallelVisitor {
+	index := factory.next_worker.add(1)
+	return SearchParallelVisitor{
+		worker:            unsafe { &factory.workers[index] }
+		haystack_builder: factory.haystack_builder
+		state:             factory.state
+		quit_after_match: factory.quit_after_match
+	}
 }
 
-fn search_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, jobs chan SearchParallelJob, stop_count int, stop &stdatomic.AtomicVal[bool]) SearchParallelProducerResult {
-	events := chan ignore.WalkParallelStreamResult{cap: parallel_job_queue_capacity}
-	stream := spawn walk_parallel_stream_runner(walk, events, stop)
-	mut haystack_count := 0
-	for {
-		event := <-events
-		if event.done {
-			break
+struct SearchParallelVisitor {
+	haystack_builder core.HaystackBuilder
+	quit_after_match bool
+mut:
+	worker &core.SearchWorker[cli.Buffer]
+	state  &SearchParallelShared
+}
+
+fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
+	mut owned_result := result
+	mut haystack := visitor.haystack_builder.build_from_result(result) or {
+		owned_result.free()
+		return .continue_
+	}
+	visitor.state.searched.store(true)
+	visitor.worker.printer().get_mut().clear()
+	search_result := visitor.worker.search(&haystack) or {
+		core.err_message('${*haystack.path()}: ${err.msg()}')
+		haystack.free_owned()
+		return .continue_
+	}
+	if search_result.has_match() {
+		visitor.state.matched.store(true)
+	}
+	if visitor.state.has_stats {
+		visitor.state.stats_lock.lock()
+		if result_stats := search_result.stats() {
+			visitor.state.stats = visitor.state.stats + *result_stats
 		}
-		if stop.load() {
-			continue
-		}
-		if haystack := haystack_builder.build_from_result(event.result) {
-			jobs <- SearchParallelJob{
-				haystack: haystack
-			}
-			haystack_count++
+		visitor.state.stats_lock.unlock()
+	}
+	visitor.state.output_lock.lock()
+	worker_buffer := visitor.worker.printer().get_mut()
+	visitor.state.bufwtr.print(worker_buffer) or {
+		if cli.is_broken_pipe_error(err) {
+			visitor.state.output_broken_pipe.store(true)
+		} else {
+			core.err_message('${*haystack.path()}: ${err.msg()}')
 		}
 	}
-	stream.wait()
-	for _ in 0 .. stop_count {
-		jobs <- SearchParallelJob{
-			stop: true
-		}
+	visitor.state.output_lock.unlock()
+	haystack.free_owned()
+	if visitor.state.output_broken_pipe.load()
+		|| (visitor.state.matched.load() && visitor.quit_after_match) {
+		return .quit
 	}
-	return SearchParallelProducerResult{
-		haystack_count: haystack_count
-	}
+	return .continue_
 }
 
 fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {
 	walk.stream(events, stop)
-	return true
-}
-
-fn search_parallel_worker(searcher_in core.SearchWorker[cli.Buffer], jobs chan SearchParallelJob, results chan SearchParallelResult, stats_enabled bool, quit_after_match bool, stop &stdatomic.AtomicVal[bool], index int) bool {
-	mut searcher := searcher_in
-	for {
-		job := <-jobs
-		if job.stop {
-			break
-		}
-		haystack := job.haystack
-		if stop.load() {
-			continue
-		}
-		searcher.printer().get_mut().clear()
-		search_result := searcher.search(&haystack) or {
-			results <- SearchParallelResult{
-				index:  index
-				buffer: searcher.printer().get_mut().take()
-				errors: ['${*haystack.path()}: ${err.msg()}']
-			}
-			continue
-		}
-		mut result := SearchParallelResult{
-			index:   index
-			matched: false
-			stats:   ?printer.Stats(none)
-			buffer:  searcher.printer().get_mut().take()
-			errors:  []string{}
-		}
-		if search_result.has_match() {
-			result.matched = true
-			if quit_after_match {
-				stop.store(true)
-			}
-		}
-		if stats_enabled {
-			if result_stats := search_result.stats() {
-				result.stats = *result_stats
-			}
-		}
-		results <- result
-	}
-	searcher.printer().flush() or {}
-	results <- SearchParallelResult{
-		index: index
-		done:  true
-	}
 	return true
 }
 
@@ -461,12 +423,9 @@ fn files(args &flags.HiArgs) !bool {
 			return err
 		}
 	}
-	path_printer.flush() or {
-		if cli.is_broken_pipe_error(err) {
-			return matched
-		}
-		return err
-	}
+	// Rust flushes the buffered stdout writer when it is dropped and ignores
+	// any error at that point, so the final flush error is ignored here too.
+	path_printer.flush() or {}
 	return matched
 }
 
@@ -479,14 +438,14 @@ fn files_parallel(args &flags.HiArgs) !bool {
 	stop := stdatomic.new_atomic(false)
 	results := chan FilesParallelResult{cap: parallel_job_queue_capacity}
 	walk := args.walk_builder()!.build_parallel()
-	producer := spawn files_parallel_producer(walk, args.has_implicit_path(), args.quit_after_match(),
-		results, stop)
+	producer := spawn files_parallel_producer(walk, args.has_implicit_path(),
+		args.quit_after_match(), results, stop)
 
 	mut matched := false
 	mut output_err := ?IError(none)
 	mut path_printer := args.path_printer_builder().build(args.stdout())
 	for {
-		result := <-results
+		mut result := <-results
 		if result.done {
 			break
 		}
@@ -497,6 +456,7 @@ fn files_parallel(args &flags.HiArgs) !bool {
 				stop.store(true)
 			}
 		}
+		result.free()
 	}
 	producer.wait()
 	if err := output_err {
@@ -505,12 +465,9 @@ fn files_parallel(args &flags.HiArgs) !bool {
 		}
 		return err
 	}
-	path_printer.flush() or {
-		if cli.is_broken_pipe_error(err) {
-			return matched
-		}
-		return err
-	}
+	// Rust flushes the buffered stdout writer when it is dropped and ignores
+	// any error at that point, so the final flush error is ignored here too.
+	path_printer.flush() or {}
 	return matched
 }
 
@@ -521,19 +478,26 @@ struct FilesParallelResult {
 	path     string
 }
 
+fn (mut result FilesParallelResult) free() {
+	unsafe { result.path.free() }
+	result.path = ''
+}
+
 fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit_after_match bool, results chan FilesParallelResult, stop &stdatomic.AtomicVal[bool]) bool {
 	events := chan ignore.WalkParallelStreamResult{cap: parallel_job_queue_capacity}
 	stream := spawn walk_parallel_stream_runner(walk, events, stop)
 	for {
-		event := <-events
+		mut event := <-events
 		if event.done {
 			break
 		}
 		if stop.load() {
+			event.result.free()
 			continue
 		}
 		if event.result.is_error {
 			core.err_message(event.result.err.msg())
+			event.result.free()
 			continue
 		}
 		dent := event.result.entry
@@ -541,6 +505,7 @@ fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit
 			core.ignore_message(err.msg())
 		}
 		if !files_should_print(&dent) {
+			event.result.free()
 			continue
 		}
 		if quit_after_match {
@@ -548,9 +513,11 @@ fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit
 				matched: true
 			}
 			stop.store(true)
+			event.result.free()
 			continue
 		}
 		path := files_print_path(&dent, strip_dot_prefix)
+		event.result.free()
 		results <- FilesParallelResult{
 			matched:  true
 			has_path: true
@@ -570,19 +537,24 @@ fn files_stream(args &flags.HiArgs) !bool {
 		strip_dot_prefix: args.has_implicit_path()
 		path_printer:     args.path_printer_builder().build(args.stdout())
 	}
-	args.walk_builder()!.build_parallel().run(mut visitor)
+	mut walk := args.walk_builder()!.build()
+	for {
+		mut result := walk.next() or { break }
+		state := visitor.visit(result)
+		result.free()
+		if state == .quit {
+			break
+		}
+	}
 	if err := visitor.err {
 		if cli.is_broken_pipe_error(err) {
 			return visitor.matched
 		}
 		return err
 	}
-	visitor.path_printer.flush() or {
-		if cli.is_broken_pipe_error(err) {
-			return visitor.matched
-		}
-		return err
-	}
+	// Rust flushes the buffered stdout writer when it is dropped and ignores
+	// any error at that point, so the final flush error is ignored here too.
+	visitor.path_printer.flush() or {}
 	return visitor.matched
 }
 
@@ -619,7 +591,10 @@ fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.Wal
 }
 
 fn (mut visitor FilesParallelVisitor) write_path(dent &ignore.DirEntry) ! {
-	path_value := files_print_path(dent, visitor.strip_dot_prefix)
+	mut path_value := files_print_path(dent, visitor.strip_dot_prefix)
+	defer {
+		unsafe { path_value.free() }
+	}
 	visitor.path_printer.write(&path_value)!
 }
 
@@ -771,7 +746,13 @@ fn collect_haystacks(args &flags.HiArgs) ![]core.Haystack {
 	mut visitor := CollectHaystacksVisitor{
 		haystack_builder: args.haystack_builder()
 	}
-	args.walk_builder()!.build_parallel().run(mut visitor)
+	mut walk := args.walk_builder()!.build()
+	for {
+		result := walk.next() or { break }
+		if visitor.visit(result) == .quit {
+			break
+		}
+	}
 	return args.sort(visitor.haystacks)
 }
 

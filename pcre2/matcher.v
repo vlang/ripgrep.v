@@ -14,10 +14,12 @@ $if pcre2 ? {
 		#flag -lpcre2-8
 	}
 	#flag -DRIPGREP_V_PCRE2_ENABLED=1
+	#flag -DRIPGREP_V_C_EMBEDDED=1
 	#include <stdio.h>
 	#include <stdlib.h>
 	#include "@VMODROOT/pcre2/pcre2_shim.h"
 	fn C.rg_pcre2_enabled() int
+	fn C.rg_pcre2_live_regex_count() usize
 	fn C.rg_pcre2_opt_caseless() u32
 	fn C.rg_pcre2_opt_dotall() u32
 	fn C.rg_pcre2_opt_extended() u32
@@ -33,6 +35,7 @@ $if pcre2 ? {
 	fn C.rg_pcre2_jit_compile(code voidptr) int
 	fn C.rg_pcre2_code_free(code voidptr)
 	fn C.rg_pcre2_regex_new(code voidptr, use_match_context int, max_jit_stack_size usize) voidptr
+	fn C.rg_pcre2_regex_clone(regex voidptr) voidptr
 	fn C.rg_pcre2_regex_free(regex voidptr)
 	fn C.rg_pcre2_regex_code(regex voidptr) voidptr
 	fn C.rg_pcre2_regex_match_context(regex voidptr) voidptr
@@ -46,6 +49,11 @@ $if pcre2 ? {
 	fn C.rg_pcre2_name_table(code voidptr) &u8
 	fn C.rg_pcre2_name_entry_group(table &u8, entry_size u32, index u32) u32
 	fn C.rg_pcre2_name_entry_name(table &u8, entry_size u32, index u32) &u8
+}
+
+// Return the number of live PCRE2 regex owners allocated by the shim.
+pub fn live_regex_count() usize {
+	return C.rg_pcre2_live_regex_count()
 }
 
 fn pcre2_enabled() bool {
@@ -406,7 +414,7 @@ pub fn (mut builder RegexMatcherBuilder) max_jit_stack_size(bytes ?usize) &Regex
 }
 
 /// An implementation of the `Matcher` trait using PCRE2.
-pub struct RegexMatcher implements IClone {
+pub struct RegexMatcher implements IClone, Drop {
 	// V-specific: PCRE2 resources are owned by the shim object and shared by
 	// by-value matcher clones through this reference count.
 	inner               voidptr
@@ -421,25 +429,34 @@ pub fn RegexMatcher.new(pattern string) !RegexMatcher {
 	return RegexMatcherBuilder.new().build(pattern)
 }
 
-pub fn (re RegexMatcher) clone() RegexMatcher {
-	if !isnil(re.refs) {
-		re.refs.add(1)
+pub fn (re &RegexMatcher) clone() RegexMatcher {
+	mut inner := re.inner
+	mut refs := re.refs
+	$if pcre2 ? {
+		if !isnil(re.inner) {
+			inner = C.rg_pcre2_regex_clone(re.inner)
+			if isnil(inner) {
+				panic('failed to clone PCRE2 matcher state')
+			}
+			refs = stdatomic.new_atomic(1)
+		}
 	}
 	return RegexMatcher{
-		inner:               re.inner
-		refs:                re.refs
+		inner:               inner
+		refs:                refs
 		capture_count_value: re.capture_count_value
 		capture_names:       re.capture_names.clone()
 	}
 }
 
-@[unsafe]
-pub fn (mut re RegexMatcher) free() {
+pub fn (mut re RegexMatcher) drop() {
 	$if pcre2 ? {
 		if !isnil(re.inner) && !isnil(re.refs) {
 			if re.refs.sub(1) == 1 {
 				C.rg_pcre2_regex_free(re.inner)
-				free(re.refs)
+				unsafe {
+					free(re.refs)
+				}
 			}
 			re.inner = voidptr(0)
 			re.refs = unsafe { nil }
@@ -447,7 +464,12 @@ pub fn (mut re RegexMatcher) free() {
 	}
 }
 
-fn (re RegexMatcher) code() voidptr {
+@[unsafe]
+pub fn (mut re RegexMatcher) free() {
+	re.drop()
+}
+
+fn (re &RegexMatcher) code() voidptr {
 	$if pcre2 ? {
 		return C.rg_pcre2_regex_code(re.inner)
 	}
@@ -455,7 +477,7 @@ fn (re RegexMatcher) code() voidptr {
 	return voidptr(0)
 }
 
-fn (re RegexMatcher) match_context() voidptr {
+fn (re &RegexMatcher) match_context() voidptr {
 	$if pcre2 ? {
 		return C.rg_pcre2_regex_match_context(re.inner)
 	}
@@ -463,12 +485,12 @@ fn (re RegexMatcher) match_context() voidptr {
 	return voidptr(0)
 }
 
-pub fn (re RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	found, _ := re.capture_groups_at(haystack, at)!
 	return found
 }
 
-pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
 	$if pcre2 ? {
 		if at > haystack.len {
 			return matcher.FallibleMatch.absent(), []string{}
@@ -504,23 +526,23 @@ pub fn (re RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.Fa
 	return Error.regex_message('PCRE2 is not available in this build of ripgrep')
 }
 
-pub fn (re RegexMatcher) new_captures() !matcher.NoCaptures {
+pub fn (re &RegexMatcher) new_captures() !matcher.NoCaptures {
 	_ = re
 	return matcher.NoCaptures.new()
 }
 
-pub fn (re RegexMatcher) capture_count() usize {
+pub fn (re &RegexMatcher) capture_count() usize {
 	return re.capture_count_value
 }
 
-pub fn (re RegexMatcher) capture_index(name string) ?usize {
+pub fn (re &RegexMatcher) capture_index(name string) ?usize {
 	if index := re.capture_names[name] {
 		return index
 	}
 	return none
 }
 
-fn (re RegexMatcher) capture_groups_from_ovector(haystack []u8, ovector &usize) []string {
+fn (re &RegexMatcher) capture_groups_from_ovector(haystack []u8, ovector &usize) []string {
 	$if pcre2 ? {
 		mut groups := []string{cap: int(re.capture_count_value)}
 		unset := C.rg_pcre2_unset()
@@ -581,7 +603,7 @@ fn pcre2_error_message(code int) string {
 	return 'PCRE2 error ${code}'
 }
 
-pub fn (re RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = caps
 	return re.find_at(haystack, at)!.is_some()
 }
@@ -591,13 +613,60 @@ pub fn (re &^a RegexMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	return none
 }
 
-pub fn (re RegexMatcher) line_terminator() ?matcher.LineTerminator {
+pub fn (re &RegexMatcher) line_terminator() ?matcher.LineTerminator {
 	_ = re
 	return none
 }
 
-pub fn (re RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
 	return matcher.default_find_candidate_line(re, haystack)
+}
+
+/// A borrowed matcher adapter for APIs that currently use V interface values.
+///
+/// The interface contains this pointer-only adapter instead of copying the
+/// owning `RegexMatcher` value.
+pub struct RegexMatcherRef[^a] {
+	re &^a RegexMatcher
+}
+
+pub fn RegexMatcherRef.new[^a](re &^a RegexMatcher) RegexMatcherRef[^a] {
+	return RegexMatcherRef[^a]{
+		re: re
+	}
+}
+
+pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.FallibleMatch {
+	return re.re.find_at(haystack, at)
+}
+
+pub fn (re RegexMatcherRef[^a]) new_captures[^a]() !matcher.NoCaptures {
+	return re.re.new_captures()
+}
+
+pub fn (re RegexMatcherRef[^a]) capture_count[^a]() usize {
+	return re.re.capture_count()
+}
+
+pub fn (re RegexMatcherRef[^a]) capture_index[^a](name string) ?usize {
+	return re.re.capture_index(name)
+}
+
+pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+	return re.re.captures_at(haystack, at, mut caps)
+}
+
+pub fn (re RegexMatcherRef[^a]) non_matching_bytes[^b, ^a]() ?&^b matcher.ByteSet {
+	_ = re
+	return none
+}
+
+pub fn (re RegexMatcherRef[^a]) line_terminator[^a]() ?matcher.LineTerminator {
+	return re.re.line_terminator()
+}
+
+pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack []u8) !matcher.FallibleLineMatchKind {
+	return re.re.find_candidate_line(haystack)
 }
 
 /// Determine whether the pattern contains an uppercase character which should

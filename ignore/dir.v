@@ -1,6 +1,7 @@
 module ignore
 
 import os
+import sync.stdatomic
 
 const empty_ignore_string = ''
 
@@ -152,6 +153,8 @@ struct IgnoreOptions implements IClone {
 
 struct IgnoreNode implements IClone {
 mut:
+	// V-specific equivalent of Rust's `Arc<IgnoreInner>` ownership count.
+	refs &stdatomic.AtomicVal[int]
 	/// The path to the directory that this matcher was built from.
 	dir string
 	/// The matcher for custom ignore files
@@ -168,10 +171,22 @@ mut:
 	is_absolute_parent bool
 }
 
+fn (mut node IgnoreNode) free() {
+	unsafe { node.dir.free() }
+	node.custom_ignore_matcher.free_empty()
+	node.ignore_matcher.free_empty()
+	node.git_ignore_matcher.free_empty()
+	node.git_exclude_matcher.free_empty()
+	node.dir = ''
+}
+
 /// Ignore is a matcher useful for recursively walking one or more directories.
 pub struct Ignore implements IClone {
 mut:
-	nodes []IgnoreNode
+	// V-specific: Rust stores each immutable matcher node behind an `Arc` and
+	// links it to its parent. Pointer elements preserve that sharing while the
+	// surrounding array represents the parent chain needed by this port.
+	nodes []&IgnoreNode
 	has_ignore_rules bool
 	has_git_parent   bool
 	/// An override matcher (default is empty).
@@ -204,6 +219,26 @@ mut:
 	opts IgnoreOptions
 }
 
+pub fn (ig &Ignore) clone() Ignore {
+	for node in ig.nodes {
+		node.refs.add(1)
+	}
+	return Ignore{
+		nodes:                        ig.nodes.clone()
+		has_ignore_rules:             ig.has_ignore_rules
+		has_git_parent:               ig.has_git_parent
+		overrides:                    ig.overrides
+		types:                        ig.types
+		absolute_base_value:          ig.absolute_base_value
+		has_absolute_base:            ig.has_absolute_base
+		global_gitignores_relative_to: ig.global_gitignores_relative_to
+		explicit_ignores:             ig.explicit_ignores
+		custom_ignore_filenames:      ig.custom_ignore_filenames
+		git_global_matcher:           ig.git_global_matcher
+		opts:                         ig.opts
+	}
+}
+
 pub fn (ig &^a Ignore) path[^a]() &^a string {
 	if ig.nodes.len == 0 {
 		return &empty_ignore_string
@@ -222,12 +257,15 @@ pub fn (ig &Ignore) is_absolute_parent() bool {
 	return ig.nodes[ig.nodes.len - 1].is_absolute_parent
 }
 
-pub fn (ig Ignore) parent() ?Ignore {
+pub fn (ig &Ignore) parent() ?Ignore {
 	if ig.nodes.len <= 1 {
 		return none
 	}
-	mut cloned := ig
-	cloned.nodes = cloned.nodes[..cloned.nodes.len - 1].clone()
+	mut cloned := ig.clone()
+	nodes := cloned.nodes[..cloned.nodes.len - 1].clone()
+	release_ignore_node(cloned.nodes[cloned.nodes.len - 1])
+	unsafe { cloned.nodes.free() }
+	cloned.nodes = nodes
 	return cloned
 }
 
@@ -291,13 +329,35 @@ pub fn (ig &Ignore) add_child(dir string) (Ignore, bool, IgnoreError) {
 	return next, has_err, err
 }
 
-fn ignore_node_has_rules(node IgnoreNode) bool {
+fn ignore_node_has_rules(node &IgnoreNode) bool {
 	return !node.custom_ignore_matcher.is_empty() || !node.ignore_matcher.is_empty()
 		|| !node.git_ignore_matcher.is_empty() || !node.git_exclude_matcher.is_empty()
 }
 
+// V-specific: the nodes themselves are immutable and shared between matcher
+// chains. A traversal frame owns only the pointer-array storage for its view
+// of that chain.
+fn (mut ig Ignore) free_nodes() {
+	for node in ig.nodes {
+		release_ignore_node(node)
+	}
+	unsafe { ig.nodes.free() }
+	ig.nodes = []&IgnoreNode{}
+}
+
+fn release_ignore_node(node &IgnoreNode) {
+	if node.refs.sub(1) == 1 {
+		mut owned := node
+		owned.free()
+		unsafe {
+			free(node.refs)
+			free(node)
+		}
+	}
+}
+
 /// Like add_child, but takes a full path and returns an IgnoreInner.
-fn (ig &Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
+fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 	check_vcs_dir := ig.opts.require_git && (ig.opts.git_ignore || ig.opts.git_exclude)
 	git_path := os.join_path(dir, '.git')
 	git_is_file := check_vcs_dir && os.is_file(git_path)
@@ -345,7 +405,8 @@ fn (ig &Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
 		}
 	}
 	final_has_err, final_err := errs.into_error_option()
-	return IgnoreNode{
+	return &IgnoreNode{
+		refs:                  stdatomic.new_atomic(1)
 		dir:                   normalize_path(dir).to_owned()
 		custom_ignore_matcher: custom_ig_matcher
 		ignore_matcher:        ig_matcher
@@ -398,7 +459,7 @@ fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] 
 fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
 	mut path_value := path
 	if path_value.starts_with('./') {
-		path_value = strip_prefix(path_value, './')
+		path_value = path_value[2..]
 	}
 	if !ig.overrides.is_empty() {
 		mat := match_from_override(ig.overrides.matched(path_value, is_dir))
@@ -443,7 +504,7 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 	any_git := !ig.opts.require_git || ig.any_git_parent()
 	mut saw_git := false
 	for i := ig.nodes.len - 1; i >= 0; i-- {
-		node := &ig.nodes[i]
+		node := ig.nodes[i]
 		if node.is_absolute_parent {
 			break
 		}
@@ -470,7 +531,7 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 			absolute_path := parent_absolute_match_path(*absolute_base,
 				ig.first_relative_dir_after_absolute_path(), path)
 			for i := ig.nodes.len - 1; i >= 0; i-- {
-				node := &ig.nodes[i]
+				node := ig.nodes[i]
 				if !node.is_absolute_parent {
 					continue
 				}
@@ -536,7 +597,12 @@ pub fn (ig &Ignore) parents() Parents {
 	mut items := []Ignore{}
 	for i := ig.nodes.len - 1; i >= 0; i-- {
 		mut item := ig.clone()
-		item.nodes = ig.nodes[..i + 1].clone()
+		nodes := ig.nodes[..i + 1].clone()
+		for removed in item.nodes[i + 1..] {
+			release_ignore_node(removed)
+		}
+		unsafe { item.nodes.free() }
+		item.nodes = nodes
 		items << item
 	}
 	return Parents{
@@ -651,7 +717,8 @@ pub fn (builder IgnoreBuilder) build_with_cwd(cwd string) Ignore {
 		}
 	}
 	return Ignore{
-		nodes: [IgnoreNode{
+		nodes: [&IgnoreNode{
+			refs:                  stdatomic.new_atomic(1)
 			dir:                   builder.dir.clone()
 			custom_ignore_matcher: Gitignore.empty()
 			ignore_matcher:        Gitignore.empty()

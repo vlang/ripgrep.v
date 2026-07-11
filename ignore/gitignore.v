@@ -144,6 +144,21 @@ pub fn (gi &Gitignore) is_empty() bool {
 	return gi.globs.len == 0
 }
 
+// V-specific: empty matchers are created for every traversed directory and
+// own their root/set storage even though they contain no rules.
+fn (mut gi Gitignore) free_empty() {
+	if !gi.is_empty() {
+		return
+	}
+	unsafe {
+		gi.root.free()
+		gi.globs.free()
+	}
+	gi.set.free_empty()
+	gi.root = ''
+	gi.globs = []Glob{}
+}
+
 /// Returns the total number of globs, which should be equivalent to
 /// `num_ignores + num_whitelists`.
 pub fn (gi Gitignore) len() int {

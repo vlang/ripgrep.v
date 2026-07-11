@@ -489,6 +489,11 @@ mut:
 	buf []u8
 }
 
+fn (mut interpolator Interpolator) free() {
+	unsafe { interpolator.buf.free() }
+	interpolator.buf = []u8{}
+}
+
 pub fn Interpolator.new(config HyperlinkConfig) Interpolator {
 	return Interpolator{
 		config: config

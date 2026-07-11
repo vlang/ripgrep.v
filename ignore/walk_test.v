@@ -1,6 +1,7 @@
 module ignore
 
 import os
+import sync
 import sync.stdatomic
 
 fn wfile(path string, contents string) {
@@ -45,38 +46,96 @@ fn walk_collect(prefix string, builder WalkBuilder) []string {
 	return paths
 }
 
-struct ParallelCollector {
+@[heap]
+struct ParallelCollectorState {
+	mutex &sync.Mutex
 mut:
 	dents []DirEntry
 }
 
+struct ParallelCollector {
+	state &ParallelCollectorState
+}
+
 fn (mut collector ParallelCollector) visit(result WalkResult) WalkState {
 	if !result.is_error {
-		collector.dents << result.entry
+		collector.state.mutex.lock()
+		unsafe {
+			mut state := &ParallelCollectorState(collector.state)
+			state.dents << result.entry
+		}
+		collector.state.mutex.unlock()
 	}
 	return .continue_
 }
 
+struct ParallelCollectorFactory {
+	state &ParallelCollectorState
+}
+
+fn (mut factory ParallelCollectorFactory) create() ParallelVisitor {
+	return ParallelCollector{
+		state: factory.state
+	}
+}
+
 fn walk_collect_entries_parallel(builder WalkBuilder) []DirEntry {
-	mut collector := ParallelCollector{}
-	builder.build_parallel().run(mut collector)
-	return collector.dents
+	state := &ParallelCollectorState{
+		mutex: sync.new_mutex()
+	}
+	mut factory := ParallelCollectorFactory{
+		state: state
+	}
+	builder.build_parallel().run(mut factory)
+	return unsafe { state.dents.clone() }
+}
+
+@[heap]
+struct ParallelSkipCollectorState {
+	mutex &sync.Mutex
+mut:
+	paths []string
 }
 
 struct ParallelSkipCollector {
-mut:
-	paths []string
+	state &ParallelSkipCollectorState
 }
 
 fn (mut collector ParallelSkipCollector) visit(result WalkResult) WalkState {
 	if result.is_error {
 		return .continue_
 	}
-	collector.paths << (*result.entry.path()).to_owned()
+	collector.state.mutex.lock()
+	unsafe {
+		mut state := &ParallelSkipCollectorState(collector.state)
+		state.paths << (*result.entry.path()).to_owned()
+	}
+	collector.state.mutex.unlock()
 	if *result.entry.file_name() == 'skip' {
 		return .skip
 	}
 	return .continue_
+}
+
+struct ParallelSkipCollectorFactory {
+	state &ParallelSkipCollectorState
+}
+
+fn (mut factory ParallelSkipCollectorFactory) create() ParallelVisitor {
+	return ParallelSkipCollector{
+		state: factory.state
+	}
+}
+
+fn walk_collect_skip_parallel(builder WalkBuilder) []string {
+	state := &ParallelSkipCollectorState{
+		mutex: sync.new_mutex()
+	}
+	mut factory := ParallelSkipCollectorFactory{
+		state: state
+	}
+	builder.build_parallel().run(mut factory)
+	return unsafe { state.paths.clone() }
 }
 
 fn walk_collect_parallel(prefix string, builder WalkBuilder) []string {
@@ -560,11 +619,10 @@ fn test_parallel_skip_prevents_descent() {
 	mut builder := WalkBuilder.new(root1)
 	builder.add(root2)
 	builder.threads(2)
-	mut collector := ParallelSkipCollector{}
-	builder.build_parallel().run(mut collector)
+	collected_paths := walk_collect_skip_parallel(builder)
 
 	mut paths := []string{}
-	for path in collector.paths {
+	for path in collected_paths {
 		paths << normal_path(strip_prefix(path, td.path()))
 	}
 	paths.sort()
@@ -592,6 +650,49 @@ fn test_parallel_single_root_uses_requested_workers() {
 	if builder.build_parallel().worker_count() != 4 {
 		panic('explicit worker count was not preserved')
 	}
+}
+
+struct QuitParallelVisitor {
+	visits &stdatomic.AtomicVal[int]
+}
+
+fn (mut visitor QuitParallelVisitor) visit(_result WalkResult) WalkState {
+	visitor.visits.add(1)
+	return .quit
+}
+
+struct QuitParallelVisitorFactory {
+	visits  &stdatomic.AtomicVal[int]
+	created &stdatomic.AtomicVal[int]
+}
+
+fn (mut factory QuitParallelVisitorFactory) create() ParallelVisitor {
+	factory.created.add(1)
+	return QuitParallelVisitor{
+		visits: factory.visits
+	}
+}
+
+fn test_parallel_quit_wakes_idle_work_stealers() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	for i in 0 .. 32 {
+		os.mkdir_all(os.join_path(td.path(), 'dir-${i}', 'nested')) or { panic(err) }
+	}
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	visits := stdatomic.new_atomic(0)
+	created := stdatomic.new_atomic(0)
+	mut factory := QuitParallelVisitorFactory{
+		visits:  visits
+		created: created
+	}
+	builder.build_parallel().run(mut factory)
+	assert created.load() == 4
+	assert visits.load() >= 1
+	assert visits.load() <= 4
 }
 
 fn test_parallel_stream_collects_single_root_children() {
@@ -657,11 +758,10 @@ fn test_parallel_single_root_skip_prevents_descent() {
 
 	mut builder := WalkBuilder.new(td.path())
 	builder.threads(4)
-	mut collector := ParallelSkipCollector{}
-	builder.build_parallel().run(mut collector)
+	collected_paths := walk_collect_skip_parallel(builder)
 
 	mut paths := []string{}
-	for path in collector.paths {
+	for path in collected_paths {
 		paths << normal_path(strip_prefix(path, td.path()))
 	}
 	paths.sort()
@@ -676,5 +776,28 @@ fn test_parallel_single_root_skip_prevents_descent() {
 	}
 	if 'keep/child/file' !in paths {
 		panic('missing keep file from ${paths}')
+	}
+}
+
+fn test_unix_paths_preserve_invalid_utf8_bytes() {
+	$if windows || macos {
+		return
+	}
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	name := [u8(`f`), `o`, `o`, 0xff, `b`, `a`, `r`].bytestr()
+	wfile(os.join_path(td.path(), name), 'match')
+	want := [name]
+	got_serial := walk_collect(td.path(), WalkBuilder.new(td.path()))
+	if got_serial != want {
+		panic('serial path bytes ${got_serial[0].bytes()}, want ${name.bytes()}')
+	}
+	mut builder := WalkBuilder.new(td.path())
+	builder.threads(4)
+	got_parallel := walk_collect_parallel(td.path(), builder)
+	if got_parallel != want {
+		panic('parallel path bytes ${got_parallel[0].bytes()}, want ${name.bytes()}')
 	}
 }

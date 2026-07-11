@@ -448,7 +448,9 @@ fn (mut lb LineBuffer) ensure_capacity() ! {
 	}
 	assert additional > 0
 	newlen := usize(lb.buf.len) + additional
-	lb.buf << []u8{len: int(additional)}
+	// Match Vec::resize without constructing and copying a second zero-filled
+	// array. The next read initializes the newly exposed free region.
+	unsafe { lb.buf.grow_len(int(additional)) }
 	assert usize(lb.buf.len) == newlen
 	assert lb.end < usize(lb.buf.len)
 }

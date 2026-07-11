@@ -28,15 +28,12 @@ fn test_command_reader_streams_stdout() {
 }
 
 fn test_command_reader_stdin_path_feeds_child() {
-	$if windows {
-		return
-	}
 	path := os.join_path(os.temp_dir(), 'ripgrep_v_command_reader_stdin_${os.getpid()}.txt')
 	os.write_file(path, 'preprocessor stdin\n') or { panic(err.msg()) }
 	defer {
 		os.rm(path) or {}
 	}
-	mut cmd := Command.new('cat')
+	mut cmd := if os.user_os() == 'windows' { Command.new('more.com') } else { Command.new('cat') }
 	cmd.stdin_path(path)
 	mut rdr := CommandReader.new(cmd) or { panic(err.msg()) }
 	mut all := []u8{}

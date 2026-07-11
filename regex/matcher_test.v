@@ -16,6 +16,28 @@ fn test_word() {
 	assert !matcher.is_match(boundary_matcher, 'abc -2 foo'.bytes())!
 }
 
+fn test_word_uses_unicode_half_boundaries() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.word(true)
+	matcher_ := builder.build('Δ') or { panic(err) }
+	assert matcher.is_match(matcher_, '-Δ-'.bytes())!
+	assert !matcher.is_match(matcher_, 'Δβ'.bytes())!
+	assert !matcher.is_match(matcher_, 'αΔ'.bytes())!
+
+	lazy := builder.build('a+?') or { panic(err) }
+	assert matcher.is_match(lazy, 'abc aaaa bc'.bytes())!
+	non_word := builder.build(r'\W+') or { panic(err) }
+	assert matcher.is_match(non_word, 'ABC !? spaced'.bytes())!
+}
+
+fn test_regex_matcher_ref_forwards_non_matching_bytes() {
+	matcher_ := RegexMatcherBuilder.new().build('foo') or { panic(err) }
+	ref_ := RegexMatcherRef.new(&matcher_)
+	non_matching := ref_.non_matching_bytes() or { panic('expected non-matching byte set') }
+	assert non_matching.contains(`\n`)
+	assert !non_matching.contains(`f`)
+}
+
 // Test that enabling a line terminator prevents it from matching through
 // said line terminator.
 fn test_line_terminator() {
@@ -196,6 +218,23 @@ fn test_non_unicode_hex_byte_literal() {
 	assert matcher.is_match(matcher_, haystack)!
 }
 
+fn test_non_unicode_dot_and_classes_match_invalid_utf8_bytes() {
+	haystack := [u8(0xff)]
+	unicode_dot := RegexMatcherBuilder.new().build('.') or { panic(err.msg()) }
+	assert !matcher.is_match(unicode_dot, haystack)!
+
+	mut bytes_builder := RegexMatcherBuilder.new()
+	bytes_builder.unicode(false)
+	byte_dot := bytes_builder.build('.') or { panic(err.msg()) }
+	mat := byte_dot.find_at(haystack, 0)!.get() or { panic('expected byte dot match') }
+	assert mat.start() == 0
+	assert mat.end() == 1
+	byte_class := bytes_builder.build(r'[\xFF]') or { panic(err.msg()) }
+	assert matcher.is_match(byte_class, haystack)!
+	negated := bytes_builder.build(r'[^\x00]') or { panic(err.msg()) }
+	assert matcher.is_match(negated, haystack)!
+}
+
 fn test_rejects_pcre_only_syntax() {
 	if _ := RegexMatcherBuilder.new().build(r'(?=a)a') {
 		panic('expected look-around error')
@@ -210,32 +249,32 @@ fn test_rejects_pcre_only_syntax() {
 	if _ := RegexMatcherBuilder.new().build(r'(?>a)') {
 		panic('expected atomic group error')
 	} else {
-		assert err.msg().contains('unsupported regex group syntax')
+		assert err.msg().contains('unrecognized flag')
 	}
 	if _ := RegexMatcherBuilder.new().build(r'a\Kb') {
 		panic('expected unsupported escape error')
 	} else {
-		assert err.msg().contains('unsupported escape sequence')
+		assert err.msg().contains('unrecognized escape sequence')
 	}
 	if _ := RegexMatcherBuilder.new().build(r'(*ACCEPT)') {
 		panic('expected backtracking verb error')
 	} else {
-		assert err.msg().contains('unsupported regex group syntax')
+		assert err.msg().contains('repetition operator missing expression')
 	}
 	if _ := RegexMatcherBuilder.new().build(r'(?&name)') {
 		panic('expected subroutine error')
 	} else {
-		assert err.msg().contains('unsupported regex group syntax')
+		assert err.msg().contains('unrecognized flag')
 	}
 	if _ := RegexMatcherBuilder.new().build(r'(?P=name)') {
 		panic('expected named backreference error')
 	} else {
-		assert err.msg().contains('backreferences')
+		assert err.msg().contains('unrecognized flag')
 	}
 	if _ := RegexMatcherBuilder.new().build(r'\k<name>') {
 		panic('expected named backreference escape error')
 	} else {
-		assert err.msg().contains('unsupported escape sequence')
+		assert err.msg().contains('unrecognized escape sequence')
 	}
 }
 
@@ -244,6 +283,21 @@ fn test_fixed_strings_allow_pcre_syntax_as_literals() {
 	builder.fixed_strings(true)
 	matcher_ := builder.build(r'(?=a)\1(?>a)\K') or { panic(err.msg()) }
 	assert matcher.is_match(matcher_, r'xx(?=a)\1(?>a)\Kyy'.bytes())!
+}
+
+fn test_ascii_hex_class_matches_ascii_bytes() {
+	matcher_ := RegexMatcherBuilder.new().build(r'[\x00-\x7F]+')!
+	assert matcher.is_match(matcher_, 'abc'.bytes())!
+	assert !matcher.is_match(matcher_, 'é'.bytes())!
+	mut line_builder := RegexMatcherBuilder.new()
+	line_builder.multi_line(true)
+	line_builder.line_terminator(`\n`)
+	line_matcher := line_builder.build(r'[\x00-\x7F]+')!
+	assert matcher.is_match(line_matcher, 'abc'.bytes())!
+	assert !matcher.is_match(line_matcher, 'é'.bytes())!
+	cloned := line_matcher.clone()
+	assert matcher.is_match(cloned, 'abc'.bytes())!
+	assert !matcher.is_match(cloned, 'é'.bytes())!
 }
 
 fn test_possessive_quantifier_syntax_matches_rust_regex() {
@@ -270,19 +324,58 @@ fn test_rust_regex_crlf_flag_compatibility() {
 }
 
 fn test_rust_regex_more_inline_and_anchor_compatibility() {
-	for pattern in [r'(?U)a+', r'(?i-m)a', r'(?x:a b)', r'(?-i:a)b', r'\Aabc',
-		r'abc\z', r'\<abc', r'abc\>'] {
+	for pattern in [r'(?U)a+', r'(?i-m)a', r'(?x:a b)', r'(?-i:a)b', r'\Aabc', r'abc\z', r'\<abc',
+		r'abc\>'] {
 		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
 		assert matcher.is_match(matcher_, 'abc'.bytes())!
 	}
 }
 
+fn test_rust_regex_greed_swap_global_scoped_and_builder() {
+	for pattern in [r'(?U)a+', r'(?U:a+)'] {
+		matcher_ := RegexMatcherBuilder.new().build(pattern)!
+		mat := (matcher_.find_at('aaaa'.bytes(), 0)!).get() or { panic('missing match') }
+		assert mat.end() == 1
+	}
+	mut builder := RegexMatcherBuilder.new()
+	builder.swap_greed(true)
+	matcher_ := builder.build(r'a+?')!
+	mat := (matcher_.find_at('aaaa'.bytes(), 0)!).get() or { panic('missing match') }
+	assert mat.end() == 4
+}
+
 fn test_rust_regex_ascii_class_compatibility() {
-	for pattern in [r'\d+', r'\D+', r'\w+', r'\W+', r'\s+', r'\S+', r'[[:alpha:]]+',
-		r'[^[:alpha:]]+', r'\pL+', r'\p{Letter}+', r'\p{gc=Lu}+', r'\p{ascii}+'] {
+	for pattern in [r'\d+', r'\D+', r'\w+', r'\W+', r'\s+', r'\S+', r'[[:alpha:]]+', r'[^[:alpha:]]+',
+		r'\pL+', r'\p{Letter}+', r'\p{gc=Lu}+', r'\p{ascii}+'] {
 		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
 		assert matcher.is_match(matcher_, 'ABC 123'.bytes())!
 	}
+}
+
+fn test_rust_regex_all_posix_ascii_classes() {
+	cases := {
+		'alnum':  'A1'
+		'alpha':  'Az'
+		'ascii':  '\u007f'
+		'blank':  '\t '
+		'cntrl':  '\u0001'
+		'digit':  '19'
+		'graph':  '!~'
+		'lower':  'az'
+		'print':  ' ~'
+		'punct':  '!@'
+		'space':  '\t\r '
+		'upper':  'AZ'
+		'word':   'A_9'
+		'xdigit': 'aF9'
+	}
+	for name, text in cases {
+		matcher_ := RegexMatcherBuilder.new().build('[[:${name}:]]+')!
+		assert matcher.is_match(matcher_, text.bytes())!
+	}
+	not_digit := RegexMatcherBuilder.new().build(r'[^[:digit:]]+')!
+	assert matcher.is_match(not_digit, 'abc'.bytes())!
+	assert !matcher.is_match(not_digit, '123'.bytes())!
 }
 
 fn test_rust_regex_common_unicode_class_compatibility() {
@@ -341,14 +434,37 @@ fn test_rust_regex_additional_script_property_compatibility() {
 	}
 }
 
-fn test_rust_regex_rejects_unsupported_unicode_properties() {
-	for pattern in [r'\p{Emoji}', r'\p{Script=Deseret}', r'[\P{Greek}]'] {
-		if _ := RegexMatcherBuilder.new().build(pattern) {
-			panic('expected unsupported Unicode property error for ${pattern}')
-		} else {
-			assert err.msg().contains('Unicode property')
-		}
+fn test_rust_regex_broad_unicode_properties() {
+	cases := {
+		r'\p{Emoji}+':                 '😀'
+		r'\p{Script=Deseret}+':        '𐐀'
+		r'\p{scx=Hiragana}+':          'ー'
+		r'\p{Alphabetic}+':            'ᾀ'
+		r'\p{Age=3.0}+':               '€'
+		r'\p{Word_Break=Katakana}+':   'カ'
+		r'\p{General_Category=Mark}+': '\u0301'
 	}
+	for pattern, text in cases {
+		matcher_ := RegexMatcherBuilder.new().build(pattern) or {
+			panic('${pattern}: ${err.msg()}')
+		}
+		assert matcher.is_match(matcher_, text.bytes())!
+	}
+	not_greek := RegexMatcherBuilder.new().build(r'[\P{Greek}]+') or { panic(err.msg()) }
+	assert matcher.is_match(not_greek, 'Latin'.bytes())!
+	assert !matcher.is_match(not_greek, 'Δ'.bytes())!
+}
+
+fn test_rust_regex_age_property_matches_codepoints_available_by_that_age() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.multi_line(true)
+	builder.line_terminator(`\n`)
+	matcher_ := builder.build(r'\p{Age=6.0}+')!
+	assert matcher.is_match(matcher_, 'abc'.bytes())!
+	cloned := matcher_.clone()
+	assert matcher.is_match(cloned, 'abc'.bytes())!
+	candidate := cloned.find_candidate_line('abc\n'.bytes())!
+	_ := candidate.get() or { panic('expected candidate') }
 }
 
 fn test_non_unicode_group_byte_literal() {
@@ -377,6 +493,78 @@ fn test_rust_regex_class_set_operations() {
 	ascii_word := RegexMatcherBuilder.new().build(r'[\w&&\p{ascii}]+') or { panic(err.msg()) }
 	assert matcher.is_match(ascii_word, 'abc_123'.bytes())!
 	assert !matcher.is_match(ascii_word, 'Δ'.bytes())!
+
+	greek_without_delta := RegexMatcherBuilder.new().build(r'[\p{Greek}--Δ]+') or {
+		panic(err.msg())
+	}
+	assert matcher.is_match(greek_without_delta, 'δ'.bytes())!
+	assert !matcher.is_match(greek_without_delta, 'Δ'.bytes())!
+	assert !matcher.is_match(greek_without_delta, 'Latin'.bytes())!
+	uppercase_greek := RegexMatcherBuilder.new().build(r'[\p{Greek}&&\p{Uppercase}]+') or {
+		panic(err.msg())
+	}
+	assert matcher.is_match(uppercase_greek, 'Δ'.bytes())!
+	assert !matcher.is_match(uppercase_greek, 'δ'.bytes())!
+}
+
+fn test_rust_regex_unicode_case_folding_scoped_flags_and_braced_hex() {
+	class_matcher := RegexMatcherBuilder.new().build(r'(?i)[δkß]') or { panic(err.msg()) }
+	for text in ['Δ', 'K', 'ẞ'] {
+		assert matcher.is_match(class_matcher, text.bytes())!
+	}
+	scoped := RegexMatcherBuilder.new().build(r'(?i:δ(?-i:x))') or { panic(err.msg()) }
+	assert matcher.is_match(scoped, 'Δx'.bytes())!
+	assert !matcher.is_match(scoped, 'ΔX'.bytes())!
+	hex := RegexMatcherBuilder.new().build(r'\x{394}') or { panic(err.msg()) }
+	assert matcher.is_match(hex, 'Δ'.bytes())!
+}
+
+fn test_rust_regex_unicode_escape_forms() {
+	for pattern in [r'\u{3B1}+', r'\u03B1+', r'\U000003B1+'] {
+		matcher_ := RegexMatcherBuilder.new().build(pattern)!
+		assert matcher.is_match(matcher_, 'α'.bytes())!
+	}
+	if _ := RegexMatcherBuilder.new().build(r'\Qabc\E') {
+		panic('expected quote escape rejection')
+	} else {
+		assert err.msg().contains('unrecognized escape sequence')
+	}
+}
+
+fn test_rust_regex_parse_errors_reject_invalid_captures_ranges_and_properties() {
+	invalid := {
+		r'(?<1>a)':            'invalid capture group character'
+		r'(?P<x>a)(?P<x>b)':   'duplicate capture group name'
+		r'[z-a]':              'invalid character class range'
+		r'\p{NoSuchProperty}': 'Unicode property not found'
+		r'[':                  'unclosed character class'
+		r'a{4,2}':             'invalid repetition count range'
+		r'*a':                 'repetition operator missing expression'
+		r'(?q:a)':             'unrecognized flag'
+	}
+	for pattern, expected in invalid {
+		if _ := RegexMatcherBuilder.new().build(pattern) {
+			panic('expected parse error for ${pattern}')
+		} else {
+			assert err.msg().starts_with('regex parse error:\n    (?:${pattern})\n')
+			assert err.msg().contains('error: ${expected}')
+		}
+	}
+}
+
+fn test_build_wrapper_parentheses_match_ripgrep_issue_2480() {
+	matcher_ := RegexMatcherBuilder.new().build(')(') or { panic(err.msg()) }
+	assert matcher.is_match(matcher_, ''.bytes())!
+}
+
+fn test_rust_regex_empty_alternatives_and_byte_offset_empty_matches() {
+	for pattern in ['', r'a|', r'|a', r'()'] {
+		empty := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
+		found := empty.find_at('Δ'.bytes(), 1)!
+		mat := found.get() or { panic('expected empty match for ${pattern}') }
+		assert mat.start() == 1
+		assert mat.end() == 1
+	}
 }
 
 fn test_rust_regex_named_capture_angle_syntax() {
@@ -390,6 +578,40 @@ fn test_rust_regex_word_boundary_variants() {
 		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
 		assert matcher.is_match(matcher_, 'abc'.bytes())!
 	}
+}
+
+fn test_rust_regex_word_boundary_variants_are_distinct_and_unicode_aware() {
+	start := RegexMatcherBuilder.new().build(r'\b{start}Δ') or { panic(err.msg()) }
+	assert matcher.is_match(start, 'Δ'.bytes())!
+	start_nonword := RegexMatcherBuilder.new().build(r'\b{start}-') or { panic(err.msg()) }
+	assert !matcher.is_match(start_nonword, '-'.bytes())!
+
+	end := RegexMatcherBuilder.new().build(r'Δ\b{end}') or { panic(err.msg()) }
+	assert matcher.is_match(end, 'Δ'.bytes())!
+	end_nonword := RegexMatcherBuilder.new().build(r'-\b{end}') or { panic(err.msg()) }
+	assert !matcher.is_match(end_nonword, '-'.bytes())!
+
+	start_half := RegexMatcherBuilder.new().build(r'\b{start-half}-') or { panic(err.msg()) }
+	assert matcher.is_match(start_half, '-'.bytes())!
+	end_half := RegexMatcherBuilder.new().build(r'-\b{end-half}') or { panic(err.msg()) }
+	assert matcher.is_match(end_half, '-'.bytes())!
+	assert !matcher.is_match(RegexMatcherBuilder.new().build(r'\b{end-half}x') or {
+		panic(err.msg())
+	}, 'Δx'.bytes())!
+
+	unicode_boundary := RegexMatcherBuilder.new().build(r'\bΔ') or { panic(err.msg()) }
+	assert matcher.is_match(unicode_boundary, 'Δ'.bytes())!
+	ascii_boundary := RegexMatcherBuilder.new().build(r'(?-u:\b)Δ') or { panic(err.msg()) }
+	assert !matcher.is_match(ascii_boundary, 'Δ'.bytes())!
+}
+
+fn test_rust_regex_unicode_word_uses_the_regex_syntax_perl_word_table() {
+	word := RegexMatcherBuilder.new().build(r'^\w$') or { panic(err.msg()) }
+	for text in ['\u0301', '\u200c', '\u203f'] {
+		assert matcher.is_match(word, text.bytes())!
+	}
+	boundary := RegexMatcherBuilder.new().build('^\\b\u0301\\b$') or { panic(err.msg()) }
+	assert matcher.is_match(boundary, '\u0301'.bytes())!
 }
 
 fn test_backend_normalized_patterns_with_line_terminator() {

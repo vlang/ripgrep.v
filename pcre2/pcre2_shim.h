@@ -6,6 +6,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+/*
+ * V embeds this header before its generated libc declarations and removes the
+ * system includes above. Keep the two allocator declarations local to that
+ * embedding mode; normal C users continue to get them from <stdlib.h>.
+ */
+#if RIPGREP_V_C_EMBEDDED
+void *calloc(size_t, size_t);
+void free(void *);
+#endif
+
 #ifndef RIPGREP_V_PCRE2_ENABLED
 #define RIPGREP_V_PCRE2_ENABLED 0
 #endif
@@ -13,10 +23,6 @@
 #if RIPGREP_V_PCRE2_ENABLED
 #define PCRE2_CODE_UNIT_WIDTH 8
 #include <pcre2.h>
-
-void *calloc(size_t count, size_t size);
-void free(void *ptr);
-int snprintf(char *str, size_t size, const char *format, ...);
 
 static inline uint32_t rg_pcre2_opt_caseless(void) { return PCRE2_CASELESS; }
 static inline int rg_pcre2_enabled(void) { return 1; }
@@ -41,7 +47,14 @@ typedef struct rg_pcre2_regex_8 {
 	pcre2_code_8 *code;
 	pcre2_match_context_8 *match_context;
 	pcre2_jit_stack_8 *jit_stack;
+	size_t max_jit_stack_size;
 } rg_pcre2_regex_8;
+
+static volatile size_t rg_pcre2_live_regexes = 0;
+
+static inline size_t rg_pcre2_live_regex_count(void) {
+	return __atomic_add_fetch(&rg_pcre2_live_regexes, 0, 5);
+}
 
 static inline int rg_pcre2_jit_available(void) {
 	int jit = 0;
@@ -128,6 +141,7 @@ static inline rg_pcre2_regex_8 *rg_pcre2_regex_new(
 		return NULL;
 	}
 	regex->code = code;
+	regex->max_jit_stack_size = max_jit_stack_size;
 	if (use_match_context) {
 		regex->match_context = pcre2_match_context_create_8(NULL);
 		if (regex->match_context == NULL) {
@@ -146,7 +160,31 @@ static inline rg_pcre2_regex_8 *rg_pcre2_regex_new(
 			}
 		}
 	}
+	__atomic_add_fetch(&rg_pcre2_live_regexes, 1, 5);
 	return regex;
+}
+
+static inline rg_pcre2_regex_8 *rg_pcre2_regex_clone(rg_pcre2_regex_8 *regex) {
+	if (regex == NULL || regex->code == NULL) {
+		return NULL;
+	}
+	pcre2_code_8 *code = pcre2_code_copy_8(regex->code);
+	if (code == NULL) {
+		return NULL;
+	}
+	size_t jit_size = 0;
+	if (pcre2_pattern_info_8(regex->code, PCRE2_INFO_JITSIZE, &jit_size) == 0
+		&& jit_size > 0) {
+		if (pcre2_jit_compile_8(code, PCRE2_JIT_COMPLETE) != 0) {
+			pcre2_code_free_8(code);
+			return NULL;
+		}
+	}
+	return rg_pcre2_regex_new(
+		code,
+		regex->match_context != NULL,
+		regex->max_jit_stack_size
+	);
 }
 
 static inline void rg_pcre2_regex_free(rg_pcre2_regex_8 *regex) {
@@ -162,6 +200,7 @@ static inline void rg_pcre2_regex_free(rg_pcre2_regex_8 *regex) {
 	if (regex->code != NULL) {
 		pcre2_code_free_8(regex->code);
 	}
+	__atomic_sub_fetch(&rg_pcre2_live_regexes, 1, 5);
 	free(regex);
 }
 
@@ -251,6 +290,7 @@ static inline unsigned char *rg_pcre2_name_entry_name(
 
 static inline uint32_t rg_pcre2_opt_caseless(void) { return 0; }
 static inline int rg_pcre2_enabled(void) { return 0; }
+static inline size_t rg_pcre2_live_regex_count(void) { return 0; }
 static inline uint32_t rg_pcre2_opt_dotall(void) { return 0; }
 static inline uint32_t rg_pcre2_opt_extended(void) { return 0; }
 static inline uint32_t rg_pcre2_opt_multiline(void) { return 0; }

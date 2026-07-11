@@ -46,7 +46,7 @@ pub fn (builder HaystackBuilder) build_from_result(result ignore.WalkResult) ?Ha
 /// searched, then this returns `None` after emitting any relevant log
 /// messages.
 fn (builder HaystackBuilder) build(dent ignore.DirEntry) ?Haystack {
-	hay := Haystack.new(dent, builder.strip_dot_prefix)
+	mut hay := Haystack.new(dent, builder.strip_dot_prefix)
 	if err := hay.dent.error() {
 		ignore_message(err.msg())
 	}
@@ -68,6 +68,7 @@ fn (builder HaystackBuilder) build(dent ignore.DirEntry) ?Haystack {
 	if !hay.is_dir() {
 		debug_message('rg::haystack', '${*hay.path()}: ignored because it is not a file')
 	}
+	hay.free_path_cache()
 	return none
 }
 
@@ -87,8 +88,8 @@ pub struct Haystack implements IClone {
 mut:
 	dent             ignore.DirEntry
 	strip_dot_prefix bool
-	// V-specific owned path cache so `path` can return a stable borrowed
-	// string even when the `./` prefix is stripped.
+	// V-specific owned byte-string path cache so `path` can return a stable
+	// borrow even when the `./` byte prefix is stripped.
 	path_value string
 }
 
@@ -114,6 +115,20 @@ fn haystack_path_value(dent ignore.DirEntry, strip_dot_prefix bool) string {
 /// is returned instead.
 pub fn (hay &^a Haystack) path[^a]() &^a string {
 	return &hay.path_value
+}
+
+// V-specific: releases the path cache while leaving the borrowed walk entry
+// owned by the caller's WalkResult.
+pub fn (mut hay Haystack) free_path_cache() {
+	unsafe { hay.path_value.free() }
+	hay.path_value = ''
+}
+
+// V-specific: release a haystack that received ownership of a walk entry,
+// as in the parallel search job queue.
+pub fn (mut hay Haystack) free_owned() {
+	hay.dent.free()
+	hay.free_path_cache()
 }
 
 /// Returns true if and only if this entry corresponds to stdin.

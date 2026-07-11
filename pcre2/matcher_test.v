@@ -1,6 +1,8 @@
 module pcre2
 
-import matcher
+fn pcre2_is_match(re &RegexMatcher, haystack []u8) !bool {
+	return re.find_at(haystack, 0)!.has_value
+}
 
 fn has_pcre2_feature() bool {
 	return pcre2_enabled()
@@ -15,12 +17,12 @@ fn test_word() {
 	mut builder := RegexMatcherBuilder.new()
 	builder.word(true)
 	matcher_ := builder.build(r'-2') or { panic(err) }
-	assert matcher.is_match(matcher_, 'abc -2 foo'.bytes())!
+	assert pcre2_is_match(&matcher_, 'abc -2 foo'.bytes())!
 
 	mut boundary_builder := RegexMatcherBuilder.new()
 	boundary_builder.word(false)
 	boundary_matcher := boundary_builder.build(r'\b-2\b') or { panic(err) }
-	assert !matcher.is_match(boundary_matcher, 'abc -2 foo'.bytes())!
+	assert !pcre2_is_match(&boundary_matcher, 'abc -2 foo'.bytes())!
 }
 
 fn test_word_rewrite_backtracks_at_same_start() {
@@ -53,14 +55,32 @@ fn test_clone_retain_free_keeps_other_clone_alive() {
 	}
 	mut matcher_ := RegexMatcherBuilder.new().build(r'abc') or { panic(err) }
 	mut cloned := matcher_.clone()
-	assert matcher.is_match(cloned, 'abc'.bytes())!
+	assert pcre2_is_match(&cloned, 'abc'.bytes())!
 	unsafe {
 		cloned.free()
 	}
-	assert matcher.is_match(matcher_, 'abc'.bytes())!
+	assert pcre2_is_match(&matcher_, 'abc'.bytes())!
 	unsafe {
 		matcher_.free()
 	}
+}
+
+fn test_automatic_drop_releases_cloned_matchers() {
+	if !has_pcre2_feature() {
+		return
+	}
+	baseline := live_regex_count()
+	for _ in 0 .. 256 {
+		exercise_automatic_matcher_drop()
+	}
+	assert live_regex_count() == baseline
+}
+
+fn exercise_automatic_matcher_drop() {
+	matcher_ := RegexMatcherBuilder.new().build(r'(Sherlock)\s+(Holmes)') or { panic(err) }
+	cloned1 := matcher_.clone()
+	cloned2 := cloned1.clone()
+	assert cloned2.find_at('Sherlock Holmes'.bytes(), 0)!.has_value
 }
 
 // Test that enabling CRLF permits `$` to match at the end of a line.
@@ -72,21 +92,21 @@ fn test_line_terminator_crlf() {
 	mut lf_builder := RegexMatcherBuilder.new()
 	lf_builder.multi_line(true)
 	lf_matcher := lf_builder.build(r'abc$') or { panic(err) }
-	assert matcher.is_match(lf_matcher, 'abc\n'.bytes())!
+	assert pcre2_is_match(&lf_matcher, 'abc\n'.bytes())!
 
 	// Test that `$` doesn't match at `\r\n` boundary normally.
 	mut crlf_off_builder := RegexMatcherBuilder.new()
 	crlf_off_builder.multi_line(true)
 	crlf_off_matcher := crlf_off_builder.build(r'abc$') or { panic(err) }
-	assert !matcher.is_match(crlf_off_matcher, 'abc\r\n'.bytes())!
+	assert !pcre2_is_match(&crlf_off_matcher, 'abc\r\n'.bytes())!
 
 	// Now check the CRLF handling.
 	mut crlf_builder := RegexMatcherBuilder.new()
 	crlf_builder.multi_line(true)
 	crlf_builder.crlf(true)
 	crlf_matcher := crlf_builder.build(r'abc$') or { panic(err) }
-	assert matcher.is_match(crlf_matcher, 'abc\n'.bytes())!
-	assert matcher.is_match(crlf_matcher, 'abc\r\n'.bytes())!
+	assert pcre2_is_match(&crlf_matcher, 'abc\n'.bytes())!
+	assert pcre2_is_match(&crlf_matcher, 'abc\r\n'.bytes())!
 }
 
 // Test that smart case works.
@@ -97,12 +117,12 @@ fn test_case_smart() {
 	mut builder := RegexMatcherBuilder.new()
 	builder.case_smart(true)
 	matcher_ := builder.build(r'abc') or { panic(err) }
-	assert matcher.is_match(matcher_, 'ABC'.bytes())!
+	assert pcre2_is_match(&matcher_, 'ABC'.bytes())!
 
 	mut upper_builder := RegexMatcherBuilder.new()
 	upper_builder.case_smart(true)
 	upper_matcher := upper_builder.build(r'aBc') or { panic(err) }
-	assert !matcher.is_match(upper_matcher, 'ABC'.bytes())!
+	assert !pcre2_is_match(&upper_matcher, 'ABC'.bytes())!
 }
 
 fn test_extended() {
@@ -112,7 +132,7 @@ fn test_extended() {
 	mut builder := RegexMatcherBuilder.new()
 	builder.extended(true)
 	matcher_ := builder.build(r'a b c') or { panic(err) }
-	assert matcher.is_match(matcher_, 'abc'.bytes())!
+	assert pcre2_is_match(&matcher_, 'abc'.bytes())!
 }
 
 fn test_look_around() {
@@ -120,8 +140,8 @@ fn test_look_around() {
 		return
 	}
 	matcher_ := RegexMatcherBuilder.new().build(r'(?<=the )Sherlock') or { panic(err) }
-	assert matcher.is_match(matcher_, 'the Sherlock'.bytes())!
-	assert !matcher.is_match(matcher_, 'not Sherlock'.bytes())!
+	assert pcre2_is_match(&matcher_, 'the Sherlock'.bytes())!
+	assert !pcre2_is_match(&matcher_, 'not Sherlock'.bytes())!
 }
 
 fn test_utf_ucp_word_classes() {
@@ -131,12 +151,12 @@ fn test_utf_ucp_word_classes() {
 	mut ascii_builder := RegexMatcherBuilder.new()
 	ascii_builder.utf(true)
 	ascii_matcher := ascii_builder.build(r'\w+') or { panic(err) }
-	assert !matcher.is_match(ascii_matcher, 'Δ'.bytes())!
+	assert !pcre2_is_match(&ascii_matcher, 'Δ'.bytes())!
 
 	mut unicode_builder := RegexMatcherBuilder.new()
 	unicode_builder.ucp(true)
 	unicode_matcher := unicode_builder.build(r'\w+') or { panic(err) }
-	assert matcher.is_match(unicode_matcher, 'Δ'.bytes())!
+	assert pcre2_is_match(&unicode_matcher, 'Δ'.bytes())!
 }
 
 fn test_required_jit_errors_when_unavailable() {
@@ -168,8 +188,8 @@ fn test_fixed_strings_escape_meta_characters() {
 	mut builder := RegexMatcherBuilder.new()
 	builder.fixed_strings(true)
 	matcher_ := builder.build(r'a.c') or { panic(err) }
-	assert matcher.is_match(matcher_, 'a.c'.bytes())!
-	assert !matcher.is_match(matcher_, 'abc'.bytes())!
+	assert pcre2_is_match(&matcher_, 'a.c'.bytes())!
+	assert !pcre2_is_match(&matcher_, 'abc'.bytes())!
 }
 
 fn test_capture_metadata() {

@@ -58,3 +58,20 @@ fn test_haystack_strip_dot_prefix() {
 	hay := builder.build_from_result(result) or { panic('expected haystack') }
 	assert *hay.path() == 'file.txt'
 }
+
+fn test_haystack_preserves_invalid_utf8_path_bytes() {
+	$if windows || macos {
+		return
+	}
+	td := haystack_tmpdir()
+	defer {
+		os.rmdir_all(td) or {}
+	}
+	name := [u8(`f`), `o`, `o`, 0xff, `b`, `a`, `r`].bytestr()
+	file := os.join_path(td, name)
+	os.write_file(file, 'abc') or { panic(err.msg()) }
+	mut walk := ignore.WalkBuilder.new(file).build()
+	result := walk.next() or { panic('expected a walk result') }
+	hay := HaystackBuilder.new().build_from_result(result) or { panic('expected haystack') }
+	assert (*hay.path()).bytes() == file.bytes()
+}

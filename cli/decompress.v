@@ -170,9 +170,7 @@ pub fn new_decompression_reader_builder() DecompressionReaderBuilder {
 /// strategy, then a passthru reader is returned that does no
 /// decompression.
 pub fn (builder DecompressionReaderBuilder) build(path string) !DecompressionReader {
-	mut cmd := builder.matcher.command(path) or {
-		return DecompressionReader.new_passthru(path)
-	}
+	mut cmd := builder.matcher.command(path) or { return DecompressionReader.new_passthru(path) }
 	cmd.arg(path)
 	cmd_reader := builder.command_builder.build(cmd) or {
 		return DecompressionReader.new_passthru(path)
@@ -221,7 +219,7 @@ enum DecompressionReaderKind {
 /// meant to be an alternative to using decompression libraries in favor of the
 /// simplicity and portability of using external commands such as `gzip` and
 /// `xz`.
-pub struct DecompressionReader {
+pub struct DecompressionReader implements Drop {
 	// V-specific: dynamic `io.Reader` calls copy concrete reader values at the
 	// interface boundary. Keep the owned process/file state behind a shared
 	// inner pointer so copies all mutate and close the same reader.
@@ -278,6 +276,17 @@ pub fn (mut reader DecompressionReader) close() ! {
 		inner.file.close()
 		inner.has_file = false
 	}
+}
+
+fn (mut reader DecompressionReader) drop() {
+	if isnil(reader.inner) {
+		return
+	}
+	reader.close() or {}
+	unsafe {
+		free(reader.inner)
+	}
+	reader.inner = unsafe { nil }
 }
 
 pub fn (mut reader DecompressionReader) read(mut buf []u8) !int {

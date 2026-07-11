@@ -809,6 +809,17 @@ pub fn (gs GlobSet) len() int {
 	return gs.len
 }
 
+// V-specific: release the allocation owned by an empty set without needing
+// sum-type payload destruction. Non-empty sets are released with their owning
+// ignore matcher once ownership-aware sum-type drops are available.
+pub fn (mut gs GlobSet) free_empty() {
+	if gs.len != 0 {
+		return
+	}
+	unsafe { gs.strats.free() }
+	gs.strats = []GlobSetMatchStrategy{}
+}
+
 /// Returns true if any glob in this set matches the path given.
 pub fn (gs GlobSet) is_match(path string) bool {
 	candidate := candidate_from_string_with(&path, gs.needs_basename, gs.needs_ext)

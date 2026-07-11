@@ -16,7 +16,7 @@ enum PrinterMatcherKind {
 	pcre2
 }
 
-pub struct PrinterMatcher {
+pub struct PrinterMatcher implements IClone, Drop {
 	kind  PrinterMatcherKind
 	regex regex.RegexMatcher
 	pcre2 pcre2.RegexMatcher
@@ -36,7 +36,7 @@ pub fn PrinterMatcher.pcre2(matcher_ pcre2.RegexMatcher) PrinterMatcher {
 	}
 }
 
-pub fn (pm PrinterMatcher) clone() PrinterMatcher {
+pub fn (pm &PrinterMatcher) clone() PrinterMatcher {
 	return match pm.kind {
 		.rust_regex {
 			PrinterMatcher{
@@ -53,42 +53,48 @@ pub fn (pm PrinterMatcher) clone() PrinterMatcher {
 	}
 }
 
-fn (pm PrinterMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+fn (mut pm PrinterMatcher) drop() {
+	if pm.kind == .pcre2 {
+		pm.pcre2.drop()
+	}
+}
+
+fn (pm &PrinterMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	return match pm.kind {
 		.rust_regex { pm.regex.find_at(haystack, at)! }
 		.pcre2 { pm.pcre2.find_at(haystack, at)! }
 	}
 }
 
-fn (pm PrinterMatcher) new_captures() !matcher.NoCaptures {
+fn (pm &PrinterMatcher) new_captures() !matcher.NoCaptures {
 	return match pm.kind {
 		.rust_regex { pm.regex.new_captures()! }
 		.pcre2 { pm.pcre2.new_captures()! }
 	}
 }
 
-fn (pm PrinterMatcher) capture_count() usize {
+fn (pm &PrinterMatcher) capture_count() usize {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_count() }
 		.pcre2 { pm.pcre2.capture_count() }
 	}
 }
 
-fn (pm PrinterMatcher) capture_index(name string) ?usize {
+fn (pm &PrinterMatcher) capture_index(name string) ?usize {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_index(name) }
 		.pcre2 { pm.pcre2.capture_index(name) }
 	}
 }
 
-fn (pm PrinterMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (pm &PrinterMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
 	return match pm.kind {
 		.rust_regex { pm.regex.captures_at(haystack, at, mut caps)! }
 		.pcre2 { pm.pcre2.captures_at(haystack, at, mut caps)! }
 	}
 }
 
-fn (pm PrinterMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+fn (pm &PrinterMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_groups_at(haystack, at)! }
 		.pcre2 { pm.pcre2.capture_groups_at(haystack, at)! }
@@ -102,14 +108,14 @@ fn (pm &^a PrinterMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	}
 }
 
-fn (pm PrinterMatcher) line_terminator() ?matcher.LineTerminator {
+fn (pm &PrinterMatcher) line_terminator() ?matcher.LineTerminator {
 	return match pm.kind {
 		.rust_regex { pm.regex.line_terminator() }
 		.pcre2 { pm.pcre2.line_terminator() }
 	}
 }
 
-fn (pm PrinterMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+fn (pm &PrinterMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
 	return match pm.kind {
 		.rust_regex { pm.regex.find_candidate_line(haystack)! }
 		.pcre2 { pm.pcre2.find_candidate_line(haystack)! }
@@ -118,7 +124,7 @@ fn (pm PrinterMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineM
 
 // V-specific: keep printer match rediscovery on the concrete wrapper so V2
 // does not need a cross-module generic `find_iter_at` specialization here.
-fn printer_find_iter_at(matcher_ PrinterMatcher, haystack []u8, at usize, matched fn (matcher.Match) bool) ! {
+fn printer_find_iter_at(matcher_ &PrinterMatcher, haystack []u8, at usize, matched fn (matcher.Match) bool) ! {
 	mut last_end := at
 	mut has_last_match := false
 	mut last_match_end := usize(0)
@@ -147,7 +153,7 @@ fn printer_find_iter_at(matcher_ PrinterMatcher, haystack []u8, at usize, matche
 	}
 }
 
-fn printer_matcher_multi_line(searcher_ searcher.Searcher, matcher_ PrinterMatcher) bool {
+fn printer_matcher_multi_line(searcher_ searcher.Searcher, matcher_ &PrinterMatcher) bool {
 	if !searcher_.multi_line() {
 		return false
 	}
@@ -182,6 +188,16 @@ mut:
 	has_hyperlink bool
 }
 
+fn (mut pp PrinterPath[^a]) free[^a]() {
+	unsafe { pp.bytes.free() }
+	if pp.has_hyperlink {
+		unsafe { pp.hyperlink.bytes.free() }
+	}
+	pp.bytes = []u8{}
+	pp.hyperlink = HyperlinkPath{}
+	pp.has_hyperlink = false
+}
+
 /// Create a new path suitable for printing.
 pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
 	return PrinterPath[^a]{
@@ -194,29 +210,25 @@ pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
 ///
 /// When set, `PrinterPath::as_bytes` will return the path provided but
 /// with its separator replaced with the one given.
-pub fn (pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
+pub fn (mut pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
 	sep_value := sep or { return pp }
-	mut bytes := pp.bytes.clone()
-	for i, byte in bytes {
+	for i, byte in pp.bytes {
 		$if windows {
 			if byte == `/` || byte == `\\` {
-				bytes[i] = sep_value
+				pp.bytes[i] = sep_value
 			}
 		} $else {
 			if byte == `/` {
-				bytes[i] = sep_value
+				pp.bytes[i] = sep_value
 			}
 		}
 	}
-	return PrinterPath[^a]{
-		path:  pp.path
-		bytes: bytes
-	}
+	return pp
 }
 
 /// Return the raw bytes for this path.
 pub fn (pp PrinterPath[^a]) as_bytes[^a]() []u8 {
-	return pp.bytes.clone()
+	return pp.bytes
 }
 
 // V-specific: exposes the cached path bytes inside the printer module so the
@@ -290,7 +302,7 @@ pub fn DecimalFormatter.new(n u64) DecimalFormatter {
 
 /// Return the decimal formatted as an ASCII byte string.
 pub fn (fmt DecimalFormatter) as_bytes() []u8 {
-	return fmt.buf.clone()
+	return fmt.buf
 }
 
 /// Trim prefix ASCII spaces from the given slice and return the corresponding
@@ -320,8 +332,8 @@ pub fn normalize_hyperlink_path(path string) ?string {
 	return canonical.clone()
 }
 
-pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ PrinterMatcher, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
-	mut bytes := bytes_in.clone()
+pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ &PrinterMatcher, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
+	mut bytes := bytes_in
 	// This strange dance is to account for the possibility of look-ahead in
 	// the regex. The problem here is that mat.bytes() doesn't include the
 	// lines beyond the match boundaries in mulit-line mode, which means that
@@ -348,12 +360,12 @@ pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ PrinterMatc
 	is_multi_line := printer_matcher_multi_line(searcher_, matcher_)
 	if is_multi_line {
 		if range.end() <= bytes.len && bytes[range.end()..].len >= max_look_ahead {
-			bytes = bytes[..range.end() + max_look_ahead].clone()
+			bytes = bytes[..range.end() + max_look_ahead]
 		}
 	} else {
 		mut line := matcher.Match.new(0, range.end())
 		line, _ = trim_line_terminator(searcher_, bytes, line)
-		bytes = bytes[..line.end()].clone()
+		bytes = bytes[..line.end()]
 	}
 	printer_find_iter_at(matcher_, bytes, range.start(), fn [range, matched] (m matcher.Match) bool {
 		if m.start() >= range.end() {
@@ -422,6 +434,16 @@ mut:
 	active  bool
 }
 
+fn (mut replacer Replacer) free() {
+	unsafe {
+		replacer.dst.free()
+		replacer.matches.free()
+	}
+	replacer.dst = []u8{}
+	replacer.matches = []matcher.Match{}
+	replacer.active = false
+}
+
 /// Create a new replacer for use with a particular matcher.
 ///
 /// This constructor does not allocate. Instead, space for dealing with
@@ -435,7 +457,7 @@ pub fn Replacer.new() Replacer {
 /// replacement, use the `replacement` method.
 ///
 /// This can fail if the underlying matcher reports an error.
-pub fn (mut replacer Replacer) replace_all(searcher_ searcher.Searcher, matcher_ PrinterMatcher, haystack_in []u8, range matcher.Match, replacement []u8) ! {
+pub fn (mut replacer Replacer) replace_all(searcher_ searcher.Searcher, matcher_ &PrinterMatcher, haystack_in []u8, range matcher.Match, replacement []u8) ! {
 	mut haystack := haystack_in.clone()
 	mut line_terminator := []u8{}
 	is_multi_line := printer_matcher_multi_line(searcher_, matcher_)
@@ -638,7 +660,7 @@ fn trim_line_terminator(searcher_ searcher.Searcher, buf []u8, line matcher.Matc
 		}
 		orig_end := line.end()
 		new_line := line.with_end(end)
-		return new_line, buf[end..orig_end].clone()
+		return new_line, buf[end..orig_end]
 	}
 	return line, []u8{}
 }

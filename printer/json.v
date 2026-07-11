@@ -177,7 +177,7 @@ fn (mut json JSON[W]) write(buf []u8) ! {
 
 /// An implementation of `Sink` associated with a matcher and an optional file
 /// path for the JSON printer.
-pub struct JSONSink[^p, ^s, W] {
+pub struct JSONSink[^p, ^s, W] implements Drop {
 	matcher PrinterMatcher
 mut:
 	replacer           Replacer
@@ -192,9 +192,19 @@ mut:
 	stats_             Stats
 }
 
+fn (mut sink JSONSink[^p, ^s, W]) drop[^p, ^s]() {
+	sink.matcher.drop()
+	sink.replacer.free()
+	if path := sink.path {
+		mut owned_path := path
+		unsafe { owned_path.free() }
+		sink.path = ?string(none)
+	}
+}
+
 /// Returns true if and only if this printer received a match in the
 /// previous search.
-pub fn (sink JSONSink[^p, ^s, W]) has_match[^p, ^s]() bool {
+pub fn (sink &JSONSink[^p, ^s, W]) has_match[^p, ^s]() bool {
 	return sink.match_count_ > 0
 }
 

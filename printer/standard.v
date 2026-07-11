@@ -350,7 +350,7 @@ pub fn (mut standard Standard[W]) into_inner() W {
 
 /// An implementation of `Sink` associated with a matcher and an optional file
 /// path for the standard printer.
-pub struct StandardSink[^p, ^s, W] {
+pub struct StandardSink[^p, ^s, W] implements Drop {
 	matcher PrinterMatcher
 mut:
 	standard                &^s Standard[W]
@@ -366,9 +366,19 @@ mut:
 	fast_plain_match        bool
 }
 
+fn (mut sink StandardSink[^p, ^s, W]) drop[^p, ^s]() {
+	sink.matcher.drop()
+	sink.replacer.free()
+	sink.interpolator.free()
+	if mut path := sink.path {
+		path.free()
+		sink.path = ?PrinterPath(none)
+	}
+}
+
 /// Returns true if and only if this printer received a match in the
 /// previous search.
-pub fn (sink StandardSink[^p, ^s, W]) has_match[^p, ^s]() bool {
+pub fn (sink &StandardSink[^p, ^s, W]) has_match[^p, ^s]() bool {
 	return sink.match_count > 0
 }
 

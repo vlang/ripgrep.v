@@ -78,7 +78,7 @@ fn test_searcher_builder_sets_and_clears_encoding() {
 	searcher := builder.build()
 
 	got := searcher.config.encoding or { panic('missing encoding') }
-	assert got.label == 'utf-16le'
+	assert got.label == 'UTF-16LE'
 
 	builder.encoding(none)
 	cleared := builder.build()
@@ -86,17 +86,36 @@ fn test_searcher_builder_sets_and_clears_encoding() {
 }
 
 fn test_searcher_encoding_normalizes_labels() {
-	assert (Encoding.new('utf8')!).label == 'utf-8'
-	assert (Encoding.new(' UTF-8 ')!).label == 'utf-8'
+	assert (Encoding.new('utf8')!).label == 'UTF-8'
+	assert (Encoding.new(' UTF-8 ')!).label == 'UTF-8'
 	assert (Encoding.new('latin1')!).label == 'windows-1252'
 	assert (Encoding.new('us-ascii')!).label == 'windows-1252'
-	assert (Encoding.new('unicodefffe')!).label == 'utf-16be'
-	assert (Encoding.new('utf32be')!).label == 'utf-32be'
+	assert (Encoding.new('unicodefffe')!).label == 'UTF-16BE'
+	assert (Encoding.new('ucs-2')!).label == 'UTF-16LE'
 	assert (Encoding.new('cp1251')!).label == 'windows-1251'
+	assert (Encoding.new('latin5')!).label == 'windows-1254'
 	assert (Encoding.new('tis-620')!).label == 'windows-874'
 	assert (Encoding.new('x-mac-roman')!).label == 'macintosh'
 	assert (Encoding.new('x-mac-ukrainian')!).label == 'x-mac-cyrillic'
 	assert (Encoding.new('x-user-defined')!).label == 'x-user-defined'
+}
+
+fn test_searcher_encoding_rejects_non_encoding_rs_labels() {
+	for label in ['utf16le', 'utf16be', 'utf-32', 'utf-32le', 'utf32be', 'eucjp', 'replacement'] {
+		if _ := Encoding.new(label) {
+			panic('encoding_rs rejects label ${label}')
+		}
+	}
+	for replacement_label in ['hz-gb-2312', 'iso-2022-cn', 'iso-2022-cn-ext', 'iso-2022-kr',
+		'csiso2022kr'] {
+		if _ := Encoding.new(replacement_label) {
+			panic('for_label_no_replacement rejects label ${replacement_label}')
+		}
+	}
+	if _ := Encoding.new('\u00a0utf-8\u00a0') {
+		panic('encoding_rs trims ASCII whitespace only')
+	}
+	assert (Encoding.new('\fUTF-8\r')!).label == 'UTF-8'
 }
 
 fn test_searcher_encoding_rejects_unknown_label() {

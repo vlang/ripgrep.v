@@ -82,9 +82,10 @@ fn Hir.look(look HirLook) Hir {
 		}
 		else {}
 	}
+
 	return Hir{
-		kind: .look
-		look: look
+		kind:  .look
+		look:  look
 		props: HirProperties{
 			non_matching_bytes:  set
 			has_haystack_anchor: look == .start || look == .end
@@ -217,10 +218,10 @@ fn (look HirLook) to_regex() string {
 		.end_lf { r'(?m:$)' }
 		.start_crlf { r'(?m:^)' }
 		.end_crlf { r'\x0D?$' }
-		.word_start_half_ascii { r'(?<![A-Za-z0-9_])' }
-		.word_end_half_ascii { r'(?![A-Za-z0-9_])' }
-		.word_start_half_unicode { r'(?<![A-Za-z0-9_])' }
-		.word_end_half_unicode { r'(?![A-Za-z0-9_])' }
+		.word_start_half_ascii { r'\b{start-half}' }
+		.word_end_half_ascii { r'\b{end-half}' }
+		.word_start_half_unicode { r'\b{start-half}' }
+		.word_end_half_unicode { r'\b{end-half}' }
 	}
 }
 

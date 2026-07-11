@@ -3,15 +3,19 @@ module regex
 import matcher
 
 fn roundtrip_line_term(pattern string, line_term matcher.LineTerminator) !string {
-	return strip_line_terminator_from_match(pattern, line_term)
+	mut config := Config.default()
+	config.line_terminator = line_term
+	return strip_line_terminator_from_match(pattern, config)
 }
 
 fn roundtrip(pattern string, byte u8) string {
-	return roundtrip_line_term(pattern, matcher.LineTerminator.byte(byte)) or { panic(err) }
+	result := roundtrip_line_term(pattern, matcher.LineTerminator.byte(byte)) or { panic(err) }
+	return result
 }
 
 fn roundtrip_crlf(pattern string) string {
-	return roundtrip_line_term(pattern, matcher.LineTerminator.crlf()) or { panic(err) }
+	result := roundtrip_line_term(pattern, matcher.LineTerminator.crlf()) or { panic(err) }
+	return result
 }
 
 fn roundtrip_err(pattern string, byte u8) bool {
@@ -21,7 +25,7 @@ fn roundtrip_err(pattern string, byte u8) bool {
 
 fn test_strip_line_terminator_various() {
 	assert roundtrip(r'[a\n]', `\n`) == '[a]'
-	assert roundtrip(r'[a\n]', `a`) == r'[\n]'
+	assert roundtrip(r'[a\n]', `a`) == r'[\x0a]'
 	assert roundtrip(r'[a\x0A]', `\n`) == '[a]'
 	assert roundtrip(r'[a\u{A}]', `\n`) == '[a]'
 	assert roundtrip_crlf(r'[a\n]') == '[a]'

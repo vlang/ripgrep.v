@@ -196,8 +196,8 @@ foo/watson:be, to a very large extent, the result of luck. Sherlock Holmes
 // See: https://github.com/BurntSushi/ripgrep/issues/128
 fn test_regression_r128() {
 	dir, mut cmd := setup('regression_r128')
-	dir.create_bytes('foo', [u8(`0`), `1`, `2`, `3`, `4`, `5`, `6`, `7`, 0x0b, `\n`, 0x0b,
-		`\n`, 0x0b, `\n`, 0x0b, `\n`, `x`])
+	dir.create_bytes('foo', [u8(`0`), `1`, `2`, `3`, `4`, `5`, `6`, `7`, 0x0b, `\n`, 0x0b, `\n`,
+		0x0b, `\n`, 0x0b, `\n`, `x`])
 
 	cmd.args(['-n', 'x'])
 	eqnice('foo:5:x\n', cmd.stdout())
@@ -585,8 +585,7 @@ fn test_regression_r599() {
 	dir, mut cmd := setup('regression_r599')
 	dir.create('input.txt', '\n\ntest\n')
 	cmd.args(['--color', 'ansi', '--colors', 'path:none', '--colors', 'line:none', '--colors',
-		'match:fg:red', '--colors', 'match:style:nobold', '--line-number', r'^$',
-		'input.txt'])
+		'match:fg:red', '--colors', 'match:style:nobold', '--line-number', r'^$', 'input.txt'])
 
 	expected := '\x1b[0m1\x1b[0m:\n\x1b[0m2\x1b[0m:\n'
 	eqnice_repr(expected, cmd.stdout())
@@ -1107,8 +1106,7 @@ use B;
 	eqnice('2\n', cmd.stdout())
 
 	mut cmd2 := dir.command()
-	cmd2.args(['--pcre2', '--multiline', '--count-matches', r'(?s)def (\w+);(?=.*use \w+)',
-		'foo'])
+	cmd2.args(['--pcre2', '--multiline', '--count-matches', r'(?s)def (\w+);(?=.*use \w+)', 'foo'])
 	eqnice('2\n', cmd2.stdout())
 }
 
@@ -1396,7 +1394,8 @@ fn test_regression_r2480() {
 fn test_regression_r2574() {
 	dir, mut cmd := setup('regression_r2574')
 	dir.create('haystack', 'some.domain.com\nsome.domain.com/x\n')
-	got := cmd.args(['--no-filename', '--no-unicode', '-w', '-o', r'(\w+\.)*domain\.(\w+)']).stdout()
+	got :=
+		cmd.args(['--no-filename', '--no-unicode', '-w', '-o', r'(\w+\.)*domain\.(\w+)']).stdout()
 	eqnice('some.domain.com\nsome.domain.com\n', got)
 }
 
@@ -1535,7 +1534,8 @@ fn test_regression_r3139_multiline_lookahead_files_with_matches() {
 	if !dir.is_pcre2() {
 		return
 	}
-	dir.create('test', 'Start \n   \n\n   XXXXXXXXXXXXXXXXXXXXXXXXXX\n   YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n   \n      thing2 \n\n')
+	dir.create('test',
+		'Start \n   \n\n   XXXXXXXXXXXXXXXXXXXXXXXXXX\n   YYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYYY\n   \n      thing2 \n\n')
 
 	mut cmd1 := dir.command()
 	got := cmd1.args(['--multiline', '--pcre2', r'(?s)Start(?=.*thing2)', 'test']).stdout()
@@ -1591,6 +1591,49 @@ fn test_regression_r3180_look_around_panic() {
 	dir, mut cmd := setup('regression_r3180_look_around_panic')
 	dir.create('haystack', ' b b b b b b b b\nc\n')
 
-	got := cmd.arg(r'(^|[^a-z])((([a-z]+)?)\s)?b(\s([a-z]+)?)($|[^a-z])').arg('haystack').arg('-U').arg('-rx').stdout()
+	got :=
+		cmd.arg(r'(^|[^a-z])((([a-z]+)?)\s)?b(\s([a-z]+)?)($|[^a-z])').arg('haystack').arg('-U').arg('-rx').stdout()
 	eqnice('xbxbx\n', got)
+}
+
+fn test_parallel_search_discards_buffer_after_search_error() {
+	$if windows {
+		return
+	}
+	dir, mut cmd := setup('parallel_search_discards_buffer_after_search_error')
+	dir.create('haystack1', 'ignored\n')
+	dir.create('haystack2', 'ignored\n')
+	dir.create('fail-pre', "#!/bin/sh\nprintf 'needle\\n'\nexit 1\n")
+	pre_path := os.join_path(dir.path(), 'fail-pre')
+	os.chmod(pre_path, 0o755) or { panic(err.msg()) }
+
+	cmd.args(['-j2', '--pre', pre_path, 'needle', 'haystack1', 'haystack2'])
+	output := cmd.raw_output()
+	if output.code != 2 {
+		panic(command_failure_message(cmd, output, 'expected a search error'))
+	}
+	eqnice('', output.stdout)
+	if !output.stderr.contains('haystack1:') || !output.stderr.contains('haystack2:') {
+		panic(command_failure_message(cmd, output, 'search error omitted the haystack path'))
+	}
+}
+
+fn test_parallel_search_output_error_includes_path() {
+	$if windows {
+		return
+	}
+	dir, _ := setup('parallel_search_output_error_includes_path')
+	dir.create('haystack1', 'needle\n')
+	dir.create('haystack2', 'needle\n')
+	stderr_path := os.join_path(dir.path(), 'stderr')
+	command := 'cd ${sh_quote(dir.path())} && ${sh_quote(rg_binary())} --path-separator / -j2 needle haystack1 haystack2 1>&- 2> ${sh_quote(stderr_path)}'
+	result := os.execute(command)
+	stderr := os.read_file(stderr_path) or { panic(err.msg()) }
+	os.rm(stderr_path) or {}
+	if result.exit_code != 2 {
+		panic('expected exit code 2, got ${result.exit_code}: ${stderr}')
+	}
+	if !stderr.contains('rg: haystack1:') || !stderr.contains('rg: haystack2:') {
+		panic('parallel output error omitted the haystack path: ${stderr}')
+	}
 }

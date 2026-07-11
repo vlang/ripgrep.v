@@ -2,6 +2,16 @@ module searcher
 
 import matcher
 
+fn test_sink_match_accessors_borrow_the_search_buffer() {
+	mut input := [u8(`a`), `b`, `c`, `\n`]
+	mat := SinkMatch.new(input, matcher.Match.new(1, 3))
+	input[1] = `x`
+	input[2] = `y`
+
+	assert mat.buffer().bytestr() == 'axy\n'
+	assert mat.bytes().bytestr() == 'xy'
+}
+
 fn test_utf8_sink_reports_utf8_match() {
 	mut got_line := u64(0)
 	mut got_text := ''
