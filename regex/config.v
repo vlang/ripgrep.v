@@ -203,7 +203,7 @@ pub fn (chir &^a ConfiguredHIR) hir[^a]() &^a Hir {
 /// Convert this HIR to a regex that can be used for matching.
 pub fn (chir ConfiguredHIR) to_regex() !meta.Regex {
 	pattern := chir.backend_pattern()
-	return meta.compile_with_size_limit(pattern, chir.config.size_limit) or {
+	return meta.compile_with_limits(pattern, chir.config.size_limit, chir.config.dfa_size_limit) or {
 		return Error.regex(err.msg())
 	}
 }

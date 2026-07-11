@@ -159,6 +159,7 @@ mut:
 	dense_seen_bits     []u64     // Direct state memo for bounded haystack/program products.
 	dense_touched_words []u32     // Bitmap words to clear before the next VM attempt.
 	dense_prog_len      int
+	memo_size_limit     usize
 	seen_keys           []u64 // Lazily allocated memoization hash table keys.
 	seen_marks          []u32 // Generation stamps for occupied memoization slots.
 	seen_generation     u32
@@ -198,7 +199,19 @@ fn (mut m Machine) begin_memo(text_len int, prog_len int) {
 	}
 	positions := usize(text_len) + 1
 	program_states := usize(prog_len)
-	max_states := usize(64 * (1 << 20)) * 8
+	// V-specific: the dense state cache is the VM counterpart of regex-automata's hybrid
+	// cache. Keep a small NFA fallback budget when the configured DFA cache is
+	// zero, and cap eager dense allocation on very large limits.
+	min_fallback_bytes := usize(8 * (1 << 20))
+	max_dense_bytes := usize(64 * (1 << 20))
+	cache_bytes := if m.memo_size_limit < min_fallback_bytes {
+		min_fallback_bytes
+	} else if m.memo_size_limit > max_dense_bytes {
+		max_dense_bytes
+	} else {
+		m.memo_size_limit
+	}
+	max_states := cache_bytes * 8
 	if program_states > 0 && positions <= max_states / program_states {
 		required_words := int((positions * program_states + 63) / 64)
 		if m.dense_seen_bits.len != required_words {
@@ -288,14 +301,15 @@ fn memo_hash(key u64) u64 {
 // Regex is the compiled regular expression object.
 pub struct Regex implements IClone, Drop {
 pub:
-	pattern      string         // The original regex string
-	prog         []Inst         // Compiled bytecode
-	total_groups int            // Number of capture groups defined in pattern
-	group_map    map[string]int // Mapping of names to indices for (?P<name>...)
-	prefix_lit   string         // Pre-calculated literal prefix for fast-skip optimization
-	has_prefix   bool           // Whether a literal prefix exists
-	anchored     bool           // True if pattern starts with '^' (optimization hint)
-	needs_memo   bool           // True when the program contains branching states.
+	pattern         string         // The original regex string
+	prog            []Inst         // Compiled bytecode
+	total_groups    int            // Number of capture groups defined in pattern
+	group_map       map[string]int // Mapping of names to indices for (?P<name>...)
+	prefix_lit      string         // Pre-calculated literal prefix for fast-skip optimization
+	has_prefix      bool           // Whether a literal prefix exists
+	anchored        bool           // True if pattern starts with '^' (optimization hint)
+	needs_memo      bool           // True when the program contains branching states.
+	memo_size_limit usize          // Maximum dense VM cache requested by the caller.
 mut:
 	refs &stdatomic.AtomicVal[int] = unsafe { nil }
 }
@@ -305,15 +319,16 @@ pub fn (re &Regex) clone() Regex {
 		re.refs.add(1)
 	}
 	return Regex{
-		pattern:      re.pattern
-		prog:         re.prog
-		total_groups: re.total_groups
-		group_map:    re.group_map
-		prefix_lit:   re.prefix_lit
-		has_prefix:   re.has_prefix
-		anchored:     re.anchored
-		needs_memo:   re.needs_memo
-		refs:         re.refs
+		pattern:         re.pattern
+		prog:            re.prog
+		total_groups:    re.total_groups
+		group_map:       re.group_map
+		prefix_lit:      re.prefix_lit
+		has_prefix:      re.has_prefix
+		anchored:        re.anchored
+		needs_memo:      re.needs_memo
+		memo_size_limit: re.memo_size_limit
+		refs:            re.refs
 	}
 }
 
@@ -512,12 +527,18 @@ fn set_bitmap(mut bitmap [4]u32, r rune) {
 
 // compile transforms a regex pattern string into a Regex object.
 pub fn compile(pattern string) !Regex {
-	return compile_with_size_limit(pattern, ~usize(0))
+	return compile_with_limits(pattern, ~usize(0), ~usize(0))
 }
 
 // compile_with_size_limit rejects a compiled program whose approximate heap
 // footprint exceeds `size_limit`.
 pub fn compile_with_size_limit(pattern string, size_limit usize) !Regex {
+	return compile_with_limits(pattern, size_limit, ~usize(0))
+}
+
+// V-specific: compile_with_limits applies both the compiled program limit and the runtime
+// memo cache capacity used by the local meta engine.
+pub fn compile_with_limits(pattern string, size_limit usize, memo_size_limit usize) !Regex {
 	mut group_map := map[string]int{}
 	initial_flags := Flags{
 		unicode: true
@@ -578,15 +599,16 @@ pub fn compile_with_size_limit(pattern string, size_limit usize) !Regex {
 	}
 
 	return Regex{
-		pattern:      pattern
-		prog:         optimized_prog
-		total_groups: final_group_count
-		group_map:    group_map
-		prefix_lit:   prefix
-		has_prefix:   has_prefix
-		anchored:     anchored
-		needs_memo:   needs_memo
-		refs:         stdatomic.new_atomic(1)
+		pattern:         pattern
+		prog:            optimized_prog
+		total_groups:    final_group_count
+		group_map:       group_map
+		prefix_lit:      prefix
+		has_prefix:      has_prefix
+		anchored:        anchored
+		needs_memo:      needs_memo
+		memo_size_limit: memo_size_limit
+		refs:            stdatomic.new_atomic(1)
 	}
 }
 
@@ -596,7 +618,8 @@ pub fn (r &Regex) new_machine() Machine {
 	// Keep the common path allocation-free, but grow for valid expressions instead
 	// of turning workspace exhaustion into a false negative.
 	mut machine := Machine{
-		captures: []int{len: r.total_groups * 2}
+		captures:        []int{len: r.total_groups * 2}
+		memo_size_limit: r.memo_size_limit
 	}
 	unsafe {
 		machine.captures.flags |= .noslices
