@@ -985,6 +985,9 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 	}
 
 	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	defer {
+		child_ignore.free_nodes()
+	}
 	if has_child_err {
 		dent.err_value = child_err
 		dent.has_err = true
@@ -1012,7 +1015,7 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 	walk.stack << WalkFrame{
 		parent_path:     (*dent.path()).to_owned()
 		parent_depth:    dent.depth()
-		ig:              child_ignore
+		ig:              child_ignore.clone()
 		children:        children
 		root_device:     root_device
 		has_root_device: has_root_device
@@ -1035,13 +1038,15 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 		return visitor.visit(walk_result_from_error(err))
 	}
 	mut dent := root
-	mut ig := walk.ig_root
+	mut ig := walk.ig_root.clone()
 	if dent.is_dir() {
 		ig2, has_err, add_err := walk.ig_root.add_parents(dent.path())
+		ig.free_nodes()
 		ig = ig2
 		if has_err {
 			state := visitor.visit(walk_result_from_error(add_err))
 			if state.is_quit() {
+				ig.free_nodes()
 				return .quit
 			}
 		}
@@ -1051,8 +1056,10 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 		root_device = device_num(dent.path()) or {
 			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path())))
 			if state.is_quit() {
+				ig.free_nodes()
 				return .quit
 			}
+			ig.free_nodes()
 			return .continue_
 		}
 	}
@@ -1060,7 +1067,10 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 	return walk.visit_traverse_entry(mut visitor, mut dent, ig, true, root_device, has_root_device)
 }
 
-fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, root_device u64, has_root_device bool) {
+fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool, root_device u64, has_root_device bool) {
+	defer {
+		ig.free_nodes()
+	}
 	should_visit := if min_depth := walk.min_depth {
 		usize(dent.depth()) >= min_depth
 	} else {
@@ -1089,6 +1099,9 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	}
 
 	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	defer {
+		child_ignore.free_nodes()
+	}
 	if has_child_err {
 		dent.err_value = child_err
 		dent.has_err = true
@@ -1143,7 +1156,10 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, ig Ignore, is_root bool, ro
 	}
 }
 
-fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent DirEntry, ig Ignore, is_root bool, root_device u64, has_root_device bool) WalkState {
+fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent DirEntry, mut ig Ignore, is_root bool, root_device u64, has_root_device bool) WalkState {
+	defer {
+		ig.free_nodes()
+	}
 	should_visit := if min_depth := walk.min_depth {
 		usize(dent.depth()) >= min_depth
 	} else {
@@ -1178,6 +1194,9 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 	}
 
 	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	defer {
+		child_ignore.free_nodes()
+	}
 	if has_child_err {
 		dent.err_value = child_err
 		dent.has_err = true
@@ -1505,6 +1524,7 @@ fn (wp WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWor
 		mut ig := wp.ig_root.clone()
 		if root.is_dir() {
 			parent_ig, has_parent_err, parent_err := wp.ig_root.add_parents(root.path())
+			ig.free_nodes()
 			ig = parent_ig
 			if has_parent_err && visitor.visit(walk_result_from_error(parent_err)).is_quit() {
 				return initial

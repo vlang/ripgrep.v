@@ -396,6 +396,25 @@ fn test_max_depth() {
 	assert_paths(td.path(), builder2, ['a', 'a/b', 'foo', 'a/foo'])
 }
 
+fn test_serial_max_depth_releases_child_ignore_node() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mkdirp(os.join_path(td.path(), 'child'))
+	mut builder := WalkBuilder.new(td.path())
+	builder.max_depth(usize(0))
+	mut walk := builder.build()
+	root_refs := walk.ig_root.node.refs.load()
+	mut dent, err := prepare_root_entry(td.path(), false)
+	assert err.kind == .other
+	mut owned_root := walk.ig_root.clone()
+	assert walk.ig_root.node.refs.load() == root_refs + 1
+	walk.enqueue_entry(mut dent, owned_root, true, 0, false)
+	assert walk.ig_root.node.refs.load() == root_refs
+	assert walk.stack.len == 0
+}
+
 fn test_min_depth() {
 	td := tmpdir()
 	defer {

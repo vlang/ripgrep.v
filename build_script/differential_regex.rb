@@ -22,6 +22,8 @@ patterns = [
   "(?m:^abc$)",
   "\\Aabc",
   "abc\\z",
+  "(?m:\\Abar)",
+  "(?m:foo\\z)",
   "\\bword\\b",
   "\\b{start}word",
   "word\\b{end}",
@@ -54,6 +56,8 @@ patterns = [
   "[\\p{Greek}&&[^Δ]]+",
   "[\\p{Greek}]+",
   "[\\P{Greek}]+",
+  "[\\p{Any}]",
+  "[\\P{Any}]",
   "\\u{03B1}+",
   "\\u03B1+",
   "\\U000003B1+",
@@ -72,6 +76,10 @@ patterns = [
   "[\\B]",
   "[\\A]",
   "[\\z]",
+  "A\\b",
+  "(?x)a b(?-x)c d",
+  "(?x:a b(?-x:c d))",
+  "(?ix)A B(?-ix)c d",
 ]
 
 # Exercise combinations as well as hand-picked syntax. Keep this deterministic
@@ -127,6 +135,7 @@ contents << [
   0xF4, 0x90, 0x80, 0x80, 0x46,
   0xC2, 0xA2, 0x47, 0x0A,
 ].pack("C*")
+contents << "else\\nbar\\nfoo\\nelse\\nabc d\\nABc D\\n"
 
 modes = [
   ["-n"],

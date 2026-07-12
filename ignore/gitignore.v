@@ -467,8 +467,12 @@ fn gitignore_builder_add_line(mut builder GitignoreBuilder, from ?string, line s
 	if current == '' {
 		return false, IgnoreError{}
 	}
+	mut owned_from := ?string(none)
+	if source := from {
+		owned_from = source.to_owned()
+	}
 	mut glob := Glob{
-		from_:            from
+		from_:            owned_from
 		original:         current.to_owned()
 		actual:           ''
 		is_whitelist_:    false

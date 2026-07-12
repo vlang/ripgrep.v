@@ -169,6 +169,24 @@ fn test_multiline_haystack_anchor_does_not_become_line_anchor() {
 	assert matcher.is_match(line_anchor, 'a\nbaz'.bytes())!
 }
 
+fn test_scoped_multiline_does_not_change_haystack_anchors() {
+	start := RegexMatcherBuilder.new().build(r'(?m:\Abar)')!
+	assert matcher.is_match(start, 'bar\nelse'.bytes())!, 'absolute start should match at haystack start'
+	assert !matcher.is_match(start, 'else\nbar'.bytes())!, 'absolute start became a line anchor'
+
+	end := RegexMatcherBuilder.new().build(r'(?m:foo\z)')!
+	assert matcher.is_match(end, 'else\nfoo'.bytes())!, 'absolute end should match at haystack end'
+	assert !matcher.is_match(end, 'foo\nelse'.bytes())!, 'absolute end became a line anchor'
+}
+
+fn test_unicode_word_boundary_next_to_invalid_utf8() {
+	haystack := [u8(`A`), 0x80, u8(`B`)]
+	end := RegexMatcherBuilder.new().build(r'A\b')!
+	mat := (end.find_at(haystack, 0)!).get() or { panic('missing match') }
+	assert mat.start() == 0
+	assert mat.end() == 1
+}
+
 fn test_candidate_lines_whole_line_literal_needs_confirmation() {
 	mut builder := RegexMatcherBuilder.new()
 	builder.line_terminator(`\n`)
@@ -312,6 +330,20 @@ fn test_rust_regex_inline_flag_compatibility() {
 		matcher_ := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
 		assert matcher.is_match(matcher_, 'abc'.bytes())!
 	}
+}
+
+fn test_rust_regex_extended_mode_can_be_disabled_and_combined() {
+	global := RegexMatcherBuilder.new().build(r'(?x)a b(?-x)c d')!
+	assert matcher.is_match(global, 'abc d'.bytes())!, 'global (?-x) did not restore literal space'
+	assert !matcher.is_match(global, 'abcd'.bytes())!, 'global (?-x) still ignored space'
+
+	scoped := RegexMatcherBuilder.new().build(r'(?x:a b(?-x:c d))')!
+	assert matcher.is_match(scoped, 'abc d'.bytes())!, 'scoped (?-x:...) did not restore literal space'
+	combined := RegexMatcherBuilder.new().build(r'(?ix)A B(?-ix)c d')!
+	assert matcher.is_match(combined, 'abc d'.bytes())!, 'combined inline flags did not match'
+	assert !matcher.is_match(combined, 'ABc D'.bytes())!, 'combined (?-ix) did not disable i/x'
+	comment := RegexMatcherBuilder.new().build("(?x)a # ignored\n b")!
+	assert matcher.is_match(comment, 'ab'.bytes())!, 'extended comment was not ignored'
 }
 
 fn test_rust_regex_crlf_flag_compatibility() {
@@ -578,6 +610,15 @@ fn test_rust_regex_character_class_escapes() {
 			assert matcher.is_match(matcher_, haystack.bytes())!
 		}
 	}
+}
+
+fn test_rust_regex_any_property_inside_character_class() {
+	any := RegexMatcherBuilder.new().build(r'[\p{Any}]')!
+	assert matcher.is_match(any, 'Δ'.bytes())!
+	assert matcher.is_match(any, 'A'.bytes())!
+	not_any := RegexMatcherBuilder.new().build(r'[\P{Any}]')!
+	assert !matcher.is_match(not_any, 'Δ'.bytes())!
+	assert !matcher.is_match(not_any, 'A'.bytes())!
 }
 
 fn test_default_regex_skips_malformed_utf8_in_unicode_mode() {

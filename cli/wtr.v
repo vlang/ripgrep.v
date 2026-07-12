@@ -43,6 +43,12 @@ mut:
 	buffer []u8
 }
 
+/// Releases the allocation owned by this writer.
+pub fn (mut stream StandardStream) free() {
+	unsafe { stream.buffer.free() }
+	stream.buffer = []u8{}
+}
+
 /// Returns a possibly buffered writer to stdout for the given color choice.
 ///
 /// The writer returned is either line buffered or block buffered. The decision

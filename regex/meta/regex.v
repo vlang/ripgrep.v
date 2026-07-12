@@ -387,6 +387,8 @@ enum NodeType {
 	char_class
 	start_of_string
 	end_of_string
+	start_of_haystack
+	end_of_haystack
 	word_boundary
 	non_word_boundary
 	word_char
@@ -820,7 +822,8 @@ fn (mut c Compiler) emit_class(node Node) {
 
 // emit_node handles quantifiers and loops, delegating the actual logic to emit_logic.
 fn (mut c Compiler) emit_node(node Node) {
-	if node.typ in [.start_of_string, .end_of_string, .word_boundary, .non_word_boundary] {
+	if node.typ in [.start_of_string, .end_of_string, .start_of_haystack, .end_of_haystack,
+		.word_boundary, .non_word_boundary] {
 		// Repeating a zero-width assertion is idempotent. Emitting the generic
 		// unbounded loop for `^*`, `$+` or `\b{end-half}*` would never advance
 		// the input cursor and could loop forever.
@@ -926,6 +929,12 @@ fn (mut c Compiler) emit_logic(node Node) {
 			c.emit(Inst{
 				typ: if node.multiline { InstType.assert_line_end } else { InstType.assert_end }
 			})
+		}
+		.start_of_haystack {
+			c.emit(Inst{ typ: .assert_start })
+		}
+		.end_of_haystack {
+			c.emit(Inst{ typ: .assert_end })
 		}
 		.word_boundary {
 			c.emit(Inst{
@@ -1293,7 +1302,12 @@ fn parse_nodes(pattern string, pos_start int, terminator rune, group_counter_sta
 					}
 					`A` {
 						parsed_nodes << Node{
-							typ: .uppercase_char
+							typ: .start_of_haystack
+						}
+					}
+					`z` {
+						parsed_nodes << Node{
+							typ: .end_of_haystack
 						}
 					}
 					`x` {
@@ -1824,10 +1838,10 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 					left, right, left_valid, right_valid := word_sides(str_ptr, str_len, sp,
 						inst_ptr.word_unicode)
 					matched := match inst_ptr.word_kind {
-						.boundary { left_valid && right_valid && left != right }
+						.boundary { left != right }
 						.negate { left_valid && right_valid && left == right }
-						.start { left_valid && !left && right }
-						.end { left && right_valid && !right }
+						.start { !left && right }
+						.end { left && !right }
 						.start_half { left_valid && !left }
 						.end_half { right_valid && !right }
 					}

@@ -290,66 +290,132 @@ fn (chir ConfiguredHIR) backend_pattern() string {
 	return '(?${flags})${pattern}'
 }
 
+struct InlineFlags {
+	enabled  string
+	disabled string
+	next     int
+	scoped   bool
+}
+
+fn inline_flags_at(pattern string, start int) ?InlineFlags {
+	if start + 3 >= pattern.len || pattern[start] != `(` || pattern[start + 1] != `?` {
+		return none
+	}
+	mut i := start + 2
+	mut enabled := []u8{}
+	mut disabled := []u8{}
+	mut disabling := false
+	mut saw_flag := false
+	for i < pattern.len && pattern[i] !in [`:`, `)`] {
+		if pattern[i] == `-` {
+			if disabling {
+				return none
+			}
+			disabling = true
+			i++
+			continue
+		}
+		if pattern[i] !in [`i`, `m`, `s`, `U`, `u`, `x`, `R`] {
+			return none
+		}
+		saw_flag = true
+		if disabling {
+			disabled << pattern[i]
+		} else {
+			enabled << pattern[i]
+		}
+		i++
+	}
+	if !saw_flag || i >= pattern.len {
+		return none
+	}
+	return InlineFlags{
+		enabled:  enabled.bytestr()
+		disabled: disabled.bytestr()
+		next:     i + 1
+		scoped:   pattern[i] == `:`
+	}
+}
+
+fn apply_inline_flags(flags InlineFlags, config Config) Config {
+	mut next := config
+	for flag in flags.enabled.bytes() {
+		match flag {
+			`U` { next.swap_greed = true }
+			`u` { next.unicode = true }
+			`x` { next.ignore_whitespace = true }
+			`R` { next.crlf = true }
+			else {}
+		}
+	}
+	for flag in flags.disabled.bytes() {
+		match flag {
+			`U` { next.swap_greed = false }
+			`u` { next.unicode = false }
+			`x` { next.ignore_whitespace = false }
+			`R` { next.crlf = false }
+			else {}
+		}
+	}
+	return next
+}
+
+fn backend_inline_flags(flags InlineFlags, unicode bool) string {
+	mut enabled := []u8{}
+	mut disabled := []u8{}
+	for flag in flags.enabled.bytes() {
+		match flag {
+			`i` { enabled << if unicode { `i` } else { `a` } }
+			`m`, `s`, `u` { enabled << flag }
+			else {}
+		}
+	}
+	for flag in flags.disabled.bytes() {
+		match flag {
+			`i` { disabled << `i` }
+			`m`, `s`, `u` { disabled << flag }
+			else {}
+		}
+	}
+	mut out := enabled.bytestr()
+	if disabled.len > 0 {
+		out += '-${disabled.bytestr()}'
+	}
+	return out
+}
+
 fn normalize_backend_pattern(pattern string, config Config, explicit_line_anchors bool) string {
 	mut out := []u8{cap: pattern.len}
 	mut i := 0
 	mut in_class := false
 	mut escaped := false
-	mut inline_ignore_whitespace := false
-	mut inline_crlf := false
 	mut effective_config := config
 	for i < pattern.len {
 		ch := pattern[i]
-		if !effective_config.unicode && !escaped && !in_class && i + 3 < pattern.len
-			&& pattern[i..i + 3] == '(?i' && pattern[i + 3] in [`)`, `:`, `-`] {
-			out << '(?a'.bytes()
-			i += 3
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?x)' {
-			inline_ignore_whitespace = true
-			i += 4
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?R)' {
-			inline_crlf = true
-			i += 4
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-R)' {
-			inline_crlf = false
-			i += 5
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?U)' {
-			effective_config.swap_greed = true
-			i += 4
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-U)' {
-			effective_config.swap_greed = false
-			i += 5
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-u)' {
-			effective_config.unicode = false
-			out << '(?-u)'.bytes()
-			i += 5
-			escaped = false
-			continue
-		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?u)' {
-			effective_config.unicode = true
-			out << '(?u)'.bytes()
-			i += 4
-			escaped = false
-			continue
+		if !escaped && !in_class {
+			if flags := inline_flags_at(pattern, i) {
+				next_config := apply_inline_flags(flags, effective_config)
+				backend_flags := backend_inline_flags(flags, next_config.unicode)
+				if flags.scoped {
+					if end := matching_group_end(pattern, i) {
+						out << if backend_flags == '' { '(?:'.bytes() } else { '(?${backend_flags}:'.bytes() }
+						out << normalize_backend_pattern(pattern[flags.next..int(end)], next_config,
+							explicit_line_anchors).bytes()
+						out << `)`
+						i = int(end) + 1
+						escaped = false
+						continue
+					}
+				} else {
+					effective_config = next_config
+					if backend_flags != '' {
+						out << '(?${backend_flags})'.bytes()
+					}
+					i = flags.next
+					escaped = false
+					continue
+				}
+			}
 		}
 		if !escaped && !in_class && ch == `[` {
 			if replacement := normalize_unicode_class_at(pattern, i, effective_config) {
@@ -377,119 +443,28 @@ fn normalize_backend_pattern(pattern string, config Config, explicit_line_anchor
 				continue
 			}
 		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?x:' {
-			if end := matching_group_end(pattern, i) {
-				inner := strip_ignored_whitespace(pattern[i + 4..int(end)])
-				out << '(?:'.bytes()
-				out << normalize_backend_pattern(inner, effective_config, explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
+		if effective_config.ignore_whitespace && !escaped && !in_class && ch == `#` {
+			for i < pattern.len && pattern[i] != `\n` {
+				i++
 			}
+			escaped = false
+			continue
 		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?U:' {
-			if end := matching_group_end(pattern, i) {
-				mut inner_config := effective_config
-				inner_config.swap_greed = true
-				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 4..int(end)], inner_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-U:' {
-			if end := matching_group_end(pattern, i) {
-				mut inner_config := effective_config
-				inner_config.swap_greed = false
-				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 5..int(end)], inner_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-x:' {
-			if end := matching_group_end(pattern, i) {
-				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 5..int(end)], effective_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-i:' {
-			if end := matching_group_end(pattern, i) {
-				out << '(?-i:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 5..int(end)], effective_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && !in_class && i + 5 <= pattern.len && pattern[i..i + 5] == '(?-u:' {
-			if end := matching_group_end(pattern, i) {
-				mut inner_config := effective_config
-				inner_config.unicode = false
-				out << '(?-u:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 5..int(end)], inner_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?u:' {
-			if end := matching_group_end(pattern, i) {
-				mut inner_config := effective_config
-				inner_config.unicode = true
-				out << '(?u:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 4..int(end)], inner_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if !escaped && !in_class && i + 4 <= pattern.len && pattern[i..i + 4] == '(?R:' {
-			if end := matching_group_end(pattern, i) {
-				mut inner_config := effective_config
-				inner_config.crlf = true
-				out << '(?:'.bytes()
-				out << normalize_backend_pattern(pattern[i + 4..int(end)], inner_config,
-					explicit_line_anchors).bytes()
-				out << `)`
-				i = int(end) + 1
-				escaped = false
-				continue
-			}
-		}
-		if inline_ignore_whitespace && !escaped && !in_class && is_extended_whitespace(ch) {
+		if effective_config.ignore_whitespace && !escaped && !in_class && is_extended_whitespace(ch) {
 			i++
 			escaped = false
 			continue
 		}
-		if explicit_line_anchors && (config.multi_line || config.crlf) && !escaped && !in_class
+		if explicit_line_anchors && (effective_config.multi_line || effective_config.crlf) && !escaped && !in_class
 			&& ch == `^` {
 			out << r'(?m:^)'.bytes()
 			i++
 			escaped = false
 			continue
 		}
-		if explicit_line_anchors && (config.multi_line || config.crlf) && !escaped && !in_class
+		if explicit_line_anchors && (effective_config.multi_line || effective_config.crlf) && !escaped && !in_class
 			&& ch == `$` {
-			if config.crlf || inline_crlf {
+			if effective_config.crlf {
 				out << r'\x0D?(?m:$)'.bytes()
 			} else {
 				out << r'(?m:$)'.bytes()
@@ -498,7 +473,7 @@ fn normalize_backend_pattern(pattern string, config Config, explicit_line_anchor
 			escaped = false
 			continue
 		}
-		if (config.crlf || inline_crlf) && !escaped && !in_class && ch == `$` {
+		if effective_config.crlf && !escaped && !in_class && ch == `$` {
 			out << r'\x0D?$'.bytes()
 			i++
 			continue
@@ -526,13 +501,13 @@ fn normalize_backend_pattern(pattern string, config Config, explicit_line_anchor
 				next := pattern[i + 1]
 				match next {
 					`A` {
-						out << `^`
+						out << r'\A'.bytes()
 						i += 2
 						escaped = false
 						continue
 					}
 					`z` {
-						out << `$`
+						out << r'\z'.bytes()
 						i += 2
 						escaped = false
 						continue

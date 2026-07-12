@@ -631,7 +631,7 @@ fn (ig &^a Ignore) absolute_base[^a]() ?&^a string {
 ///
 /// V-specific: this iterator yields owned references to the shared persistent
 /// matcher nodes.
-pub struct Parents {
+pub struct Parents implements Drop {
 mut:
 	items []Ignore
 	index int
@@ -641,9 +641,21 @@ pub fn (mut p Parents) next() ?Ignore {
 	if p.index >= p.items.len {
 		return none
 	}
-	item := p.items[p.index]
+	mut item := p.items[p.index]
+	// Transfer the counted node reference out of the iterator. Clearing the
+	// slot keeps Parents.drop from releasing the reference now owned by item.
+	p.items[p.index].node = unsafe { nil }
 	p.index++
 	return item
+}
+
+fn (mut p Parents) drop() {
+	for mut item in p.items {
+		item.free_nodes()
+	}
+	unsafe { p.items.free() }
+	p.items = []Ignore{}
+	p.index = 0
 }
 
 /// A builder for creating an Ignore matcher.
@@ -881,10 +893,15 @@ pub fn (mut builder IgnoreBuilder) ignore_case_insensitive(yes bool) {
 /// I/O errors are ignored.
 pub fn create_gitignore(dir string, dir_for_ignorefile string, names []string, case_insensitive bool) (Gitignore, bool, IgnoreError) {
 	mut paths := []string{}
+	defer {
+		unsafe { paths.free() }
+	}
 	for name in names {
 		gipath := join_ignore_path(dir_for_ignorefile, name)
 		if os.user_os() == 'windows' || os.exists(gipath) {
 			paths << gipath
+		} else {
+			unsafe { gipath.free() }
 		}
 	}
 	if paths.len == 0 {

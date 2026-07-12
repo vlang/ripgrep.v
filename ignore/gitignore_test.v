@@ -1,5 +1,7 @@
 module ignore
 
+import os
+
 fn gi_from_str(root string, s string) Gitignore {
 	mut builder := GitignoreBuilder.new(root)
 	add_has_err, add_err := builder.add_str(none_string(), s)
@@ -22,6 +24,22 @@ fn assert_not_ignored(root string, gi_src string, path string, is_dir bool) {
 }
 
 const root = '/home/foobar/rust/rg'
+
+fn test_create_gitignore_owns_glob_source_path() {
+	dir := os.join_path(os.temp_dir(), 'ripgrep_v_gitignore_source_${os.getpid()}')
+	os.mkdir_all(dir)!
+	defer {
+		os.rmdir_all(dir) or {}
+	}
+	ignore_path := os.join_path(dir, '.ignore')
+	os.write_file(ignore_path, 'hit\n')!
+	gi, has_err, err := create_gitignore(dir, dir, ['.ignore'], false)
+	assert !has_err, err.msg()
+	matched := gi.matched(os.join_path(dir, 'hit'), false)
+	glob_ref := matched.inner() or { panic('missing ignore match') }
+	from := glob_ref.glob.from() or { panic('missing glob source') }
+	assert from == ignore_path
+}
 
 fn test_ig1() {
 	assert_ignored(root, 'months', 'months', false)

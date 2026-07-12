@@ -144,6 +144,10 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		searcher:         searcher
 		stats:            stats
 	}
+	defer {
+		visitor.searcher.printer().get_mut().free()
+		visitor.searcher.free()
+	}
 	mut walk := args.walk_builder()!.build()
 	for {
 		mut result := walk.next() or { break }
@@ -223,6 +227,10 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	searcher_ := args.searcher()!
 	printer_ := args.printer_standard_stream(mode, args.stdout())
 	mut searcher := args.search_worker_standard_stream(matcher_, searcher_, printer_)!
+	defer {
+		searcher.printer().get_mut().free()
+		searcher.free()
+	}
 	for haystack in haystacks {
 		searched = true
 		search_result := searcher.search(&haystack) or {

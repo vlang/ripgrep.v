@@ -402,6 +402,30 @@ fn test_parents_iterator_yields_owned_matchers() {
 	if !third.matched('foo', false).is_none() {
 		panic('root parent should not have loaded child rules')
 	}
+	mut owned_first := first
+	mut owned_second := second
+	mut owned_third := third
+	owned_first.free_nodes()
+	owned_second.free_nodes()
+	owned_third.free_nodes()
+}
+
+fn test_parents_iterator_releases_unconsumed_matchers() {
+	ig0 := IgnoreBuilder.new().build()
+	ig1, has_err1, _ := ig0.add_child('one')
+	assert !has_err1
+	ig2, has_err2, _ := ig1.add_child('two')
+	assert !has_err2
+	root_refs := ig0.node.refs.load()
+	first_refs := ig1.node.refs.load()
+	mut parents := ig2.parents()
+	assert ig0.node.refs.load() == root_refs + 1
+	assert ig1.node.refs.load() == first_refs + 1
+	mut first := parents.next() or { panic('missing first parent') }
+	parents.drop()
+	assert ig0.node.refs.load() == root_refs
+	assert ig1.node.refs.load() == first_refs
+	first.free_nodes()
 }
 
 fn test_git_info_exclude_in_linked_worktree() {
