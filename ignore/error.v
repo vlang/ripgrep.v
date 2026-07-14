@@ -107,23 +107,29 @@ pub fn invalid_definition_error() IgnoreError {
 }
 
 pub fn (err IgnoreError) with_path(path string) IgnoreError {
+	cause := err.clone()
 	mut cloned := err
 	cloned.kind = .with_path
 	cloned.path = path.to_owned()
+	cloned.nested = [cause]
 	return cloned
 }
 
 pub fn (err IgnoreError) with_depth(depth int) IgnoreError {
+	cause := err.clone()
 	mut cloned := err
 	cloned.kind = .with_depth
 	cloned.depth = depth
+	cloned.nested = [cause]
 	return cloned
 }
 
 pub fn (err IgnoreError) with_line_number(line u64) IgnoreError {
+	cause := err.clone()
 	mut cloned := err
 	cloned.kind = .with_line_number
 	cloned.line = line
+	cloned.nested = [cause]
 	return cloned
 }
 
@@ -144,6 +150,9 @@ pub fn ignore_error_is_io(err IgnoreError) bool {
 	match err.kind {
 		.io { return true }
 		.partial {
+			return err.nested.len == 1 && ignore_error_is_io(err.nested[0])
+		}
+		.with_line_number, .with_path, .with_depth {
 			return err.nested.len == 1 && ignore_error_is_io(err.nested[0])
 		}
 		else {}

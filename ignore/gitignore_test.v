@@ -25,6 +25,15 @@ fn assert_not_ignored(root string, gi_src string, path string, is_dir bool) {
 
 const root = '/home/foobar/rust/rg'
 
+fn test_new_uses_the_source_path_parent() {
+	gi, has_err, err := Gitignore.new('relative-ignore-file')
+	assert !has_err, err.msg()
+	assert *gi.path() == ''
+	empty_path, empty_has_err, empty_err := Gitignore.new('')
+	assert !empty_has_err, empty_err.msg()
+	assert *empty_path.path() == '/'
+}
+
 fn test_create_gitignore_owns_glob_source_path() {
 	dir := os.join_path(os.temp_dir(), 'ripgrep_v_gitignore_source_${os.getpid()}')
 	os.mkdir_all(dir)!
@@ -122,10 +131,60 @@ fn test_ig20() {
 }
 
 fn test_ig_brace_alternates() {
-	assert_ignored(root, '*.{js,json,py}', 'src/main.py', false)
-	assert_not_ignored(root, '*.{js,json,py}', 'src/main.rs', false)
-	assert_ignored(root, '{.git,node_modules,plugged}/**', 'node_modules/pkg/index.js',
-		false)
+	gi := gi_from_str(root, '*.{js,json,py}')
+	assert gi.len() == 1
+	assert gi.num_ignores() == 1
+	assert gi.matched('src/main.py', false).is_ignore()
+	assert !gi.matched('src/main.rs', false).is_ignore()
+	assert_ignored(root, '{.git,node_modules,plugged}/**', 'node_modules/pkg/index.js', false)
+}
+
+fn test_glob_accessors_preserve_source_and_compiled_pattern() {
+	mut builder := GitignoreBuilder.new(root)
+	has_err, err := builder.add_line('source/.gitignore', '*.rs')
+	assert !has_err, err.msg()
+	gi, build_has_err, build_err := builder.build()
+	assert !build_has_err, build_err.msg()
+	matched := gi.matched('src/main.rs', false)
+	glob_ref := matched.inner() or { panic('missing ignore match') }
+	from := glob_ref.glob.from() or { panic('missing glob source') }
+	assert *from == 'source/.gitignore'
+	assert *glob_ref.glob.original() == '*.rs'
+	assert *glob_ref.glob.actual() == '**/*.rs'
+}
+
+fn test_builder_can_build_then_add_another_glob() {
+	mut builder := GitignoreBuilder.new(root)
+	has_err, err := builder.add_line(none_string(), '*.rs')
+	assert !has_err, err.msg()
+	first, first_has_err, first_err := builder.build()
+	assert !first_has_err, first_err.msg()
+	assert first.len() == 1
+	has_err2, err2 := builder.add_line(none_string(), '*.c')
+	assert !has_err2, err2.msg()
+	second, second_has_err, second_err := builder.build()
+	assert !second_has_err, second_err.msg()
+	assert second.len() == 2
+	assert second.matched('main.rs', false).is_ignore()
+	assert second.matched('main.c', false).is_ignore()
+}
+
+fn test_strip_only_removes_complete_root_components() {
+	component_boundary := gi_from_str('/foo/bar', '/ista/hit')
+	assert !component_boundary.matched('/foo/barista/hit', false).is_ignore(), 'stripped a partial root component'
+	file_name := gi_from_str('foo', '/bar')
+	assert !file_name.matched('foobar', false).is_ignore(), 'stripped a prefix from a file name'
+	file_system_root := gi_from_str('/', '/foo')
+	assert file_system_root.matched('/foo', false).is_ignore(), 'did not strip the file system root'
+}
+
+fn test_add_line_reports_the_glob_error_kind() {
+	mut builder := GitignoreBuilder.new(root)
+	builder.allow_unclosed_class(false)
+	has_err, err := builder.add_line(none_string(), '[abc')
+	assert has_err
+	assert err.path == '[abc'
+	assert err.message == "unclosed character class; missing ']'"
 }
 
 fn test_ig21() {
@@ -335,6 +394,15 @@ fn test_parse_excludes_file4() {
 fn test_parse_excludes_file5() {
 	data := bytes('[core]\nexcludesFile = " "~/foo/bar " ""')
 	assert parse_excludes_file(data) == none
+}
+
+fn test_parse_excludes_file_matches_ascii_case_and_optional_quotes() {
+	data := bytes('[core]\n  ExClUdEsFiLe = "  ~/foo/bar')
+	got := parse_excludes_file(data) or { panic('expected path') }
+	assert path_string(got) == expand_tilde('~/foo/bar')
+	data2 := bytes('[core]\nexcludesFile = ~/foo/bar"')
+	got2 := parse_excludes_file(data2) or { panic('expected path') }
+	assert path_string(got2) == expand_tilde('~/foo/bar')
 }
 
 // See: https://github.com/BurntSushi/ripgrep/issues/106

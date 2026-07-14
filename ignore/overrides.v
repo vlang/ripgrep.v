@@ -162,7 +162,7 @@ pub fn (builder OverrideBuilder) build() (Override, bool, IgnoreError) {
 /// namely, `!` at the beginning of a glob will ignore a file. Without `!`,
 /// all matches of the glob provided are treated as whitelist matches.
 pub fn (mut builder OverrideBuilder) add(glob string) (bool, IgnoreError) {
-	return gitignore_builder_add_line(mut builder.builder, none_string(), glob)
+	return builder.builder.add_line(none_string(), glob)
 }
 
 /// Toggle whether the globs should be matched case insensitively or not.
