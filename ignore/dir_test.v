@@ -80,6 +80,65 @@ fn test_gitignore_with_jj() {
 	assert ig.matched('baz', false).is_none()
 }
 
+fn test_gitignore_with_jj_file() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	wfile(os.join_path(td.path(), '.jj'), '')
+	wfile(os.join_path(td.path(), '.gitignore'), 'foo\n!bar')
+
+	ig, has_err, _ := IgnoreBuilder.new().build().add_child(td.path())
+	assert !has_err
+	assert ig.matched('foo', false).is_ignore()
+	assert ig.matched('bar', false).is_whitelist()
+	assert ig.matched('baz', false).is_none()
+}
+
+fn test_strip_if_is_prefix_matches_platform_path_semantics() {
+	path := 'foobar'
+	$if unix {
+		assert strip_if_is_prefix('foo', &path) == 'bar'
+	} $else {
+		assert strip_if_is_prefix('foo', &path) == path
+	}
+}
+
+fn test_ignore_builder_methods_chain_and_build_reuses() {
+	mut builder := IgnoreBuilder.new()
+	builder.hidden(false).ignore(false).git_ignore(false).current_dir('')
+	mut first := builder.build()
+	mut second := builder.build()
+	assert !first.opts.hidden
+	assert !first.opts.ignore
+	assert !first.opts.git_ignore
+	assert !second.opts.hidden
+	assert !second.opts.ignore
+	assert !second.opts.git_ignore
+	assert first.global_gitignores_relative_to != none
+	assert first.global_gitignores_relative_to or { 'missing' } == ''
+	assert second.global_gitignores_relative_to != none
+	assert second.global_gitignores_relative_to or { 'missing' } == ''
+	first.free_nodes()
+	second.free_nodes()
+}
+
+fn test_read_first_line_matches_bufread_lines() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	path := os.join_path(td.path(), 'lines')
+	os.write_bytes(path, [u8(`a`), `b`, `c`, `\r`, `\r`, `\n`, 0xff]) or { panic(err) }
+	line, has_err, _ := read_first_line(path)
+	assert !has_err
+	assert line == 'abc\r'
+
+	os.write_bytes(path, [u8(0xff), `\n`]) or { panic(err) }
+	_, invalid_has_err, _ := read_first_line(path)
+	assert invalid_has_err
+}
+
 fn test_gitignore_no_git() {
 	td := tmpdir()
 	defer {

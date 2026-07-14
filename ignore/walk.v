@@ -580,7 +580,7 @@ pub fn WalkBuilder.new(path string) WalkBuilder {
 pub fn (builder &WalkBuilder) build() Walk {
 	cwd := builder.get_or_set_current_dir()
 	ig_root := if *cwd != '' {
-		builder.ig_builder.build_with_cwd((*cwd).clone())
+		builder.ig_builder.build_with_cwd(?string((*cwd).clone()))
 	} else {
 		builder.ig_builder.build()
 	}
@@ -610,7 +610,7 @@ pub fn (builder &WalkBuilder) build() Walk {
 pub fn (builder &WalkBuilder) build_parallel() WalkParallel {
 	cwd := builder.get_or_set_current_dir()
 	ig_root := if *cwd != '' {
-		builder.ig_builder.build_with_cwd((*cwd).clone())
+		builder.ig_builder.build_with_cwd(?string((*cwd).clone()))
 	} else {
 		builder.ig_builder.build()
 	}

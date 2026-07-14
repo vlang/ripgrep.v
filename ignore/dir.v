@@ -1,5 +1,6 @@
 module ignore
 
+import encoding.utf8
 import os
 import sync.stdatomic
 
@@ -185,8 +186,6 @@ pub struct Ignore implements IClone {
 mut:
 	// V-specific equivalent of Rust's `Arc<IgnoreInner>`.
 	node &IgnoreNode
-	has_ignore_rules bool
-	has_git_parent   bool
 	/// An override matcher (default is empty).
 	overrides Override
 	/// A file type matcher.
@@ -221,16 +220,14 @@ pub fn (ig &Ignore) clone() Ignore {
 	ig.node.refs.add(1)
 	return Ignore{
 		node:                         ig.node
-		has_ignore_rules:             ig.has_ignore_rules
-		has_git_parent:               ig.has_git_parent
-		overrides:                    ig.overrides
-		types:                        ig.types
-		absolute_base_value:          ig.absolute_base_value
+		overrides:                    ig.overrides.clone()
+		types:                        ig.types.clone()
+		absolute_base_value:          ig.absolute_base_value.clone()
 		has_absolute_base:            ig.has_absolute_base
-		global_gitignores_relative_to: ig.global_gitignores_relative_to
-		explicit_ignores:             ig.explicit_ignores
-		custom_ignore_filenames:      ig.custom_ignore_filenames
-		git_global_matcher:           ig.git_global_matcher
+		global_gitignores_relative_to: clone_optional_string(ig.global_gitignores_relative_to)
+		explicit_ignores:             ig.explicit_ignores.clone()
+		custom_ignore_filenames:      ig.custom_ignore_filenames.clone()
+		git_global_matcher:           ig.git_global_matcher.clone()
 		opts:                         ig.opts
 	}
 }
@@ -258,16 +255,14 @@ pub fn (ig &Ignore) parent() ?Ignore {
 fn (ig &Ignore) with_node(node &IgnoreNode) Ignore {
 	return Ignore{
 		node:                         node
-		has_ignore_rules:             ig.has_ignore_rules
-		has_git_parent:               ig.has_git_parent
-		overrides:                    ig.overrides
-		types:                        ig.types
-		absolute_base_value:          ig.absolute_base_value
+		overrides:                    ig.overrides.clone()
+		types:                        ig.types.clone()
+		absolute_base_value:          ig.absolute_base_value.clone()
 		has_absolute_base:            ig.has_absolute_base
-		global_gitignores_relative_to: ig.global_gitignores_relative_to
-		explicit_ignores:             ig.explicit_ignores
-		custom_ignore_filenames:      ig.custom_ignore_filenames
-		git_global_matcher:           ig.git_global_matcher
+		global_gitignores_relative_to: clone_optional_string(ig.global_gitignores_relative_to)
+		explicit_ignores:             ig.explicit_ignores.clone()
+		custom_ignore_filenames:      ig.custom_ignore_filenames.clone()
+		git_global_matcher:           ig.git_global_matcher.clone()
 		opts:                         ig.opts
 	}
 }
@@ -298,16 +293,13 @@ pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 		mut absolute_node := node
 		absolute_node.is_absolute_parent = true
 		absolute_node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
-			os.is_dir(os.join_path(parent, '.git')) || os.is_file(os.join_path(parent, '.git'))
-				|| os.is_dir(os.join_path(parent, '.jj'))
+			os.exists(os.join_path(parent, '.git')) || os.exists(os.join_path(parent, '.jj'))
 		} else {
 			false
 		}
 		mut next := built.with_node(absolute_node)
 		next.absolute_base_value = absolute_base.to_owned()
 		next.has_absolute_base = true
-		next.has_ignore_rules = next.has_ignore_rules || ignore_node_has_rules(absolute_node)
-		next.has_git_parent = next.has_git_parent || absolute_node.has_git
 		built.free_nodes()
 		built = next
 	}
@@ -325,15 +317,7 @@ pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 /// Note that all I/O errors are completely ignored.
 pub fn (ig &Ignore) add_child(dir string) (Ignore, bool, IgnoreError) {
 	node, has_err, err := ig.add_child_path(dir)
-	mut next := ig.with_node(node)
-	next.has_ignore_rules = next.has_ignore_rules || ignore_node_has_rules(node)
-	next.has_git_parent = next.has_git_parent || node.has_git
-	return next, has_err, err
-}
-
-fn ignore_node_has_rules(node &IgnoreNode) bool {
-	return !node.custom_ignore_matcher.is_empty() || !node.ignore_matcher.is_empty()
-		|| !node.git_ignore_matcher.is_empty() || !node.git_exclude_matcher.is_empty()
+	return ig.with_node(node), has_err, err
 }
 
 // V-specific: each matcher owns one counted reference to the immutable tail
@@ -364,8 +348,7 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 	check_vcs_dir := ig.opts.require_git && (ig.opts.git_ignore || ig.opts.git_exclude)
 	git_path := os.join_path(dir, '.git')
 	git_is_file := check_vcs_dir && os.is_file(git_path)
-	has_git := check_vcs_dir && ((os.is_dir(git_path) || git_is_file) || os.is_dir(os.join_path(dir,
-		'.jj')))
+	has_git := check_vcs_dir && (os.exists(git_path) || os.exists(os.join_path(dir, '.jj')))
 
 	mut errs := PartialErrorBuilder{}
 	custom_ig_matcher := if ig.custom_ignore_filenames.len == 0 {
@@ -424,7 +407,10 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 
 /// Returns true if at least one type of ignore rule should be matched.
 fn (ig &Ignore) has_any_ignore_rules() bool {
-	return ig.has_ignore_rules
+	has_custom_ignore_files := ig.custom_ignore_filenames.len > 0
+	has_explicit_ignores := ig.explicit_ignores.len > 0
+	return ig.opts.ignore || ig.opts.git_global || ig.opts.git_ignore || ig.opts.git_exclude
+		|| has_custom_ignore_files || has_explicit_ignores
 }
 
 /// Like `matched`, but works with a directory entry instead.
@@ -706,29 +692,25 @@ pub fn IgnoreBuilder.new() IgnoreBuilder {
 ///
 /// The matcher returned won't match anything until ignore rules from
 /// directories are added to it.
-pub fn (builder IgnoreBuilder) build() Ignore {
-	return builder.build_with_cwd('')
+pub fn (builder &IgnoreBuilder) build() Ignore {
+	return builder.build_with_cwd(none_string())
 }
 
 /// Builds a new `Ignore` matcher using the given CWD directory.
 ///
 /// The matcher returned won't match anything until ignore rules from
 /// directories are added to it.
-pub fn (builder IgnoreBuilder) build_with_cwd(cwd string) Ignore {
-	mut relative_to := ''
-	if cwd != '' {
-		relative_to = cwd.to_owned()
-	} else if configured := builder.global_gitignores_relative_to {
-		relative_to = configured.clone()
-	}
+pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 	mut global_gitignores_relative_to := none_string()
-	if relative_to != '' {
-		global_gitignores_relative_to = ?string(relative_to.clone())
+	if cwd_value := cwd {
+		global_gitignores_relative_to = ?string(cwd_value.clone())
+	} else if configured := builder.global_gitignores_relative_to {
+		global_gitignores_relative_to = ?string(configured.clone())
 	}
 	mut git_global_matcher := Gitignore.empty()
 	if builder.opts.git_global {
-		if relative_to != '' {
-			mut gitignore_builder := GitignoreBuilder.new(relative_to.clone())
+		if relative_to := global_gitignores_relative_to {
+			mut gitignore_builder := GitignoreBuilder.new(relative_to)
 			_, _ = gitignore_builder.case_insensitive(builder.opts.ignore_case_insensitive)
 			gi, _, _ := gitignore_builder.build_global()
 			git_global_matcher = gi
@@ -746,11 +728,8 @@ pub fn (builder IgnoreBuilder) build_with_cwd(cwd string) Ignore {
 			has_git:               false
 			is_absolute_parent:    true
 		}
-		has_ignore_rules:          !git_global_matcher.is_empty()
-			|| gitignore_list_has_rules(builder.explicit_ignores.clone())
-		has_git_parent:            false
-		overrides:                 builder.overrides
-		types:                     builder.types
+		overrides:                 builder.overrides.clone()
+		types:                     builder.types.clone()
 		absolute_base_value:       ''.to_owned()
 		has_absolute_base:         false
 		global_gitignores_relative_to: global_gitignores_relative_to
@@ -761,18 +740,10 @@ pub fn (builder IgnoreBuilder) build_with_cwd(cwd string) Ignore {
 	}
 }
 
-fn gitignore_list_has_rules(items []Gitignore) bool {
-	for item in items {
-		if !item.is_empty() {
-			return true
-		}
-	}
-	return false
-}
-
 /// Set the current directory used for matching global gitignores.
-pub fn (mut builder IgnoreBuilder) current_dir(cwd string) {
+pub fn (mut builder IgnoreBuilder) current_dir(cwd string) &IgnoreBuilder {
 	builder.global_gitignores_relative_to = ?string(cwd.to_owned())
+	return builder
 }
 
 /// Add an override matcher.
@@ -780,8 +751,9 @@ pub fn (mut builder IgnoreBuilder) current_dir(cwd string) {
 /// By default, no override matcher is used.
 ///
 /// This overrides any previous setting.
-pub fn (mut builder IgnoreBuilder) overrides(overrides Override) {
+pub fn (mut builder IgnoreBuilder) overrides(overrides Override) &IgnoreBuilder {
 	builder.overrides = overrides
+	return builder
 }
 
 /// Add a file type matcher.
@@ -789,13 +761,15 @@ pub fn (mut builder IgnoreBuilder) overrides(overrides Override) {
 /// By default, no file type matcher is used.
 ///
 /// This overrides any previous setting.
-pub fn (mut builder IgnoreBuilder) types(types Types) {
+pub fn (mut builder IgnoreBuilder) types(types Types) &IgnoreBuilder {
 	builder.types = types
+	return builder
 }
 
 /// Adds a new global ignore matcher from the ignore file path given.
-pub fn (mut builder IgnoreBuilder) add_ignore(ig Gitignore) {
+pub fn (mut builder IgnoreBuilder) add_ignore(ig Gitignore) &IgnoreBuilder {
 	builder.explicit_ignores << ig
+	return builder
 }
 
 /// Add a custom ignore file name
@@ -804,15 +778,17 @@ pub fn (mut builder IgnoreBuilder) add_ignore(ig Gitignore) {
 ///
 /// When specifying multiple names, earlier names have lower precedence than
 /// later names.
-pub fn (mut builder IgnoreBuilder) add_custom_ignore_filename(file_name string) {
+pub fn (mut builder IgnoreBuilder) add_custom_ignore_filename(file_name string) &IgnoreBuilder {
 	builder.custom_ignore_filenames << file_name.to_owned()
+	return builder
 }
 
 /// Enables ignoring hidden files.
 ///
 /// This is enabled by default.
-pub fn (mut builder IgnoreBuilder) hidden(yes bool) {
+pub fn (mut builder IgnoreBuilder) hidden(yes bool) &IgnoreBuilder {
 	builder.opts.hidden = yes
+	return builder
 }
 
 /// Enables reading `.ignore` files.
@@ -821,8 +797,9 @@ pub fn (mut builder IgnoreBuilder) hidden(yes bool) {
 /// supported by search tools such as ripgrep and The Silver Searcher.
 ///
 /// This is enabled by default.
-pub fn (mut builder IgnoreBuilder) ignore(yes bool) {
+pub fn (mut builder IgnoreBuilder) ignore(yes bool) &IgnoreBuilder {
 	builder.opts.ignore = yes
+	return builder
 }
 
 /// Enables reading ignore files from parent directories.
@@ -831,8 +808,9 @@ pub fn (mut builder IgnoreBuilder) ignore(yes bool) {
 /// file path given are respected. Otherwise, they are ignored.
 ///
 /// This is enabled by default.
-pub fn (mut builder IgnoreBuilder) parents(yes bool) {
+pub fn (mut builder IgnoreBuilder) parents(yes bool) &IgnoreBuilder {
 	builder.opts.parents = yes
+	return builder
 }
 
 /// Add a global gitignore matcher.
@@ -843,8 +821,9 @@ pub fn (mut builder IgnoreBuilder) parents(yes bool) {
 /// This overwrites any previous global gitignore setting.
 ///
 /// This is enabled by default.
-pub fn (mut builder IgnoreBuilder) git_global(yes bool) {
+pub fn (mut builder IgnoreBuilder) git_global(yes bool) &IgnoreBuilder {
 	builder.opts.git_global = yes
+	return builder
 }
 
 /// Enables reading `.gitignore` files.
@@ -853,8 +832,9 @@ pub fn (mut builder IgnoreBuilder) git_global(yes bool) {
 /// man page.
 ///
 /// This is enabled by default.
-pub fn (mut builder IgnoreBuilder) git_ignore(yes bool) {
+pub fn (mut builder IgnoreBuilder) git_ignore(yes bool) &IgnoreBuilder {
 	builder.opts.git_ignore = yes
+	return builder
 }
 
 /// Enables reading `.git/info/exclude` files.
@@ -863,8 +843,9 @@ pub fn (mut builder IgnoreBuilder) git_ignore(yes bool) {
 /// `gitignore` man page.
 ///
 /// This is enabled by default.
-pub fn (mut builder IgnoreBuilder) git_exclude(yes bool) {
+pub fn (mut builder IgnoreBuilder) git_exclude(yes bool) &IgnoreBuilder {
 	builder.opts.git_exclude = yes
+	return builder
 }
 
 /// Whether a git repository is required to apply git-related ignore
@@ -872,15 +853,17 @@ pub fn (mut builder IgnoreBuilder) git_exclude(yes bool) {
 ///
 /// When disabled, git-related ignore rules are applied even when searching
 /// outside a git repository.
-pub fn (mut builder IgnoreBuilder) require_git(yes bool) {
+pub fn (mut builder IgnoreBuilder) require_git(yes bool) &IgnoreBuilder {
 	builder.opts.require_git = yes
+	return builder
 }
 
 /// Process ignore files case insensitively
 ///
 /// This is disabled by default.
-pub fn (mut builder IgnoreBuilder) ignore_case_insensitive(yes bool) {
+pub fn (mut builder IgnoreBuilder) ignore_case_insensitive(yes bool) &IgnoreBuilder {
 	builder.opts.ignore_case_insensitive = yes
+	return builder
 }
 
 /// Creates a new gitignore matcher for the directory given.
@@ -978,33 +961,28 @@ fn read_first_line(path string) (string, bool, IgnoreError) {
 		return '', false, IgnoreError{}
 	}
 	line_end := contents.index('\n') or { contents.len }
-	return contents[..line_end].trim_right('\r'), false, IgnoreError{}
+	mut line := contents[..line_end]
+	if line.ends_with('\r') {
+		line = line[..line.len - 1]
+	}
+	if !utf8.validate_str(line) {
+		return '', true, io_error(error('stream did not contain valid UTF-8')).with_path(path)
+	}
+	return line.to_owned(), false, IgnoreError{}
 }
 
 /// Strips `prefix` from `path` if it's a prefix, otherwise returns `path`
 /// unchanged.
 fn strip_if_is_prefix[^a](prefix string, path &^a string) string {
 	value := *path
-	if prefix == './' {
-		if value.starts_with('./') {
-			return unsafe { value.substr_unsafe(2, value.len) }
-		}
-		return value
-	}
-	if prefix == os.path_separator.str() {
+	$if unix {
 		if value.starts_with(prefix) {
 			return unsafe { value.substr_unsafe(prefix.len, value.len) }
 		}
 		return value
+	} $else {
+		return strip_prefix(value, prefix)
 	}
-	if value == prefix {
-		return ''
-	}
-	prefix_with_sep := prefix + os.path_separator.str()
-	if value.starts_with(prefix_with_sep) {
-		return unsafe { value.substr_unsafe(prefix_with_sep.len, value.len) }
-	}
-	return strip_prefix(value, prefix)
 }
 
 fn parent_absolute_match_path(absolute_base string, relative_base string, path string) string {
@@ -1034,7 +1012,14 @@ fn parent_absolute_match_path(absolute_base string, relative_base string, path s
 }
 
 fn (ig &Ignore) any_git_parent() bool {
-	return ig.has_git_parent
+	mut node := ig.node
+	for !isnil(node) {
+		if node.has_git {
+			return true
+		}
+		node = node.parent
+	}
+	return false
 }
 
 fn (ig &Ignore) first_relative_dir_after_absolute_path() string {
@@ -1049,5 +1034,12 @@ fn (ig &Ignore) first_relative_dir_after_absolute_path() string {
 }
 
 fn none_string() ?string {
+	return none
+}
+
+fn clone_optional_string(value ?string) ?string {
+	if text := value {
+		return text.clone()
+	}
 	return none
 }
