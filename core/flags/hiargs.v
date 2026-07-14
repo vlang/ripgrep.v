@@ -429,7 +429,7 @@ fn (args &HiArgs) matcher_rust() !core.PatternMatcher {
 /// complete, a buffer can be given to the buffer writer to write to
 /// stdout.
 pub fn (args &HiArgs) buffer_writer() cli.BufferWriter {
-	mut wtr := cli.BufferWriter.stdout(args.color.to_cli_color_choice())
+	mut wtr := cli.BufferWriter.stdout(args.color.to_termcolor())
 	wtr.separator(optional_bytes_clone(args.file_separator))
 	return wtr
 }
@@ -872,7 +872,7 @@ pub fn (args &HiArgs) stats() ?printer.Stats {
 /// buffering, based on either explicit configuration from the user via CLI
 /// flags, or automatically based on whether stdout is connected to a tty.
 pub fn (args &HiArgs) stdout() cli.StandardStream {
-	color := args.color.to_cli_color_choice()
+	color := args.color.to_termcolor()
 	match args.buffer {
 		.auto {
 			if args.is_terminal_stdout {
@@ -1522,15 +1522,6 @@ fn compute_mmap_choice(mode MmapMode, paths &Paths) searcher.MmapChoice {
 		.never {
 			return never
 		}
-	}
-}
-
-fn (choice ColorChoice) to_cli_color_choice() cli.ColorChoice {
-	return match choice {
-		.never { cli.ColorChoice.never }
-		.auto { cli.ColorChoice.auto }
-		.always { cli.ColorChoice.always }
-		.ansi { cli.ColorChoice.ansi }
 	}
 }
 

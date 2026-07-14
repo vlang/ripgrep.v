@@ -2939,7 +2939,6 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.debug {
 			assert v.unwrap_switch()
 			args.logging = .debug
-			args.has_logging = true
 		}
 		.dfa_size_limit {
 			args.dfa_size_limit = parse_human_readable_usize(v.unwrap_value())!
@@ -3289,7 +3288,6 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		.trace {
 			assert v.unwrap_switch()
 			args.logging = .trace
-			args.has_logging = true
 		}
 		.trim {
 			args.trim = v.unwrap_switch()

@@ -124,11 +124,11 @@ fn parse_low_from_raw(rawargs []string) ParseResult[LowArgs] {
 fn set_log_levels(low LowArgs) {
 	core.set_messages(!low.no_messages)
 	core.set_ignore_messages(!low.no_ignore_messages)
-	if !low.has_logging {
+	logging := low.logging or {
 		core.set_log_level(.off)
 		return
 	}
-	match low.logging {
+	match logging {
 		.debug { core.set_log_level(.debug) }
 		.trace { core.set_log_level(.trace) }
 	}

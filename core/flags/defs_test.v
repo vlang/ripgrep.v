@@ -624,15 +624,13 @@ fn test_crlf() {
 
 fn test_debug() {
 	mut args := parse_low_raw([]string{}) or { panic(err.msg()) }
-	assert !args.has_logging
+	assert args.logging == none
 
 	args = parse_low_raw(['--debug']) or { panic(err.msg()) }
-	assert args.has_logging
-	assert args.logging == .debug
+	assert args.logging == ?LoggingMode(.debug)
 
 	args = parse_low_raw(['--trace', '--debug']) or { panic(err.msg()) }
-	assert args.has_logging
-	assert args.logging == .debug
+	assert args.logging == ?LoggingMode(.debug)
 }
 
 fn test_dfa_size_limit() {
@@ -2090,15 +2088,13 @@ fn test_threads() {
 
 fn test_trace() {
 	mut args := parse_low_raw([]string{}) or { panic(err.msg()) }
-	assert !args.has_logging
+	assert args.logging == none
 
 	args = parse_low_raw(['--trace']) or { panic(err.msg()) }
-	assert args.has_logging
-	assert args.logging == .trace
+	assert args.logging == ?LoggingMode(.trace)
 
 	args = parse_low_raw(['--debug', '--trace']) or { panic(err.msg()) }
-	assert args.has_logging
-	assert args.logging == .trace
+	assert args.logging == ?LoggingMode(.trace)
 }
 
 fn test_trim() {
