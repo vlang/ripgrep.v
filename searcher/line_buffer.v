@@ -8,7 +8,7 @@ $if !windows {
 }
 
 /// The default buffer capacity that we use for the line buffer.
-pub const default_buffer_capacity = 64 * (1 << 10) // 64 KB
+const default_buffer_capacity = 64 * (1 << 10) // 64 KB
 
 enum BufferAllocationKind {
 	eager
@@ -91,9 +91,9 @@ fn LineBufferBuilder.new() LineBufferBuilder {
 }
 
 /// Create a new line buffer from this builder's configuration.
-fn (builder LineBufferBuilder) build() LineBuffer {
+fn (builder &LineBufferBuilder) build() LineBuffer {
 	return LineBuffer{
-		config: builder.config
+		config: builder.config.clone()
 		buf:    []u8{len: int(builder.config.capacity)}
 	}
 }
@@ -174,11 +174,7 @@ mut:
 /// This does not change the binary detection behavior of the given line
 /// buffer.
 fn LineBufferReader.new[^r, ^b](rdr &^r io.Reader, line_buffer &^b LineBuffer) LineBufferReader[^r, ^b] {
-	line_buffer.pos = 0
-	line_buffer.last_lineterm = 0
-	line_buffer.end = 0
-	line_buffer.absolute_byte_offset_ = 0
-	line_buffer.binary_byte_offset_ = none
+	line_buffer.clear()
 	return LineBufferReader[^r, ^b]{
 		rdr:         rdr
 		line_buffer: line_buffer
@@ -191,13 +187,13 @@ fn LineBufferReader.new[^r, ^b](rdr &^r io.Reader, line_buffer &^b LineBuffer) L
 /// correspond to an offset in memory. It is typically used for reporting
 /// purposes. It can also be used for counting the number of bytes that
 /// have been searched.
-fn (rdr LineBufferReader[^r, ^b]) absolute_byte_offset[^r, ^b]() u64 {
+fn (rdr &LineBufferReader[^r, ^b]) absolute_byte_offset[^r, ^b]() u64 {
 	return rdr.line_buffer.absolute_byte_offset()
 }
 
 /// If binary data was detected, then this returns the absolute byte offset
 /// at which binary data was initially found.
-fn (rdr LineBufferReader[^r, ^b]) binary_byte_offset[^r, ^b]() ?u64 {
+fn (rdr &LineBufferReader[^r, ^b]) binary_byte_offset[^r, ^b]() ?u64 {
 	return rdr.line_buffer.binary_byte_offset()
 }
 
@@ -219,7 +215,7 @@ fn (mut rdr LineBufferReader[^r, ^b]) fill[^r, ^b]() !bool {
 }
 
 /// Return the contents of this buffer.
-fn (rdr LineBufferReader[^r, ^b]) buffer[^r, ^b]() []u8 {
+fn (rdr &LineBufferReader[^r, ^b]) buffer[^r, ^b]() []u8 {
 	return rdr.line_buffer.buffer()
 }
 
@@ -227,14 +223,6 @@ fn (rdr LineBufferReader[^r, ^b]) buffer[^r, ^b]() []u8 {
 /// to the number of bytes returned by `buffer`.
 fn (mut rdr LineBufferReader[^r, ^b]) consume[^r, ^b](amt usize) {
 	rdr.line_buffer.consume(amt)
-}
-
-/// Consumes the remainder of the buffer. Subsequent calls to `buffer` are
-/// guaranteed to return an empty slice until the buffer is refilled.
-///
-/// This is a convenience function for `consume(buffer.len())`.
-fn (mut rdr LineBufferReader[^r, ^b]) consume_all[^r, ^b]() {
-	rdr.line_buffer.consume_all()
 }
 
 /// A line buffer manages a (typically fixed) buffer for holding lines.
@@ -298,19 +286,25 @@ fn (mut lb LineBuffer) clear() {
 /// particularly in error messages.
 ///
 /// This is reset to `0` when `clear` is called.
-fn (lb LineBuffer) absolute_byte_offset() u64 {
+fn (lb &LineBuffer) absolute_byte_offset() u64 {
 	return lb.absolute_byte_offset_
 }
 
 /// If binary data was detected, then this returns the absolute byte offset
 /// at which binary data was initially found.
-fn (lb LineBuffer) binary_byte_offset() ?u64 {
+fn (lb &LineBuffer) binary_byte_offset() ?u64 {
 	return lb.binary_byte_offset_
 }
 
 /// Return the contents of this buffer.
-fn (lb LineBuffer) buffer() []u8 {
+fn (lb &LineBuffer) buffer() []u8 {
 	return lb.buf[lb.pos..lb.last_lineterm]
+}
+
+/// Return the contents of the free space beyond the end of the buffer as
+/// a mutable slice.
+fn (mut lb LineBuffer) free_buffer() []u8 {
+	return lb.buf[lb.end..]
 }
 
 /// Consume the number of bytes provided. This must be less than or equal
@@ -319,15 +313,6 @@ fn (mut lb LineBuffer) consume(amt usize) {
 	assert amt <= usize(lb.buffer().len)
 	lb.pos += amt
 	lb.absolute_byte_offset_ += u64(amt)
-}
-
-/// Consumes the remainder of the buffer. Subsequent calls to `buffer` are
-/// guaranteed to return an empty slice until the buffer is refilled.
-///
-/// This is a convenience function for `consume(buffer.len())`.
-fn (mut lb LineBuffer) consume_all() {
-	amt := usize(lb.buffer().len)
-	lb.consume(amt)
 }
 
 /// Fill the contents of this buffer by discarding the part of the buffer
@@ -348,6 +333,9 @@ fn (mut lb LineBuffer) consume_all() {
 /// error if the buffer must be expanded past its allocation limit, as
 /// governed by the buffer allocation strategy.
 fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
+	// If the binary detection heuristic tells us to quit once binary data
+	// has been observed, then we no longer read new data and reach EOF
+	// once the current buffer has been consumed.
 	if lb.config.binary.is_quit() && lb.binary_byte_offset_ != none {
 		return lb.buffer().len != 0
 	}
@@ -355,8 +343,7 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 	assert lb.pos == 0
 	for {
 		lb.ensure_capacity()!
-		oldend := lb.end
-		mut free := lb.buf[lb.end..]
+		mut free := lb.free_buffer()
 		nread := rdr.read(mut free) or {
 			if is_reader_eof(err) {
 				0
@@ -365,32 +352,47 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 			}
 		}
 		if nread == 0 {
+			// We're only done reading for good once the caller has
+			// consumed everything.
 			lb.last_lineterm = lb.end
 			return lb.buffer().len != 0
 		}
+
+		// Get a mutable view into the bytes we've just read. These are
+		// the bytes that we do binary detection on, and also the bytes we
+		// search to find the last line terminator. We need a mutable slice
+		// in the case of binary conversion.
+		oldend := lb.end
 		lb.end += usize(nread)
 		mut newbytes := lb.buf[oldend..lb.end]
+
+		// Binary detection.
 		if binary_byte := lb.config.binary.quit_byte() {
 			if i := find_byte(newbytes, binary_byte) {
-				absolute_offset := lb.absolute_byte_offset_ + u64(oldend + i)
 				lb.end = oldend + i
 				lb.last_lineterm = lb.end
-				lb.binary_byte_offset_ = absolute_offset
+				lb.binary_byte_offset_ = lb.absolute_byte_offset_ + u64(lb.end)
+				// If the first byte in our buffer is a binary byte,
+				// then our buffer is empty and we should report as
+				// such to the caller.
 				return lb.pos < lb.end
 			}
 		} else if binary_byte := lb.config.binary.convert_byte() {
-			if i := find_byte(newbytes, binary_byte) {
-				absolute_offset := lb.absolute_byte_offset_ + u64(oldend + i)
-				replace_bytes(mut newbytes, binary_byte, lb.config.lineterm)
+			if i := replace_bytes(mut newbytes, binary_byte, lb.config.lineterm) {
+				// Record only the first binary offset.
 				if lb.binary_byte_offset_ == none {
-					lb.binary_byte_offset_ = absolute_offset
+					lb.binary_byte_offset_ = lb.absolute_byte_offset_ + u64(oldend + i)
 				}
 			}
 		}
+
+		// Update our `last_lineterm` positions if we read one.
 		if i := rfind_byte(newbytes, lb.config.lineterm) {
 			lb.last_lineterm = oldend + i + 1
 			return true
 		}
+		// At this point, if we couldn't find a line terminator, then we
+		// don't have a complete line. Therefore, we try to read more!
 	}
 	return false
 }
@@ -424,9 +426,11 @@ fn (mut lb LineBuffer) roll() {
 /// allocated. If the allocation must exceed the configured limit, then
 /// this returns an error.
 fn (mut lb LineBuffer) ensure_capacity() ! {
-	if lb.end < usize(lb.buf.len) {
+	if lb.free_buffer().len != 0 {
 		return
 	}
+	// `len` is used for computing the next allocation size. The capacity
+	// is permitted to start at `0`, so we make sure it's at least `1`.
 	len := usize_max(1, usize(lb.buf.len))
 	additional := match lb.config.buffer_alloc.kind {
 		.eager {
@@ -461,21 +465,25 @@ fn replace_bytes(mut bytes []u8, src u8, replacement u8) ?usize {
 	if src == replacement {
 		return none
 	}
-	mut first_pos := usize(0)
-	mut has_first := false
-	for i in 0 .. bytes.len {
-		if bytes[i] == src {
-			if !has_first {
-				first_pos = usize(i)
-				has_first = true
-			}
-			bytes[i] = replacement
+	first_pos := find_byte(bytes, src)?
+	bytes[first_pos] = replacement
+	mut at := first_pos + 1
+	for at < usize(bytes.len) {
+		i := find_byte(bytes[at..], src) or { break }
+		pos := at + i
+		bytes[pos] = replacement
+		at = pos + 1
+
+		// To search for adjacent `src` bytes we use a different strategy.
+		// Since binary data tends to have long runs of NUL terminators,
+		// it is faster to compare one-byte-at-a-time than to stop and start
+		// memchr (through `find_byte`) for every byte in a sequence.
+		for at < usize(bytes.len) && bytes[at] == src {
+			bytes[at] = replacement
+			at++
 		}
 	}
-	if has_first {
-		return first_pos
-	}
-	return none
+	return first_pos
 }
 
 fn find_byte(bytes []u8, byte u8) ?usize {

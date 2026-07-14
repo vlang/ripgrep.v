@@ -25,6 +25,23 @@ fn (mut rdr ByteSliceReader) read(mut buf []u8) !int {
 	return nread
 }
 
+/// Consumes the remainder of the buffer. Subsequent calls to `buffer` are
+/// guaranteed to return an empty slice until the buffer is refilled.
+///
+/// This is a convenience function for `consume(buffer.len())`.
+fn (mut rdr LineBufferReader[^r, ^b]) consume_all[^r, ^b]() {
+	rdr.line_buffer.consume_all()
+}
+
+/// Consumes the remainder of the buffer. Subsequent calls to `buffer` are
+/// guaranteed to return an empty slice until the buffer is refilled.
+///
+/// This is a convenience function for `consume(buffer.len())`.
+fn (mut lb LineBuffer) consume_all() {
+	amt := usize(lb.buffer().len)
+	lb.consume(amt)
+}
+
 fn assert_replace(slice string, src u8, replacement u8, expected string, expected_pos ?usize) {
 	mut dst := slice.bytes()
 	pos := replace_bytes(mut dst, src, replacement)
@@ -71,6 +88,14 @@ fn test_replace() {
 	assert_replace('aba', `a`, `z`, 'zbz', usize(0))
 	assert_replace('bbb', `b`, `z`, 'zzz', usize(0))
 	assert_replace('bac', `b`, `z`, 'zac', usize(0))
+}
+
+fn test_line_buffer_builder_build_is_reusable() {
+	builder := LineBufferBuilder.new()
+	first := builder.build()
+	second := builder.build()
+	assert first.buf.len == default_buffer_capacity
+	assert second.buf.len == default_buffer_capacity
 }
 
 fn test_buffer_basics1() {
@@ -204,10 +229,15 @@ fn test_buffer_limited_capacity1() {
 	assert rdr.buffer().bytestr() == 'lisa\n'
 	rdr.consume_all()
 
+	// This returns an error because while we have just enough room to
+	// store maggie in the buffer, we *don't* have enough room to read one
+	// more byte, so we don't know whether we're at EOF or not, and
+	// therefore must give up.
 	if _ := rdr.fill() {
 		assert false
 	}
 
+	// We can mush on though!
 	assert rdr.buffer().bytestr() == 'm'
 	rdr.consume_all()
 
@@ -235,6 +265,7 @@ fn test_buffer_limited_capacity2() {
 	assert rdr.buffer().bytestr() == 'lisa\n'
 	rdr.consume_all()
 
+	// We have just enough space.
 	assert rdr.fill()!
 	assert rdr.buffer().bytestr() == 'maggie'
 	rdr.consume_all()
@@ -440,4 +471,19 @@ fn test_buffer_binary_convert4() {
 	assert !rdr.fill()!
 	assert rdr.absolute_byte_offset() == u64(bytes.len)
 	assert_some_u64(rdr.binary_byte_offset(), u64(bytes.len - 2))
+}
+
+fn test_buffer_binary_convert_line_terminator_is_noop() {
+	bytes := 'homer\nlisa\n'
+	mut builder := LineBufferBuilder.new()
+	builder.binary_detection(BinaryDetection.convert(`\n`))
+	mut linebuf := builder.build()
+	mut source := ByteSliceReader.new(bytes)
+	mut rdr := LineBufferReader.new(&source, &linebuf)
+
+	assert rdr.fill()!
+	assert rdr.buffer().bytestr() == bytes
+	rdr.consume_all()
+	assert !rdr.fill()!
+	assert_no_u64(rdr.binary_byte_offset())
 }
