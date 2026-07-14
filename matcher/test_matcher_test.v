@@ -44,7 +44,9 @@ fn make_test_matcher(pattern string) TestMatcher {
 				pattern: .a_plus
 			}
 		}
-		else { unsupported_test_matcher(pattern) }
+		else {
+			unsupported_test_matcher(pattern)
+		}
 	}
 }
 
@@ -74,9 +76,23 @@ fn assert_matches_eq(actual []Match, expected []Match) {
 	}
 }
 
+fn test_byte_set_empty_ranges_are_noops() {
+	mut empty := ByteSet.empty()
+	empty.add_all(3, 2)
+	for byte in 0 .. 256 {
+		assert !empty.contains(u8(byte))
+	}
+
+	mut full := ByteSet.full()
+	full.remove_all(3, 2)
+	for byte in 0 .. 256 {
+		assert full.contains(u8(byte))
+	}
+}
+
 fn is_word_byte(byte u8) bool {
-	return (byte >= `a` && byte <= `z`) || (byte >= `A` && byte <= `Z`) || (byte >= `0`
-		&& byte <= `9`) || byte == `_`
+	return (byte >= `a` && byte <= `z`) || (byte >= `A` && byte <= `Z`)
+		|| (byte >= `0` && byte <= `9`) || byte == `_`
 }
 
 fn is_space_byte(byte u8) bool {
@@ -309,7 +325,8 @@ fn test_captures_iter() {
 		matches << second
 		return true
 	})!
-	assert_matches_eq(matches, [tm(0, 5), tm(0, 2), tm(3, 5), tm(6, 11), tm(6, 8), tm(9, 11)])
+	assert_matches_eq(matches, [tm(0, 5), tm(0, 2), tm(3, 5),
+		tm(6, 11), tm(6, 8), tm(9, 11)])
 
 	// Test that captures_iter respects short circuiting.
 	matches.clear()

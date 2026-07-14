@@ -306,6 +306,9 @@ pub fn (mut set ByteSet) add(byte u8) {
 
 /// Add an inclusive range of bytes.
 pub fn (mut set ByteSet) add_all(start u8, end u8) {
+	if start > end {
+		return
+	}
 	mut byte := start
 	for {
 		set.add(byte)
@@ -327,6 +330,9 @@ pub fn (mut set ByteSet) remove(byte u8) {
 
 /// Remove an inclusive range of bytes.
 pub fn (mut set ByteSet) remove_all(start u8, end u8) {
+	if start > end {
+		return
+	}
 	mut byte := start
 	for {
 		set.remove(byte)
@@ -623,7 +629,7 @@ pub fn (opt FallibleUsize) get() ?usize {
 /// generic module functions below.
 pub interface Matcher {
 	/// Returns the start and end byte range of the first match in `haystack`
-	/// after `at`, where the byte offsets are relative to the that start of
+	/// after `at`, where the byte offsets are relative to that start of
 	/// `haystack` (and not `at`). If no match exists, then `none` is returned.
 	///
 	/// The text encoding of `haystack` is not strictly specified. Matchers are
@@ -635,27 +641,129 @@ pub interface Matcher {
 	find_at(haystack []u8, at usize) !FallibleMatch
 	/// Creates an empty group of captures suitable for use with the capturing
 	/// APIs of this interface.
+	///
+	/// Implementations that don't support capturing groups should use
+	/// the `NoCaptures` type and implement this method by calling
+	/// `NoCaptures.new()`.
 	new_captures() !NoCaptures
 	/// Returns the total number of capturing groups in this matcher.
+	///
+	/// If a matcher supports capturing groups, then this value must always be
+	/// at least 1, where the first capturing group always corresponds to the
+	/// overall match.
+	///
+	/// If a matcher does not support capturing groups, then this should
+	/// always return 0.
+	///
+	/// By default, capturing groups are not supported, so this always
+	/// returns 0.
 	capture_count() usize
 	/// Maps the given capture group name to its corresponding capture group
 	/// index, if one exists. If one does not exist, then `none` is returned.
+	///
+	/// If the given capture group name maps to multiple indices, then it is
+	/// not specified which one is returned. However, it is guaranteed that
+	/// one of them is returned.
+	///
+	/// By default, capturing groups are not supported, so this always returns
+	/// `none`.
 	capture_index(name string) ?usize
 	/// Populates the first set of capture group matches from `haystack`
 	/// into `caps` after `at`, where the byte offsets in each capturing
 	/// group are relative to the start of `haystack` (and not `at`). If no
 	/// match exists, then `false` is returned and the contents of the given
 	/// capturing groups are unspecified.
+	///
+	/// The text encoding of `haystack` is not strictly specified. Matchers are
+	/// advised to assume UTF-8, or at worst, some ASCII compatible encoding.
+	///
+	/// The significance of the starting point is that it takes the surrounding
+	/// context into consideration. For example, the `\A` anchor can only
+	/// match when `at == 0`.
+	///
+	/// By default, capturing groups aren't supported, and this implementation
+	/// will always behave as if a match were impossible.
+	///
+	/// Implementors that provide support for capturing groups must guarantee
+	/// that when a match occurs, the first capture match (at index `0`) is
+	/// always set to the overall match offsets.
+	///
+	/// Note that if implementors seek to support capturing groups, then they
+	/// should implement this method. Other methods that match based on
+	/// captures will then work automatically.
 	captures_at(haystack []u8, at usize, mut caps NoCaptures) !bool
 	/// If available, return a set of bytes that will never appear in a match
 	/// produced by an implementation.
+	///
+	/// Specifically, if such a set can be determined, then it's possible for
+	/// callers to perform additional operations on the basis that certain
+	/// bytes may never match.
+	///
+	/// For example, if a search is configured to possibly produce results
+	/// that span multiple lines but a caller provided pattern can never
+	/// match across multiple lines, then it may make sense to divert to
+	/// more optimized line oriented routines that don't need to handle the
+	/// multi-line match case.
+	///
+	/// Implementations that produce this set must never report false
+	/// positives, but may produce false negatives. That is, is a byte is in
+	/// this set then it must be guaranteed that it is never in a match. But,
+	/// if a byte is not in this set, then callers cannot assume that a match
+	/// exists with that byte.
+	///
+	/// By default, this returns `none`.
 	non_matching_bytes[^a]() ?&^a ByteSet
 	/// If this matcher was compiled as a line oriented matcher, then this
 	/// method returns the line terminator if and only if the line terminator
-	/// never appears in any match produced by this matcher.
+	/// never appears in any match produced by this matcher. If this wasn't
+	/// compiled as a line oriented matcher, or if the aforementioned guarantee
+	/// cannot be made, then this must return `none`, which is the default.
+	/// It is **never wrong** to return `none`, but returning a line terminator
+	/// when it can appear in a match results in unspecified behavior.
+	///
+	/// The line terminator is typically `b'\n'`, but can be any single byte or
+	/// `CRLF`.
+	///
+	/// By default, this returns `none`.
 	line_terminator() ?LineTerminator
 	/// Return one of the following: a confirmed line match, a candidate line
-	/// match (which may be a false positive) or no match at all.
+	/// match (which may be a false positive) or no match at all (which **must
+	/// not** be a false negative). When reporting a confirmed or candidate
+	/// match, the position returned can be any position in the line.
+	///
+	/// By default, this never returns a candidate match, and always either
+	/// returns a confirmed match or no match at all.
+	///
+	/// When a matcher can match spans over multiple lines, then the behavior
+	/// of this method is unspecified. Namely, use of this method only
+	/// makes sense in a context where the caller is looking for the next
+	/// matching line. That is, callers should only use this method when
+	/// `line_terminator` does not return `none`.
+	///
+	/// # Design rationale
+	///
+	/// A line matcher is, fundamentally, a normal matcher with the addition
+	/// of one optional method: finding a line. By default, this routine
+	/// is implemented via the matcher's `shortest_match` method, which
+	/// always yields either no match or a `LineMatchKind.confirmed`. However,
+	/// implementors may provide a routine for this that can return candidate
+	/// lines that need subsequent verification to be confirmed as a match.
+	/// This can be useful in cases where it may be quicker to find candidate
+	/// lines via some other means instead of relying on the more general
+	/// implementations for `find` and `shortest_match`.
+	///
+	/// For example, consider the regex `\w+foo\s+`. Both `find` and
+	/// `shortest_match` must consider the entire regex, including the `\w+`
+	/// and `\s+`, while searching. However, this method could look for lines
+	/// containing `foo` and return them as candidates. Finding `foo` might
+	/// be implemented as a highly optimized substring search routine (like
+	/// `memmem`), which is likely to be faster than whatever more generalized
+	/// routine is required for resolving `\w+foo\s+`. The caller is then
+	/// responsible for confirming whether a match exists or not.
+	///
+	/// Note that while this method may report false positives, it must never
+	/// report false negatives. That is, it can never skip over lines that
+	/// contain a match.
 	find_candidate_line(haystack []u8) !FallibleLineMatchKind
 }
 
