@@ -1008,7 +1008,7 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file o
 	}
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_file(mut file, path, has_path)!
-			mut search := MultiLine.new(s, matcher_ref_value(matcher_), s.multi_line_buffer,
+			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &s.multi_line_buffer,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if needs_transcoding {
@@ -1034,7 +1034,7 @@ pub fn (mut s Searcher) search_reader(matcher_ &matcher.Matcher, mut read_from i
 
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_reader(mut read_from)!
-			mut search := MultiLine.new(s, matcher_ref_value(matcher_), s.multi_line_buffer,
+			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &s.multi_line_buffer,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if s.config.encoding != none || s.config.bom_sniffing {
@@ -1061,21 +1061,21 @@ pub fn (mut s Searcher) search_slice(matcher_ &matcher.Matcher, slice []u8, writ
 	if s.slice_needs_transcoding(slice) {
 		transcoded := s.transcode_slice(slice)!
 		if s.multi_line_with_matcher(matcher_) {
-				mut search := MultiLine.new(s, matcher_ref_value(matcher_), transcoded,
+				mut search := MultiLine.new(s, matcher_ref_value(matcher_), &transcoded,
 					sink_ref_value(&write_to))
 			search.run()!
 		} else {
-				mut search := SliceByLine.new(s, matcher_ref_value(matcher_), transcoded,
+				mut search := SliceByLine.new(s, matcher_ref_value(matcher_), &transcoded,
 					sink_ref_value(&write_to))
 			search.run()!
 		}
 		return
 	}
 	if s.multi_line_with_matcher(matcher_) {
-			mut search := MultiLine.new(s, matcher_ref_value(matcher_), slice, sink_ref_value(&write_to))
+			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &slice, sink_ref_value(&write_to))
 		search.run()!
 	} else {
-			mut search := SliceByLine.new(s, matcher_ref_value(matcher_), slice,
+			mut search := SliceByLine.new(s, matcher_ref_value(matcher_), &slice,
 				sink_ref_value(&write_to))
 		search.run()!
 	}
@@ -3925,20 +3925,12 @@ mut:
 }
 
 fn ReadByLine.new[^s, ^r, ^b](searcher &^s Searcher, matcher_ matcher.Matcher, read_from LineBufferReader[^r, ^b], write_to Sink) ReadByLine[^s, ^r, ^b] {
-	mut line_number := ?u64(none)
-	if searcher.config.line_number {
-		line_number = u64(1)
+	$if debug {
+		assert !searcher.multi_line_with_matcher(&matcher_)
 	}
 	return ReadByLine[^s, ^r, ^b]{
 		config: &searcher.config
-		core:   Core[^s]{
-			config:      &searcher.config
-			matcher_:    matcher_
-			searcher:    searcher
-			sink:        write_to
-			binary:      false
-			line_number: line_number
-		}
+		core:   Core.new(searcher, matcher_, write_to, false)
 		rdr:    read_from
 	}
 }
@@ -3994,26 +3986,18 @@ fn (search ReadByLine[^s, ^r, ^b]) should_binary_quit[^s, ^r, ^b]() bool {
 }
 
 struct SliceByLine[^s] {
+	slice &^s []u8
 mut:
-	core  Core[^s]
-	slice []u8
+	core Core[^s]
 }
 
-fn SliceByLine.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, slice []u8, write_to Sink) SliceByLine[^s] {
-	mut line_number := ?u64(none)
-	if searcher.config.line_number {
-		line_number = u64(1)
+fn SliceByLine.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, slice &^s []u8, write_to Sink) SliceByLine[^s] {
+	$if debug {
+		assert !searcher.multi_line_with_matcher(&matcher_)
 	}
 	return SliceByLine[^s]{
-		core:  Core[^s]{
-			config:      &searcher.config
-			matcher_:    matcher_
-			searcher:    searcher
-			sink:        write_to
-			binary:      true
-			line_number: line_number
-		}
-		slice: slice.clone()
+		core:  Core.new(searcher, matcher_, write_to, true)
+		slice: slice
 	}
 }
 
@@ -4045,28 +4029,20 @@ fn (mut search SliceByLine[^s]) byte_count[^s]() u64 {
 
 struct MultiLine[^s] {
 	config &^s Config
+	slice  &^s []u8
 mut:
-	core           Core[^s]
-	slice          []u8
-	last_match     ?matcher.Match
+	core       Core[^s]
+	last_match ?matcher.Match
 }
 
-fn MultiLine.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, slice []u8, write_to Sink) MultiLine[^s] {
-	mut line_number := ?u64(none)
-	if searcher.config.line_number {
-		line_number = u64(1)
+fn MultiLine.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, slice &^s []u8, write_to Sink) MultiLine[^s] {
+	$if debug {
+		assert searcher.multi_line_with_matcher(&matcher_)
 	}
 	return MultiLine[^s]{
 		config: &searcher.config
-		core:   Core[^s]{
-			config:      &searcher.config
-			matcher_:    matcher_
-			searcher:    searcher
-			sink:        write_to
-			binary:      true
-			line_number: line_number
-		}
-		slice:  slice.clone()
+		core:   Core.new(searcher, matcher_, write_to, true)
+		slice:  slice
 	}
 }
 
@@ -4151,6 +4127,8 @@ fn (mut search MultiLine[^s]) sink[^s]() !bool {
 }
 
 fn (mut search MultiLine[^s]) sink_matched_inverted[^s]() !bool {
+	assert search.config.invert_match
+
 	maybe_mat := search.find()!
 	invert_match := if mat := maybe_mat.get() {
 		line := locate(search.slice, search.config.line_term.as_byte(), mat)
