@@ -783,7 +783,7 @@ pub fn (mut sink JSONSink[^p, ^s, W]) finish[^p, ^s](_searcher &searcher.Searche
 /// specialize here using a fixed size array without any allocation.
 // V-specific: the translated wire message owns its submatches, so this helper
 // materializes the dynamic representation expected by `Message`.
-fn json_submatches(bytes []u8, matches []matcher.Match, replacement ?Replacement) []SubMatch {
+fn json_submatches[^a](bytes []u8, matches []matcher.Match, replacement ?Replacement[^a]) []SubMatch {
 	mut submatches := []SubMatch{cap: matches.len}
 	for i, mat in matches {
 		mut repl := ?[]u8(none)

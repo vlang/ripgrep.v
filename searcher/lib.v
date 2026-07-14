@@ -39,6 +39,18 @@ $if !windows {
 
 interface IClone {}
 
+/// V-specific projection of `Matcher` containing the operations used by the
+/// searcher. Rust associated capture types prevent concrete capturing matchers
+/// from satisfying the broader V interface even though this code never uses
+/// those capture operations.
+pub interface SearchMatcher {
+	find_at(haystack []u8, at usize) !matcher.FallibleMatch
+	shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize
+	non_matching_bytes[^a]() ?&^a matcher.ByteSet
+	line_terminator() ?matcher.LineTerminator
+	find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind
+}
+
 fn is_reader_eof(err IError) bool {
 	return err is io.Eof || err is os.Eof
 }
@@ -989,7 +1001,7 @@ fn (mut rdr SearchSliceReader[^a]) read[^a](mut buf []u8) !int {
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_file` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_path[^p](matcher_ &matcher.Matcher, path &^p string, write_to Sink) ! {
+pub fn (mut s Searcher) search_path[^p](matcher_ &SearchMatcher, path &^p string, write_to Sink) ! {
 	mut file := os.open(*path) or { return err }
 	defer {
 		file.close()
@@ -1003,11 +1015,11 @@ pub fn (mut s Searcher) search_path[^p](matcher_ &matcher.Matcher, path &^p stri
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_path` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_file(matcher_ &matcher.Matcher, mut file os.File, write_to Sink) ! {
+pub fn (mut s Searcher) search_file(matcher_ &SearchMatcher, mut file os.File, write_to Sink) ! {
 	s.search_file_maybe_path(matcher_, mut file, '', false, write_to)!
 }
 
-fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file os.File, path string, has_path bool, write_to Sink) ! {
+fn (mut s Searcher) search_file_maybe_path(matcher_ &SearchMatcher, mut file os.File, path string, has_path bool, write_to Sink) ! {
 	$if !macos {
 		if mmap := s.config.mmap.open(mut file, path, has_path) {
 			defer {
@@ -1053,7 +1065,7 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file o
 /// one should try to use higher level APIs (e.g., searching by file or
 /// file path) so that memory maps can be used if they are available and
 /// enabled.
-pub fn (mut s Searcher) search_reader(matcher_ &matcher.Matcher, mut read_from io.Reader, write_to Sink) ! {
+pub fn (mut s Searcher) search_reader(matcher_ &SearchMatcher, mut read_from io.Reader, write_to Sink) ! {
 	s.check_config(matcher_)!
 
 	if s.multi_line_with_matcher(matcher_) {
@@ -1078,7 +1090,7 @@ pub fn (mut s Searcher) search_reader(matcher_ &matcher.Matcher, mut read_from i
 
 /// Execute a search over the given slice and write the results to the
 /// given sink.
-pub fn (mut s Searcher) search_slice(matcher_ &matcher.Matcher, slice []u8, write_to Sink) ! {
+pub fn (mut s Searcher) search_slice(matcher_ &SearchMatcher, slice []u8, write_to Sink) ! {
 	s.check_config(matcher_)!
 
 	// We can search the slice directly, unless we need to do transcoding.
@@ -1098,7 +1110,7 @@ pub fn (mut s Searcher) search_slice(matcher_ &matcher.Matcher, slice []u8, writ
 
 /// Check that the searcher's configuration and the matcher are consistent
 /// with each other.
-fn (s &Searcher) check_config(matcher_ &matcher.Matcher) ! {
+fn (s &Searcher) check_config(matcher_ &SearchMatcher) ! {
 	if limit := s.config.heap_limit {
 		if limit == 0 && !s.config.mmap.is_enabled() {
 			return ConfigError.search_unavailable()
@@ -2612,7 +2624,7 @@ pub fn (s &Searcher) max_matches() ?u64 {
 /// searcher has been configured to execute a search that can report
 /// matches over multiple lines, but where the matcher guarantees that it
 /// will never produce a match over multiple lines.
-pub fn (s &Searcher) multi_line_with_matcher(matcher_ &matcher.Matcher) bool {
+pub fn (s &Searcher) multi_line_with_matcher(matcher_ &SearchMatcher) bool {
 	if !s.multi_line() {
 		return false
 	}
@@ -2873,12 +2885,6 @@ pub fn (mat &SinkMatch[^b]) bytes_range_in_buffer[^b]() matcher.Match {
 /// Returns the bytes for all matching lines, including the line
 /// terminators, if they exist.
 pub fn (mat &SinkMatch[^b]) bytes[^b]() []u8 {
-	return mat.bytes_
-}
-
-// V-specific: exposes the active search-buffer slice for printer internals
-// that consume it before the search buffer is reused.
-pub fn (mat &SinkMatch[^b]) bytes_view[^b]() []u8 {
 	return mat.bytes_
 }
 
@@ -3592,7 +3598,7 @@ fn append_bytes(mut dst []u8, bytes []u8) {
 	}
 }
 
-fn matcher_ref_value(matcher_ &matcher.Matcher) matcher.Matcher {
+fn matcher_ref_value(matcher_ &SearchMatcher) SearchMatcher {
 	return *matcher_
 }
 
@@ -3610,7 +3616,7 @@ struct Core[^s] {
 	// V-specific: interfaces replace the Rust matcher's and sink's generic
 	// parameters while preserving the same owned values.
 	config   &^s Config
-	matcher_ matcher.Matcher
+	matcher_ SearchMatcher
 	searcher &^s Searcher
 mut:
 	sink                Sink
@@ -3627,7 +3633,7 @@ mut:
 	count_              u64
 }
 
-fn Core.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, sink Sink, binary bool) Core[^s] {
+fn Core.new[^s](searcher &^s Searcher, matcher_ SearchMatcher, sink Sink, binary bool) Core[^s] {
 	mut line_number := ?u64(none)
 	if searcher.config.line_number {
 		line_number = u64(1)
@@ -3675,7 +3681,7 @@ fn (core &Core[^s]) binary_byte_offset[^s]() ?u64 {
 	return none
 }
 
-fn (core &^a Core[^s]) matcher[^a, ^s]() &^a matcher.Matcher {
+fn (core &^a Core[^s]) matcher[^a, ^s]() &^a SearchMatcher {
 	return &core.matcher_
 }
 
@@ -4179,7 +4185,7 @@ mut:
 	rdr  LineBufferReader[^r, ^b]
 }
 
-fn ReadByLine.new[^s, ^r, ^b](searcher &^s Searcher, matcher_ matcher.Matcher, read_from LineBufferReader[^r, ^b], write_to Sink) ReadByLine[^s, ^r, ^b] {
+fn ReadByLine.new[^s, ^r, ^b](searcher &^s Searcher, matcher_ SearchMatcher, read_from LineBufferReader[^r, ^b], write_to Sink) ReadByLine[^s, ^r, ^b] {
 	$if debug {
 		assert !searcher.multi_line_with_matcher(&matcher_)
 	}
@@ -4246,7 +4252,7 @@ mut:
 	core Core[^s]
 }
 
-fn SliceByLine.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, slice &^s []u8, write_to Sink) SliceByLine[^s] {
+fn SliceByLine.new[^s](searcher &^s Searcher, matcher_ SearchMatcher, slice &^s []u8, write_to Sink) SliceByLine[^s] {
 	$if debug {
 		assert !searcher.multi_line_with_matcher(&matcher_)
 	}
@@ -4290,7 +4296,7 @@ mut:
 	last_match ?matcher.Match
 }
 
-fn MultiLine.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, slice &^s []u8, write_to Sink) MultiLine[^s] {
+fn MultiLine.new[^s](searcher &^s Searcher, matcher_ SearchMatcher, slice &^s []u8, write_to Sink) MultiLine[^s] {
 	$if debug {
 		assert searcher.multi_line_with_matcher(&matcher_)
 	}

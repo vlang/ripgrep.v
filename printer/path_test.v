@@ -15,6 +15,11 @@ fn test_printer_path_separator() {
 	ppath := PrinterPath.new(&path).with_separator(u8(92))
 
 	assert ppath.as_bytes().bytestr() == 'alpha\\beta\\gamma.txt'
+	$if unix {
+		assert *ppath.as_path() == 'alpha\\beta\\gamma.txt'
+	} $else {
+		assert *ppath.as_path() == path
+	}
 }
 
 fn test_printer_path_without_separator() {
@@ -34,4 +39,13 @@ fn test_printer_path_hyperlink_for_existing_path() {
 	mut ppath := PrinterPath.new(&path)
 	hyperlink := ppath.as_hyperlink() or { panic('missing hyperlink path') }
 	assert hyperlink.bytes.bytestr().starts_with('/')
+}
+
+fn test_printer_path_caches_missing_hyperlink() {
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_printer_path_missing_hyperlink_test.txt')
+	os.rm(path) or {}
+	mut ppath := PrinterPath.new(&path)
+	assert ppath.as_hyperlink() == none
+	assert ppath.hyperlink_initialized
+	assert !ppath.has_hyperlink
 }

@@ -696,7 +696,7 @@ pub fn (mut sink StandardSink[^p, ^s, W]) matched[^b, ^p, ^s](searcher_ &searche
 			return false
 		}
 	}
-	mut imp := StandardImpl.from_match(*searcher_, &sink, mat)
+	mut imp := StandardImpl.from_match(searcher_, &sink, mat)
 	imp.sink()!
 	return true
 }
@@ -714,13 +714,13 @@ pub fn (mut sink StandardSink[^p, ^s, W]) context[^b, ^p, ^s](searcher_ &searche
 			return false
 		}
 	}
-	mut imp := StandardImpl.from_context(*searcher_, &sink, ctx)
+	mut imp := StandardImpl.from_context(searcher_, &sink, ctx)
 	imp.sink()!
 	return true
 }
 
 pub fn (mut sink StandardSink[^p, ^s, W]) context_break[^p, ^s](searcher_ &searcher.Searcher) !bool {
-	mut imp := StandardImpl.new(*searcher_, &sink)
+	mut imp := StandardImpl.new(searcher_, &sink)
 	imp.write_context_separator()!
 	return true
 }
@@ -745,7 +745,7 @@ pub fn (mut sink StandardSink[^p, ^s, W]) begin[^p, ^s](_searcher &searcher.Sear
 
 pub fn (mut sink StandardSink[^p, ^s, W]) finish[^p, ^s](searcher_ &searcher.Searcher, finish &searcher.SinkFinish) ! {
 	if offset := sink.binary_byte_offset {
-		mut imp := StandardImpl.new(*searcher_, &sink)
+		mut imp := StandardImpl.new(searcher_, &sink)
 		imp.write_binary_message(offset)!
 	}
 	if sink.has_stats {
@@ -764,18 +764,18 @@ pub fn (mut sink StandardSink[^p, ^s, W]) finish[^p, ^s](searcher_ &searcher.Sea
 ///
 /// A StandardImpl is initialized every time a match or a contextual line is
 /// reported.
-struct StandardImpl[^p, ^s, W] {
-	searcher searcher.Searcher
+struct StandardImpl[^a, ^p, ^s, W] {
+	searcher &^a searcher.Searcher
 mut:
-	sink           &^s StandardSink[^p, ^s, W]
-	sunk           Sunk
+	sink           &^a StandardSink[^p, ^s, W]
+	sunk           Sunk[^a]
 	/// Set to true if and only if we are writing a match with color.
 	in_color_match bool
 }
 
 /// Bundle self with a searcher and return the core implementation of Sink.
-fn StandardImpl.new[^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W]) StandardImpl[^p, ^s, W] {
-	return StandardImpl[^p, ^s, W]{
+fn StandardImpl.new[^a, ^p, ^s, W](searcher_ &^a searcher.Searcher, sink &^a StandardSink[^p, ^s, W]) StandardImpl[^a, ^p, ^s, W] {
+	return StandardImpl[^a, ^p, ^s, W]{
 		searcher: searcher_
 		sink:     sink
 		sunk:     Sunk.empty()
@@ -784,9 +784,9 @@ fn StandardImpl.new[^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSin
 
 /// Bundle self with a searcher and return the core implementation of Sink
 /// for use with handling matching lines.
-fn StandardImpl.from_match[^b, ^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W], mat &searcher.SinkMatch[^b]) StandardImpl[^p, ^s, W] {
-	sunk := Sunk.from_sink_match(mat, sink.standard.matches, sink.replacer.replacement())
-	return StandardImpl[^p, ^s, W]{
+fn StandardImpl.from_match[^a, ^b, ^p, ^s, W](searcher_ &^a searcher.Searcher, sink &^a StandardSink[^p, ^s, W], mat &^a searcher.SinkMatch[^b]) StandardImpl[^a, ^p, ^s, W] {
+	sunk := Sunk.from_sink_match(mat, &sink.standard.matches, sink.replacer.replacement())
+	return StandardImpl[^a, ^p, ^s, W]{
 		searcher: searcher_
 		sink:     sink
 		sunk:     sunk
@@ -795,16 +795,16 @@ fn StandardImpl.from_match[^b, ^p, ^s, W](searcher_ searcher.Searcher, sink &^s 
 
 /// Bundle self with a searcher and return the core implementation of Sink
 /// for use with handling contextual lines.
-fn StandardImpl.from_context[^b, ^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W], ctx &searcher.SinkContext[^b]) StandardImpl[^p, ^s, W] {
-	sunk := Sunk.from_sink_context(ctx, sink.standard.matches, sink.replacer.replacement())
-	return StandardImpl[^p, ^s, W]{
+fn StandardImpl.from_context[^a, ^b, ^p, ^s, W](searcher_ &^a searcher.Searcher, sink &^a StandardSink[^p, ^s, W], ctx &^a searcher.SinkContext[^b]) StandardImpl[^a, ^p, ^s, W] {
+	sunk := Sunk.from_sink_context(ctx, &sink.standard.matches, sink.replacer.replacement())
+	return StandardImpl[^a, ^p, ^s, W]{
 		searcher: searcher_
 		sink:     sink
 		sunk:     sunk
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) sink[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink[^a, ^p, ^s]() ! {
 	imp.write_search_prelude()!
 	matches := imp.sunk.matches()
 	if matches.len == 0 {
@@ -826,7 +826,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink[^p, ^s]() ! {
 ///
 /// This should only be used when the configuration does not demand match
 /// granularity and the searcher is not in multi line mode.
-fn (mut imp StandardImpl[^p, ^s, W]) sink_fast[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_fast[^a, ^p, ^s]() ! {
 	$if debug {
 		assert imp.sunk.matches().len == 0
 		assert !imp.multi_line() || imp.is_context()
@@ -841,7 +841,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink_fast[^p, ^s]() ! {
 ///
 /// This should only be used when the configuration does not demand match
 /// granularity. This may be used when the searcher is in multi line mode.
-fn (mut imp StandardImpl[^p, ^s, W]) sink_fast_multi_line[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_fast_multi_line[^a, ^p, ^s]() ! {
 	$if debug {
 		assert imp.sunk.matches().len == 0
 		// This isn't actually a required invariant for using this method,
@@ -867,7 +867,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink_fast_multi_line[^p, ^s]() ! {
 
 /// Print a matching line where the configuration of the printer requires
 /// finding each individual match (e.g., for coloring).
-fn (mut imp StandardImpl[^p, ^s, W]) sink_slow[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow[^a, ^p, ^s]() ! {
 	$if debug {
 		assert imp.sunk.matches().len > 0
 		assert !imp.multi_line() || imp.is_context()
@@ -894,7 +894,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink_slow[^p, ^s]() ! {
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) sink_slow_multi_line[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_line[^a, ^p, ^s]() ! {
 	$if debug {
 		assert imp.sunk.matches().len > 0
 		assert imp.multi_line()
@@ -928,7 +928,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink_slow_multi_line[^p, ^s]() ! {
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) sink_slow_multi_line_only_matching[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_line_only_matching[^a, ^p, ^s]() ! {
 	line_term := imp.searcher.line_terminator().as_byte()
 	spec := imp.config().colors.matched()
 	bytes := imp.sunk.bytes()
@@ -971,7 +971,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink_slow_multi_line_only_matching[^p, ^s](
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) sink_slow_multi_per_match[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_per_match[^a, ^p, ^s]() ! {
 	line_term := imp.searcher.line_terminator().as_byte()
 	spec := imp.config().colors.matched()
 	bytes := imp.sunk.bytes()
@@ -1031,7 +1031,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) sink_slow_multi_per_match[^p, ^s]() ! {
 /// Write the beginning part of a matching line. This (may) include things
 /// like the file path, line number among others, depending on the
 /// configuration and the parameters given.
-fn (mut imp StandardImpl[^p, ^s, W]) write_prelude[^p, ^s](absolute_byte_offset u64, line_number ?u64, column ?u64) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_prelude[^a, ^p, ^s](absolute_byte_offset u64, line_number ?u64, column ?u64) ! {
 	mut next_separator := PreludeSeparator.none_
 	field_separator := imp.separator_field()
 	mut interp_status := InterpolatorStatus.inactive()
@@ -1075,7 +1075,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_prelude[^p, ^s](absolute_byte_offset 
 	imp.write_prelude_separator(mut next_separator, field_separator)!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_prelude_separator[^p, ^s](mut next_separator PreludeSeparator, field_separator []u8) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_prelude_separator[^a, ^p, ^s](mut next_separator PreludeSeparator, field_separator []u8) ! {
 	match next_separator {
 		.none_ {}
 		.field_separator {
@@ -1090,7 +1090,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_prelude_separator[^p, ^s](mut next_se
 	next_separator = .none_
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_line[^p, ^s](line []u8) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_line[^a, ^p, ^s](line []u8) ! {
 	mut range := matcher.Match.new(0, line.len)
 	if imp.config().trim_ascii {
 		lineterm := imp.searcher.line_terminator()
@@ -1109,7 +1109,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_line[^p, ^s](line []u8) ! {
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_colored_line[^p, ^s](matches []matcher.Match, bytes []u8) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_line[^a, ^p, ^s](matches []matcher.Match, bytes []u8) ! {
 	// If we know we aren't going to emit color, then we can go faster.
 	spec := imp.config().colors.matched()
 	if !imp.sink.standard.wtr.supports_color() || spec.is_none() {
@@ -1134,7 +1134,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_colored_line[^p, ^s](matches []matche
 /// This accounts for trimming any whitespace prefix and will *never* print
 /// a line terminator. If a match exceeds the range specified by `line`,
 /// then only the part of the match within `line` (if any) is printed.
-fn (mut imp StandardImpl[^p, ^s, W]) write_colored_matches[^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
 	imp.trim_line_terminator(bytes, mut line)
 	if matches.len == 0 {
 		imp.write(bytes[line.start()..line.end()])!
@@ -1171,7 +1171,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_colored_matches[^p, ^s](bytes []u8, m
 	imp.end_line_highlight()!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_exceeded_line[^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_exceeded_line[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
 	if imp.config().max_columns_preview {
 		original_end := line.end()
 		limit := usize(imp.config().max_columns or { 0 })
@@ -1215,7 +1215,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_exceeded_line[^p, ^s](bytes []u8, mut
 /// write that path to the underlying writer followed by a line terminator.
 /// (If a path terminator is set, then that is used instead of the line
 /// terminator.)
-fn (mut imp StandardImpl[^p, ^s, W]) write_path_line[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_path_line[^a, ^p, ^s]() ! {
 	if mut path := imp.path() {
 		imp.write_path_hyperlink(mut path)!
 		if term := imp.config().path_terminator {
@@ -1226,7 +1226,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_path_line[^p, ^s]() ! {
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_search_prelude[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_search_prelude[^a, ^p, ^s]() ! {
 	this_search_written := imp.sink.standard.wtr.count() > 0
 	if this_search_written {
 		return
@@ -1243,7 +1243,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_search_prelude[^p, ^s]() ! {
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_binary_message[^p, ^s](offset u64) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_binary_message[^a, ^p, ^s](offset u64) ! {
 	if !imp.sink.has_match() {
 		return
 	}
@@ -1286,47 +1286,47 @@ fn binary_byte_debug_escape(byte u8) string {
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_context_separator[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_context_separator[^a, ^p, ^s]() ! {
 	if sep := imp.config().separator_context {
 		imp.write(sep)!
 		imp.write_line_term()!
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_line_term[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_line_term[^a, ^p, ^s]() ! {
 	imp.write(imp.searcher.line_terminator().as_bytes())!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_spec[^p, ^s](spec ColorSpec, buf []u8) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_spec[^a, ^p, ^s](spec ColorSpec, buf []u8) ! {
 	imp.sink.standard.wtr.set_color(spec)!
 	imp.write(buf)!
 	imp.sink.standard.wtr.reset()!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_path[^p, ^s](mut path PrinterPath[^p]) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_path[^a, ^p, ^s](mut path PrinterPath[^p]) ! {
 	spec := imp.config().colors.path()
 	imp.sink.standard.wtr.set_color(spec)!
-	imp.write(path.as_bytes_view())!
+	imp.write(path.as_bytes())!
 	imp.sink.standard.wtr.reset()!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write_path_hyperlink[^p, ^s](mut path PrinterPath[^p]) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_path_hyperlink[^a, ^p, ^s](mut path PrinterPath[^p]) ! {
 	status := imp.start_hyperlink(mut path, none, none)!
 	imp.write_path(mut path)!
 	imp.end_hyperlink(status)!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) start_hyperlink[^p, ^s](mut path PrinterPath[^p], line_number ?u64, column ?u64) !InterpolatorStatus {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) start_hyperlink[^a, ^p, ^s](mut path PrinterPath[^p], line_number ?u64, column ?u64) !InterpolatorStatus {
 	hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 	values := Values.new(hyperpath).line(line_number).column(column)
 	return imp.sink.interpolator.begin(&values, mut imp.sink.standard.wtr)
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) end_hyperlink[^p, ^s](status InterpolatorStatus) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) end_hyperlink[^a, ^p, ^s](status InterpolatorStatus) ! {
 	imp.sink.interpolator.finish(status, mut imp.sink.standard.wtr)!
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) start_color_match[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) start_color_match[^a, ^p, ^s]() ! {
 	if imp.in_color_match {
 		return
 	}
@@ -1334,7 +1334,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) start_color_match[^p, ^s]() ! {
 	imp.in_color_match = true
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) end_color_match[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) end_color_match[^a, ^p, ^s]() ! {
 	if !imp.in_color_match {
 		return
 	}
@@ -1346,23 +1346,23 @@ fn (mut imp StandardImpl[^p, ^s, W]) end_color_match[^p, ^s]() ! {
 	imp.in_color_match = false
 }
 
-fn (imp StandardImpl[^p, ^s, W]) highlight_on[^p, ^s]() bool {
+fn (imp StandardImpl[^a, ^p, ^s, W]) highlight_on[^a, ^p, ^s]() bool {
 	return !imp.config().colors.highlight().is_none() && !imp.is_context()
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) start_line_highlight[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) start_line_highlight[^a, ^p, ^s]() ! {
 	if imp.highlight_on() {
 		imp.sink.standard.wtr.set_color(imp.config().colors.highlight())!
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) end_line_highlight[^p, ^s]() ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) end_line_highlight[^a, ^p, ^s]() ! {
 	if imp.highlight_on() {
 		imp.sink.standard.wtr.reset()!
 	}
 }
 
-fn (mut imp StandardImpl[^p, ^s, W]) write[^p, ^s](buf []u8) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write[^a, ^p, ^s](buf []u8) ! {
 	mut written := usize(0)
 	for written < buf.len {
 		n := imp.sink.standard.wtr.write(buf[written..])!
@@ -1373,21 +1373,21 @@ fn (mut imp StandardImpl[^p, ^s, W]) write[^p, ^s](buf []u8) ! {
 	}
 }
 
-fn (imp StandardImpl[^p, ^s, W]) has_line_terminator[^p, ^s](buf []u8) bool {
+fn (imp StandardImpl[^a, ^p, ^s, W]) has_line_terminator[^a, ^p, ^s](buf []u8) bool {
 	return imp.searcher.line_terminator().is_suffix(buf)
 }
 
-fn (imp StandardImpl[^p, ^s, W]) is_context[^p, ^s]() bool {
+fn (imp StandardImpl[^a, ^p, ^s, W]) is_context[^a, ^p, ^s]() bool {
 	return imp.sunk.context_kind() != none
 }
 
 /// Return the underlying configuration for this printer.
-fn (imp StandardImpl[^p, ^s, W]) config[^p, ^s]() &^s StandardConfig {
+fn (imp StandardImpl[^a, ^p, ^s, W]) config[^a, ^p, ^s]() &^a StandardConfig {
 	return &imp.sink.standard.config
 }
 
 /// Return the path associated with this printer, if one exists.
-fn (imp StandardImpl[^p, ^s, W]) path[^p, ^s]() ?&^s PrinterPath[^p] {
+fn (imp StandardImpl[^a, ^p, ^s, W]) path[^a, ^p, ^s]() ?&^a PrinterPath[^p] {
 	if imp.sink.path != none {
 		return unsafe { &imp.sink.path? }
 	}
@@ -1396,7 +1396,7 @@ fn (imp StandardImpl[^p, ^s, W]) path[^p, ^s]() ?&^s PrinterPath[^p] {
 
 /// Return the appropriate field separator based on whether we are emitting
 /// matching or contextual lines.
-fn (imp StandardImpl[^p, ^s, W]) separator_field[^p, ^s]() &^s []u8 {
+fn (imp StandardImpl[^a, ^p, ^s, W]) separator_field[^a, ^p, ^s]() &^a []u8 {
 	if imp.is_context() {
 		return &imp.config().separator_field_context
 	}
@@ -1405,7 +1405,7 @@ fn (imp StandardImpl[^p, ^s, W]) separator_field[^p, ^s]() &^s []u8 {
 
 /// Returns true if and only if the given line exceeds the maximum number
 /// of columns set. If no maximum is set, then this always returns false.
-fn (imp StandardImpl[^p, ^s, W]) exceeds_max_columns[^p, ^s](line []u8) bool {
+fn (imp StandardImpl[^a, ^p, ^s, W]) exceeds_max_columns[^a, ^p, ^s](line []u8) bool {
 	if max := imp.config().max_columns {
 		return u64(line.len) > max
 	}
@@ -1419,13 +1419,12 @@ fn (imp StandardImpl[^p, ^s, W]) exceeds_max_columns[^p, ^s](line []u8) bool {
 /// line mode, but also checks if the matter can match over multiple lines.
 /// If it can't, then we don't need multi line handling, even if the
 /// searcher has multi line mode enabled.
-fn (imp StandardImpl[^p, ^s, W]) multi_line[^p, ^s]() bool {
+fn (imp StandardImpl[^a, ^p, ^s, W]) multi_line[^a, ^p, ^s]() bool {
 	return printer_matcher_multi_line(imp.searcher, imp.sink.matcher)
 }
 
-fn (imp StandardImpl[^p, ^s, W]) trim_line_terminator[^p, ^s](buf []u8, mut line matcher.Match) {
-	line2, _ := trim_line_terminator(imp.searcher, buf, line)
-	line = line2
+fn (imp StandardImpl[^a, ^p, ^s, W]) trim_line_terminator[^a, ^p, ^s](buf []u8, mut line matcher.Match) {
+	_ := trim_line_terminator(imp.searcher, &buf, mut line)
 }
 
 /// Trim prefix ASCII spaces from the given slice and return the
@@ -1433,7 +1432,7 @@ fn (imp StandardImpl[^p, ^s, W]) trim_line_terminator[^p, ^s](buf []u8, mut line
 ///
 /// This stops trimming a prefix as soon as it sees non-whitespace or a
 /// line terminator.
-fn (imp StandardImpl[^p, ^s, W]) trim_ascii_prefix[^p, ^s](slice []u8, mut range matcher.Match) {
+fn (imp StandardImpl[^a, ^p, ^s, W]) trim_ascii_prefix[^a, ^p, ^s](slice []u8, mut range matcher.Match) {
 	if !imp.config().trim_ascii {
 		return
 	}
