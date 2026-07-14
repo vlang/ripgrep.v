@@ -111,13 +111,13 @@ pub fn (o &^a Override) matched[^a](path string, is_dir bool) Match[OverrideGlob
 		if mat.is_ignore() {
 			return Match[OverrideGlob[^a]]{
 				kind:      .whitelist
-				value:     OverrideGlob.matched(giglob)
+				value:     OverrideGlob.matched(*giglob)
 				has_value: true
 			}
 		} else if mat.is_whitelist() {
 			return Match[OverrideGlob[^a]]{
 				kind:      .ignore
-				value:     OverrideGlob.matched(giglob)
+				value:     OverrideGlob.matched(*giglob)
 				has_value: true
 			}
 		}

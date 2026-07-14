@@ -381,7 +381,7 @@ pub fn (builder &GitignoreBuilder) build() (Gitignore, bool, IgnoreError) {
 			nignore++
 		}
 	}
-	set := builder.builder.build() or { return Gitignore.empty(), true, glob_error('', err.msg()) }
+	set := builder.builder.build() or { return Gitignore.empty(), true, glob_error(none, err.msg()) }
 	return Gitignore{
 		root:             builder.root.clone()
 		globs:            builder.globs.clone()
@@ -444,7 +444,7 @@ pub fn (mut builder GitignoreBuilder) add(path string) (bool, IgnoreError) {
 		}
 		add_has_err, add_err := builder.add_line(path, line)
 		if add_has_err {
-			errs.push(add_err.with_path(path).with_line_number(lineno))
+			errs.push(add_err.tagged(path, lineno))
 		}
 	}
 	return errs.into_error_option()

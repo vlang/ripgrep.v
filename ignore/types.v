@@ -373,7 +373,7 @@ pub fn (builder &TypesBuilder) build() (Types, bool, IgnoreError) {
 		}
 		selections << selection_with_def(selection.clone(), def.clone())
 	}
-	set := build_set.build() or { return Types.empty(), true, glob_error('', err.msg()) }
+	set := build_set.build() or { return Types.empty(), true, glob_error(none, err.msg()) }
 	return Types{
 		defs:              defs
 		selections:        selections

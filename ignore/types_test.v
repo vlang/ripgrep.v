@@ -148,7 +148,7 @@ fn test_types_build_rejects_invalid_glob() {
 	_, build_has_err, build_err := builder.build()
 	assert build_has_err
 	assert build_err.kind == .glob
-	assert build_err.path == '['
+	assert build_err.glob == ?string('[')
 }
 
 fn test_types_match_reports_definition_and_clones_matcher() {

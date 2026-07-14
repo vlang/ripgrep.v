@@ -183,7 +183,7 @@ fn test_add_line_reports_the_glob_error_kind() {
 	builder.allow_unclosed_class(false)
 	has_err, err := builder.add_line(none_string(), '[abc')
 	assert has_err
-	assert err.path == '[abc'
+	assert err.glob == ?string('[abc')
 	assert err.message == "unclosed character class; missing ']'"
 }
 

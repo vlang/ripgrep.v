@@ -1157,7 +1157,7 @@ fn (mut walk Walk) enqueue_child(frame WalkFrame, child_entry DirChild) {
 	} else {
 		DirEntryRaw.from_child(child_depth, frame.parent_path, child_entry.name) or {
 			walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(frame.parent_path,
-				child_entry.name)).with_depth(int(child_depth))))
+				child_entry.name)).with_depth(child_depth)))
 			return
 		}
 	}
@@ -1165,7 +1165,7 @@ fn (mut walk Walk) enqueue_child(frame WalkFrame, child_entry DirChild) {
 		child_path := child_raw.path.clone()
 		child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
 			walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(frame.parent_path,
-				child_entry.name)).with_depth(int(child_depth))))
+				child_entry.name)).with_depth(child_depth)))
 			return
 		}
 		if child_raw.ty == .directory {
@@ -1223,7 +1223,7 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 	mut descend := true
 	if has_root_device {
 		descend = is_same_file_system(root_device, dent.path()) or {
-			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 			false
 		}
 	}
@@ -1249,7 +1249,7 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 		}
 	}
 	children := walk.read_dir_children(dent.path()) or {
-		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 		return
 	}
 	walk.stack << WalkFrame{
@@ -1344,7 +1344,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 	mut descend := true
 	if has_root_device {
 		descend = is_same_file_system(root_device, dent.path()) or {
-			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 			false
 		}
 	}
@@ -1370,7 +1370,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 		}
 	}
 	children := walk.read_dir_children(dent.path()) or {
-		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 		return
 	}
 	for child_entry in children {
@@ -1381,7 +1381,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 		} else {
 			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
 				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
-					child_entry.name)).with_depth(int(child_depth))))
+					child_entry.name)).with_depth(child_depth)))
 				continue
 			}
 		}
@@ -1389,7 +1389,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 			child_path := child_raw.path.clone()
 			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
 				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
-					child_entry.name)).with_depth(int(child_depth))))
+					child_entry.name)).with_depth(child_depth)))
 				continue
 			}
 			if child_raw.ty == .directory {
@@ -1444,7 +1444,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 	mut descend := true
 	if has_root_device {
 		descend = is_same_file_system(root_device, dent.path()) or {
-			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 			if state.is_quit() {
 				return .quit
 			}
@@ -1479,7 +1479,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 		}
 	}
 	children := walk.read_dir_children(dent.path()) or {
-		state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+		state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 		if state.is_quit() {
 			return .quit
 		}
@@ -1493,7 +1493,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 		} else {
 			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
 				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
-					child_entry.name)).with_depth(int(child_depth))))
+					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
 				}
@@ -1504,7 +1504,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 			child_path := child_raw.path.clone()
 			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
 				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
-					child_entry.name)).with_depth(int(child_depth))))
+					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
 				}
@@ -2093,7 +2093,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	mut descend := true
 	if work.has_root_device {
 		descend = is_same_file_system(work.root_device, dent.path()) or {
-			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 			if state.is_quit() {
 				return state
 			}
@@ -2124,7 +2124,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 		}
 	}
 	mut children := walk.read_dir_children(dent.path()) or {
-		return visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(int(dent.depth()))))
+		return visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
 	}
 	defer {
 		for child_entry in children {
@@ -2140,7 +2140,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 		} else {
 			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
 				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
-					child_entry.name)).with_depth(int(child_depth))))
+					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
 				}
@@ -2151,7 +2151,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 			child_path := child_raw.path.clone()
 			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
 				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
-					child_entry.name)).with_depth(int(child_depth))))
+					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
 				}
@@ -2238,7 +2238,7 @@ fn sort_children(mut children []DirChild, parent_path string, has_name_cmp bool,
 
 fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth usize) ?IgnoreError {
 	hchild := Handle.from_path(child_path) or {
-		return io_error(err).with_path(child_path).with_depth(int(child_depth))
+		return io_error(err).with_path(child_path).with_depth(child_depth)
 	}
 	mut node := ig_parent.node
 	for !isnil(node) {
@@ -2246,10 +2246,10 @@ fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth usize) ?I
 			break
 		}
 		h := Handle.from_path(node.dir) or {
-			return io_error(err).with_path(child_path).with_depth(int(child_depth))
+			return io_error(err).with_path(child_path).with_depth(child_depth)
 		}
 		if h.same_file(hchild) {
-			return loop_error(node.dir, child_path).with_depth(int(child_depth))
+			return loop_error(node.dir, child_path).with_depth(child_depth)
 		}
 		node = node.parent
 	}

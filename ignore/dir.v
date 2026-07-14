@@ -65,60 +65,15 @@ fn IgnoreMatch.hidden[^a]() IgnoreMatch[^a] {
 }
 
 fn match_from_override[^a](m Match[OverrideGlob[^a]]) Match[IgnoreMatch[^a]] {
-	if value := m.inner() {
-		if m.is_ignore() {
-			return Match[IgnoreMatch[^a]]{
-				kind:      .ignore
-				value:     IgnoreMatch.overrides(value)
-				has_value: true
-			}
-		} else if m.is_whitelist() {
-			return Match[IgnoreMatch[^a]]{
-				kind:      .whitelist
-				value:     IgnoreMatch.overrides(value)
-				has_value: true
-			}
-		}
-	}
-	return Match[IgnoreMatch[^a]]{}
+	return m.map(IgnoreMatch.overrides)
 }
 
 fn match_from_gitignore[^a](m Match[GitignoreGlobRef[^a]]) Match[IgnoreMatch[^a]] {
-	if value := m.inner() {
-		if m.is_ignore() {
-			return Match[IgnoreMatch[^a]]{
-				kind:      .ignore
-				value:     IgnoreMatch.gitignore(value)
-				has_value: true
-			}
-		} else if m.is_whitelist() {
-			return Match[IgnoreMatch[^a]]{
-				kind:      .whitelist
-				value:     IgnoreMatch.gitignore(value)
-				has_value: true
-			}
-		}
-	}
-	return Match[IgnoreMatch[^a]]{}
+	return m.map(IgnoreMatch.gitignore)
 }
 
 fn match_from_types[^a](m Match[TypesGlob[^a]]) Match[IgnoreMatch[^a]] {
-	if value := m.inner() {
-		if m.is_ignore() {
-			return Match[IgnoreMatch[^a]]{
-				kind:      .ignore
-				value:     IgnoreMatch.types(value)
-				has_value: true
-			}
-		} else if m.is_whitelist() {
-			return Match[IgnoreMatch[^a]]{
-				kind:      .whitelist
-				value:     IgnoreMatch.types(value)
-				has_value: true
-			}
-		}
-	}
-	return Match[IgnoreMatch[^a]]{}
+	return m.map(IgnoreMatch.types)
 }
 
 // V-specific: this constructs only the empty match, so it carries no borrowed
