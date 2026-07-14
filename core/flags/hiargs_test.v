@@ -62,6 +62,16 @@ fn test_hiargs_extracts_pattern_and_paths_from_positionals() {
 	assert !hi.with_filename
 }
 
+fn test_hiargs_rejects_non_utf8_positional_pattern() {
+	mut low := default_low_args()
+	low.positional = [[u8(0xff)].bytestr(), 'haystack.txt']
+	HiArgs.from_low_args(mut low) or {
+		assert err.msg().contains('pattern given is not valid UTF-8')
+		return
+	}
+	panic('expected invalid UTF-8 pattern error')
+}
+
 fn test_hiargs_deduplicates_explicit_patterns() {
 	mut low := default_low_args()
 	low.patterns = [
@@ -197,4 +207,29 @@ fn test_hiargs_pcre2_reports_unavailable_without_feature() {
 		return
 	}
 	panic('expected PCRE2 unavailable error')
+}
+
+fn test_hiargs_only_suggests_pcre2_when_available() {
+	message := 'regex parse error: backreferences are not supported'
+	$if pcre2 ? {
+		assert suggest_pcre2(&message) != none
+	} $else {
+		assert suggest_pcre2(&message) == none
+		assert suggest_other_engine(message) == message
+	}
+}
+
+fn test_hiargs_hostname_runs_binary_without_shell_parsing() {
+	$if windows {
+		return
+	}
+	path := os.join_path(os.temp_dir(), 'ripgrep v hostname ${os.getpid()}')
+	os.write_file(path, "#!/bin/sh\nprintf '\\302\\240direct-host\\342\\200\\211'\n") or {
+		panic(err)
+	}
+	os.chmod(path, 0o755) or { panic(err) }
+	defer {
+		os.rm(path) or {}
+	}
+	assert hostname(?string(path)) or { '' } == 'direct-host'
 }

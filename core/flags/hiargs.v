@@ -2,7 +2,9 @@ module flags
 
 import cli
 import core
+import encoding.utf8
 import ignore
+import io
 import matcher
 import os
 import pcre2
@@ -128,15 +130,15 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 
 	mut state := State.new()!
 	patterns := Patterns.from_low_args(mut state, mut low)!
-	paths := Paths.from_low_args(mut state, patterns, mut low)!
+	paths := Paths.from_low_args(mut state, &patterns, mut low)!
 
-	binary := BinaryDetection.from_low_args(state, low)
+	binary := BinaryDetection.from_low_args(&state, &low)
 	colors := take_color_specs(mut state, mut low)!
 	hyperlink_config := take_hyperlink_config(mut state, mut low)!
-	stats_value := stats(low)
-	types_value := types(low)!
-	globs_value := globs(state, low)!
-	pre_globs_value := preprocessor_globs(state, low)!
+	stats_value := stats(&low)
+	types_value := types(&low)!
+	globs_value := globs(&state, &low)!
+	pre_globs_value := preprocessor_globs(&state, &low)!
 
 	color := if low.color == .auto && !state.is_terminal_stdout { ColorChoice.never } else { low.color }
 	column := low.column or { low.vimgrep }
@@ -154,6 +156,7 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 	} else {
 		default_thread_count()
 	}
+	core.debug_message('rg::flags::hiargs', 'using ${threads} thread(s)')
 	with_filename := low.with_filename or { low.vimgrep || !paths.is_one_file }
 
 	mut file_separator := ?[]u8(none)
@@ -195,7 +198,7 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 		}
 	}
 
-	mmap_choice_value := compute_mmap_choice(low.mmap, paths)
+	mmap_choice_value := compute_mmap_choice(low.mmap, &paths)
 
 	return HiArgs{
 		mode:                         low.mode
@@ -274,7 +277,7 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 ///
 /// The builder can be used to turn a directory entry (from the `ignore`
 /// crate) into something that can be searched.
-pub fn (args HiArgs) haystack_builder() core.HaystackBuilder {
+pub fn (args &HiArgs) haystack_builder() core.HaystackBuilder {
 	mut builder := core.HaystackBuilder.new()
 	builder.strip_dot_prefix(args.paths.has_implicit_path)
 	return builder
@@ -285,7 +288,7 @@ pub fn (args HiArgs) haystack_builder() core.HaystackBuilder {
 ///
 /// If there was a problem building the matcher (e.g., a syntax error),
 /// then this returns an error.
-pub fn (args HiArgs) matcher() !core.PatternMatcher {
+pub fn (args &HiArgs) matcher() !core.PatternMatcher {
 	match args.engine {
 		.default {
 			matcher_ := args.matcher_rust() or { return error(suggest_other_engine(err.msg())) }
@@ -300,6 +303,7 @@ pub fn (args HiArgs) matcher() !core.PatternMatcher {
 			} else {
 				err.msg()
 			}
+			core.debug_message('rg::flags::hiargs', 'error building Rust regex in hybrid mode:\n${rust_err}')
 			pcre_err := if matcher_ := args.matcher_pcre2() {
 				return matcher_
 			} else {
@@ -320,7 +324,7 @@ pub fn (args HiArgs) matcher() !core.PatternMatcher {
 ///
 /// If the `pcre2` feature is not enabled then this always returns an
 /// error.
-fn (args HiArgs) matcher_pcre2() !core.PatternMatcher {
+fn (args &HiArgs) matcher_pcre2() !core.PatternMatcher {
 	$if pcre2 ? {
 		mut builder := pcre2.RegexMatcherBuilder.new()
 		builder.multi_line(true)
@@ -364,7 +368,7 @@ fn (args HiArgs) matcher_pcre2() !core.PatternMatcher {
 ///
 /// If there was a problem building the matcher (such as a regex syntax
 /// error), then an error is returned.
-fn (args HiArgs) matcher_rust() !core.PatternMatcher {
+fn (args &HiArgs) matcher_rust() !core.PatternMatcher {
 	mut builder := regex.RegexMatcherBuilder.new()
 	builder.multi_line(true)
 	builder.unicode(!args.no_unicode)
@@ -424,14 +428,14 @@ fn (args HiArgs) matcher_rust() !core.PatternMatcher {
 /// then independently write to the buffers. Once a unit of work is
 /// complete, a buffer can be given to the buffer writer to write to
 /// stdout.
-pub fn (args HiArgs) buffer_writer() cli.BufferWriter {
+pub fn (args &HiArgs) buffer_writer() cli.BufferWriter {
 	mut wtr := cli.BufferWriter.stdout(args.color.to_cli_color_choice())
 	wtr.separator(optional_bytes_clone(args.file_separator))
 	return wtr
 }
 
 /// Returns the configured separator printed between search result blocks.
-pub fn (args HiArgs) file_separator_bytes() ?[]u8 {
+pub fn (args &HiArgs) file_separator_bytes() ?[]u8 {
 	return optional_bytes_clone(args.file_separator)
 }
 
@@ -446,7 +450,7 @@ pub fn (args HiArgs) file_separator_bytes() ?[]u8 {
 /// this warning is only emitted when ripgrep was called without any
 /// explicit file paths since otherwise the warning would likely be too
 /// aggressive.
-pub fn (args HiArgs) has_implicit_path() bool {
+pub fn (args &HiArgs) has_implicit_path() bool {
 	return args.paths.has_implicit_path
 }
 
@@ -455,7 +459,7 @@ pub fn (args HiArgs) has_implicit_path() bool {
 ///
 /// When this returns false, it is impossible for ripgrep to ever report
 /// a match.
-pub fn (args HiArgs) matches_possible() bool {
+pub fn (args &HiArgs) matches_possible() bool {
 	if args.patterns.patterns.len == 0 && !args.invert_match {
 		return false
 	}
@@ -472,7 +476,7 @@ pub fn (args HiArgs) matches_possible() bool {
 /// This is generally useful for determining what action ripgrep should
 /// take. The main mode is of course to "search," but there are other
 /// non-search modes such as `--type-list` and `--files`.
-pub fn (args HiArgs) mode() Mode {
+pub fn (args &HiArgs) mode() Mode {
 	return args.mode
 }
 
@@ -481,7 +485,7 @@ pub fn (args HiArgs) mode() Mode {
 /// This is useful for the `--files` mode in ripgrep, where the printer
 /// just needs to emit paths and not need to worry about the functionality
 /// of searching.
-pub fn (args HiArgs) path_printer_builder() printer.PathPrinterBuilder {
+pub fn (args &HiArgs) path_printer_builder() printer.PathPrinterBuilder {
 	mut builder := printer.PathPrinterBuilder.new()
 	builder.color_specs(args.colors.clone())
 	builder.hyperlink(args.hyperlink_config.clone())
@@ -494,7 +498,7 @@ pub fn (args HiArgs) path_printer_builder() printer.PathPrinterBuilder {
 ///
 /// This chooses which printer to build (JSON, summary or standard) based
 /// on the search mode given.
-pub fn (args HiArgs) printer[W](search_mode SearchMode, wtr W) core.Printer[W] {
+pub fn (args &HiArgs) printer[W](search_mode SearchMode, wtr W) core.Printer[W] {
 	summary_kind := if args.quiet {
 		match search_mode {
 			.files_with_matches, .count, .count_matches, .json, .standard {
@@ -522,12 +526,12 @@ pub fn (args HiArgs) printer[W](search_mode SearchMode, wtr W) core.Printer[W] {
 }
 
 /// Builds a JSON printer.
-fn (args HiArgs) printer_json[W](wtr W) printer.JSON[W] {
+fn (args &HiArgs) printer_json[W](wtr W) printer.JSON[W] {
 	mut builder := args.printer_json_builder()
 	return builder.build(wtr)
 }
 
-fn (args HiArgs) printer_json_builder() printer.JSONBuilder {
+fn (args &HiArgs) printer_json_builder() printer.JSONBuilder {
 	mut builder := printer.JSONBuilder.new()
 	builder.pretty(false)
 	builder.always_begin_end(false)
@@ -537,12 +541,12 @@ fn (args HiArgs) printer_json_builder() printer.JSONBuilder {
 
 /// Builds a "standard" grep printer where matches are printed as plain
 /// text lines.
-fn (args HiArgs) printer_standard[W](wtr W) printer.Standard[W] {
+fn (args &HiArgs) printer_standard[W](wtr W) printer.Standard[W] {
 	mut builder := args.printer_standard_builder()
 	return builder.build(wtr)
 }
 
-fn (args HiArgs) printer_standard_builder() printer.StandardBuilder {
+fn (args &HiArgs) printer_standard_builder() printer.StandardBuilder {
 	mut builder := printer.StandardBuilder.new()
 	builder.byte_offset(args.byte_offset)
 	builder.color_specs(args.colors.clone())
@@ -576,12 +580,12 @@ fn (args HiArgs) printer_standard_builder() printer.StandardBuilder {
 
 /// Builds a "summary" printer where search results are aggregated on a
 /// file-by-file basis.
-fn (args HiArgs) printer_summary[W](wtr W, kind printer.SummaryKind) printer.Summary[W] {
+fn (args &HiArgs) printer_summary[W](wtr W, kind printer.SummaryKind) printer.Summary[W] {
 	mut builder := args.printer_summary_builder(kind)
 	return builder.build(wtr)
 }
 
-fn (args HiArgs) printer_summary_builder(kind printer.SummaryKind) printer.SummaryBuilder {
+fn (args &HiArgs) printer_summary_builder(kind printer.SummaryKind) printer.SummaryBuilder {
 	mut builder := printer.SummaryBuilder.new()
 	builder.color_specs(args.colors.clone())
 	builder.exclude_zero(!args.include_zero)
@@ -600,7 +604,7 @@ fn (args HiArgs) printer_summary_builder(kind printer.SummaryKind) printer.Summa
 /// The current ownership frontend does not reliably monomorphize the nested
 /// generic `HiArgs.printer` call from `rg/main.v`, so the executable uses this
 /// concrete wrapper while preserving the translated generic API above.
-pub fn (args HiArgs) printer_standard_stream(search_mode SearchMode, wtr cli.StandardStream) core.Printer[cli.StandardStream] {
+pub fn (args &HiArgs) printer_standard_stream(search_mode SearchMode, wtr cli.StandardStream) core.Printer[cli.StandardStream] {
 	summary_kind := if args.quiet {
 		match search_mode {
 			.files_with_matches, .count, .count_matches, .json, .standard {
@@ -633,7 +637,7 @@ pub fn (args HiArgs) printer_standard_stream(search_mode SearchMode, wtr cli.Sta
 /// V-specific concrete buffer printer entry point for the CLI.
 ///
 /// See `printer_standard_stream`.
-pub fn (args HiArgs) printer_buffer(search_mode SearchMode, wtr cli.Buffer) core.Printer[cli.Buffer] {
+pub fn (args &HiArgs) printer_buffer(search_mode SearchMode, wtr cli.Buffer) core.Printer[cli.Buffer] {
 	summary_kind := if args.quiet {
 		match search_mode {
 			.files_with_matches, .count, .count_matches, .json, .standard {
@@ -663,7 +667,7 @@ pub fn (args HiArgs) printer_buffer(search_mode SearchMode, wtr cli.Buffer) core
 	return core.Printer.summary(builder.build(wtr))
 }
 
-fn (args HiArgs) replacement_bytes() ?[]u8 {
+fn (args &HiArgs) replacement_bytes() ?[]u8 {
 	if replacement := args.replace {
 		return replacement.bytes()
 	}
@@ -690,7 +694,7 @@ fn optional_string_clone(value ?string) ?string {
 /// anything to stdout. There are some exceptions. For example, when the
 /// user has provided `--stats`, then ripgrep will print statistics to
 /// stdout.
-pub fn (args HiArgs) quiet() bool {
+pub fn (args &HiArgs) quiet() bool {
 	return args.quiet
 }
 
@@ -702,7 +706,7 @@ pub fn (args HiArgs) quiet() bool {
 /// that finds all matches and a search that only finds one of them. (An
 /// exception here is if `--stats` is given, then `quit_after_match` will
 /// always return false since the user expects ripgrep to find everything.)
-pub fn (args HiArgs) quit_after_match() bool {
+pub fn (args &HiArgs) quit_after_match() bool {
 	return args.quit_after_match
 }
 
@@ -710,13 +714,13 @@ pub fn (args HiArgs) quit_after_match() bool {
 ///
 /// Search results are found using the given matcher and written to the
 /// given printer.
-pub fn (args HiArgs) search_worker[W](matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[W]) !core.SearchWorker[W] {
+pub fn (args &HiArgs) search_worker[W](matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[W]) !core.SearchWorker[W] {
 	mut builder := core.SearchWorkerBuilder.new()
 	args.configure_search_worker_builder(mut builder)!
 	return builder.build(matcher_, searcher_, printer_)
 }
 
-fn (args HiArgs) configure_search_worker_builder(mut builder core.SearchWorkerBuilder) ! {
+fn (args &HiArgs) configure_search_worker_builder(mut builder core.SearchWorkerBuilder) ! {
 	builder.preprocessor(optional_string_clone(args.pre))!
 	builder.preprocessor_globs(args.pre_globs.clone())
 	builder.search_zip(args.search_zip)
@@ -727,7 +731,7 @@ fn (args HiArgs) configure_search_worker_builder(mut builder core.SearchWorkerBu
 /// V-specific concrete stdout search worker entry point for the CLI.
 ///
 /// See `printer_standard_stream`.
-pub fn (args HiArgs) search_worker_standard_stream(matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[cli.StandardStream]) !core.SearchWorker[cli.StandardStream] {
+pub fn (args &HiArgs) search_worker_standard_stream(matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[cli.StandardStream]) !core.SearchWorker[cli.StandardStream] {
 	mut builder := core.SearchWorkerBuilder.new()
 	args.configure_search_worker_builder(mut builder)!
 	return builder.build_standard_stream(matcher_, searcher_, printer_)
@@ -736,14 +740,14 @@ pub fn (args HiArgs) search_worker_standard_stream(matcher_ core.PatternMatcher,
 /// V-specific concrete buffer search worker entry point for the CLI.
 ///
 /// See `printer_standard_stream`.
-pub fn (args HiArgs) search_worker_buffer(matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[cli.Buffer]) !core.SearchWorker[cli.Buffer] {
+pub fn (args &HiArgs) search_worker_buffer(matcher_ core.PatternMatcher, searcher_ searcher.Searcher, printer_ core.Printer[cli.Buffer]) !core.SearchWorker[cli.Buffer] {
 	mut builder := core.SearchWorkerBuilder.new()
 	args.configure_search_worker_builder(mut builder)!
 	return builder.build_buffer(matcher_, searcher_, printer_)
 }
 
 /// Build a searcher from the command line parameters.
-pub fn (args HiArgs) searcher() !searcher.Searcher {
+pub fn (args &HiArgs) searcher() !searcher.Searcher {
 	line_term := if args.crlf {
 		matcher.LineTerminator.crlf()
 	} else if args.null_data {
@@ -794,13 +798,13 @@ pub fn (args HiArgs) searcher() !searcher.Searcher {
 /// any additional sorting. This is done because `walk_builder()` will sort
 /// the iterator it yields during directory traversal, so no additional
 /// sorting is needed.
-pub fn (args HiArgs) sort(haystacks []core.Haystack) []core.Haystack {
+pub fn (args &HiArgs) sort(haystacks []core.Haystack) []core.Haystack {
 	sort := args.sort or { return haystacks }
 	if sort.kind == .path && !sort.reverse {
 		return haystacks
 	}
-	mut sorted := haystacks.clone()
 	if sort.kind == .path {
+		mut sorted := haystacks
 		sorted.sort_with_compare(fn (a &core.Haystack, b &core.Haystack) int {
 			ap := *a.path()
 			bp := *b.path()
@@ -814,20 +818,29 @@ pub fn (args HiArgs) sort(haystacks []core.Haystack) []core.Haystack {
 		})
 		return sorted
 	}
-	sorted.sort_with_compare(fn [sort] (a &core.Haystack, b &core.Haystack) int {
-		atime := sort_key_for_haystack(a, sort.kind)
-		btime := sort_key_for_haystack(b, sort.kind)
-		ordering := compare_optional_time(atime, btime)
+	mut with_timestamps := []TimestampedHaystack{cap: haystacks.len}
+	for haystack in haystacks {
+		with_timestamps << TimestampedHaystack{
+			timestamp: sort_key_for_haystack(&haystack, sort.kind)
+			haystack:  haystack.clone()
+		}
+	}
+	with_timestamps.sort_with_compare(fn [sort] (a &TimestampedHaystack, b &TimestampedHaystack) int {
+		ordering := compare_optional_time(a.timestamp, b.timestamp)
 		if sort.reverse {
 			return -ordering
 		}
 		return ordering
 	})
+	mut sorted := []core.Haystack{cap: with_timestamps.len}
+	for item in with_timestamps {
+		sorted << item.haystack.clone()
+	}
 	return sorted
 }
 
 /// Returns true if a sort mode was configured.
-pub fn (args HiArgs) has_sort() bool {
+pub fn (args &HiArgs) has_sort() bool {
 	if _ := args.sort {
 		return true
 	}
@@ -836,7 +849,7 @@ pub fn (args HiArgs) has_sort() bool {
 
 /// Returns true when the requested sort cannot be satisfied by traversal
 /// order and therefore requires collecting all haystacks before searching.
-pub fn (args HiArgs) sort_requires_buffering() bool {
+pub fn (args &HiArgs) sort_requires_buffering() bool {
 	sort := args.sort or { return false }
 	return sort.kind != .path || sort.reverse
 }
@@ -846,8 +859,11 @@ pub fn (args HiArgs) sort_requires_buffering() bool {
 ///
 /// When this returns `None`, then callers may assume that the user did
 /// not request statistics.
-pub fn (args HiArgs) stats() ?printer.Stats {
-	return args.stats
+pub fn (args &HiArgs) stats() ?printer.Stats {
+	if stats_value := args.stats {
+		return stats_value.clone()
+	}
+	return none
 }
 
 /// Returns a color-enabled writer for stdout.
@@ -855,7 +871,7 @@ pub fn (args HiArgs) stats() ?printer.Stats {
 /// The writer returned is also configured to do either line or block
 /// buffering, based on either explicit configuration from the user via CLI
 /// flags, or automatically based on whether stdout is connected to a tty.
-pub fn (args HiArgs) stdout() cli.StandardStream {
+pub fn (args &HiArgs) stdout() cli.StandardStream {
 	color := args.color.to_cli_color_choice()
 	match args.buffer {
 		.auto {
@@ -876,7 +892,7 @@ pub fn (args HiArgs) stdout() cli.StandardStream {
 /// the available number of cores) and whether ripgrep's mode supports
 /// parallelism. It is intended that this number be used to directly
 /// determine how many threads to spawn.
-pub fn (args HiArgs) threads() usize {
+pub fn (args &HiArgs) threads() usize {
 	return args.threads
 }
 
@@ -897,7 +913,7 @@ pub fn (args &^a HiArgs) types[^a]() &^a ignore.Types {
 /// If `HiArgs::threads` is equal to `1`, then callers should generally
 /// choose to explicitly use single threaded traversal since it won't have
 /// the unnecessary overhead of synchronization.
-pub fn (args HiArgs) walk_builder() !ignore.WalkBuilder {
+pub fn (args &HiArgs) walk_builder() !ignore.WalkBuilder {
 	if args.paths.paths.len == 0 {
 		return error('expected at least one path')
 	}
@@ -986,6 +1002,7 @@ mut:
 /// argument parsing.
 fn State.new() !State {
 	cwd := current_dir()!
+	core.debug_message('rg::flags::hiargs', 'read CWD from environment: ${cwd}')
 	return State{
 		is_terminal_stdout: cli.is_tty_stdout()
 		stdin_consumed:    false
@@ -1029,6 +1046,9 @@ fn Patterns.from_low_args(mut state State, mut low LowArgs) !Patterns {
 		}
 		pat := low.positional[0].clone()
 		low.positional.delete(0)
+		if !utf8.validate_str(pat) {
+			return error('pattern given is not valid UTF-8')
+		}
 		return Patterns{
 			patterns: [pat]
 		}
@@ -1096,7 +1116,7 @@ struct Paths {
 }
 
 /// Drain the search paths out of the given low arguments.
-fn Paths.from_low_args(mut state State, _ Patterns, mut low LowArgs) !Paths {
+fn Paths.from_low_args(mut state State, _patterns &Patterns, mut low LowArgs) !Paths {
 	// We require a `&Patterns` even though we don't use it to ensure that
 	// patterns have already been read from LowArgs. This let's us safely
 	// assume that all remaining positional arguments are intended to be
@@ -1110,6 +1130,7 @@ fn Paths.from_low_args(mut state State, _ Patterns, mut low LowArgs) !Paths {
 		paths << path.clone()
 	}
 	low.positional = []string{}
+	core.debug_message('rg::flags::hiargs', 'number of paths given to search: ${paths.len}')
 	if paths.len > 0 {
 		is_one_file := paths.len == 1
 			// Note that we specifically use `!paths[0].is_dir()` here
@@ -1120,6 +1141,7 @@ fn Paths.from_low_args(mut state State, _ Patterns, mut low LowArgs) !Paths {
 			//
 			// See: https://github.com/BurntSushi/ripgrep/issues/2736
 			&& (paths[0] == '-' || !os.is_dir(paths[0]))
+		core.debug_message('rg::flags::hiargs', 'is_one_file? ${is_one_file}')
 		return Paths{
 			paths:             paths
 			has_implicit_path: false
@@ -1135,7 +1157,13 @@ fn Paths.from_low_args(mut state State, _ Patterns, mut low LowArgs) !Paths {
 	// they meant to search the CWD.
 	is_readable_stdin := cli.is_readable_stdin()
 	use_cwd := !is_readable_stdin || state.stdin_consumed || low.mode.kind != .search
+	core.debug_message('rg::flags::hiargs', 'using heuristics to determine whether to read from stdin or search ./ (is_readable_stdin=${is_readable_stdin}, stdin_consumed=${state.stdin_consumed}, mode=${low.mode})')
 	path, is_one_file := if use_cwd { './', false } else { '-', true }
+	core.debug_message('rg::flags::hiargs', if use_cwd {
+		'heuristic chose to search ./'
+	} else {
+		'heuristic chose to search stdin'
+	})
 	return Paths{
 		paths:             [path]
 		has_implicit_path: true
@@ -1144,7 +1172,7 @@ fn Paths.from_low_args(mut state State, _ Patterns, mut low LowArgs) !Paths {
 }
 
 /// Returns true if ripgrep will only search stdin and nothing else.
-fn (paths Paths) is_only_stdin() bool {
+fn (paths &Paths) is_only_stdin() bool {
 	return paths.paths.len == 1 && paths.paths[0] == '-'
 }
 
@@ -1163,7 +1191,7 @@ struct BinaryDetection {
 }
 
 /// Determines the correct binary detection mode from low-level arguments.
-fn BinaryDetection.from_low_args(_ State, low LowArgs) BinaryDetection {
+fn BinaryDetection.from_low_args(_state &State, low &LowArgs) BinaryDetection {
 	disabled := low.binary == .as_text || low.null_data
 	convert := low.binary == .search_and_suppress
 	explicit := if disabled {
@@ -1186,13 +1214,13 @@ fn BinaryDetection.from_low_args(_ State, low LowArgs) BinaryDetection {
 
 /// Returns true when both implicit and explicit binary detection is
 /// disabled.
-fn (binary BinaryDetection) is_none() bool {
+fn (binary &BinaryDetection) is_none() bool {
 	return binary.explicit.quit_byte() == none && binary.explicit.convert_byte() == none
 		&& binary.implicit.quit_byte() == none && binary.implicit.convert_byte() == none
 }
 
 /// Builds the file type matcher from low level arguments.
-fn types(low LowArgs) !ignore.Types {
+fn types(low &LowArgs) !ignore.Types {
 	mut builder := ignore.TypesBuilder.new()
 	builder.add_defaults()
 	for tychange in low.type_changes {
@@ -1223,7 +1251,7 @@ fn types(low LowArgs) !ignore.Types {
 
 /// Builds the glob "override" matcher from the CLI `-g/--glob` and `--iglob`
 /// flags.
-fn globs(state State, low LowArgs) !ignore.Override {
+fn globs(state &State, low &LowArgs) !ignore.Override {
 	if low.globs.len == 0 && low.iglobs.len == 0 {
 		return ignore.Override.empty()
 	}
@@ -1260,7 +1288,7 @@ fn globs(state State, low LowArgs) !ignore.Override {
 }
 
 /// Builds a glob matcher for all of the preprocessor globs (via `--pre-glob`).
-fn preprocessor_globs(state State, low LowArgs) !ignore.Override {
+fn preprocessor_globs(state &State, low &LowArgs) !ignore.Override {
 	if low.pre_glob.len == 0 {
 		return ignore.Override.empty()
 	}
@@ -1280,7 +1308,7 @@ fn preprocessor_globs(state State, low LowArgs) !ignore.Override {
 
 /// Determines whether stats should be tracked for this search. If so, a stats
 /// object is returned.
-fn stats(low LowArgs) ?printer.Stats {
+fn stats(low &LowArgs) ?printer.Stats {
 	if low.mode.kind != .search {
 		return none
 	}
@@ -1308,12 +1336,15 @@ fn take_hyperlink_config(mut state State, mut low LowArgs) !printer.HyperlinkCon
 	_ = state
 	mut env := printer.HyperlinkEnvironment.new()
 	if hostname_value := hostname(low.hostname_bin) {
+		core.debug_message('rg::flags::hiargs', 'found hostname for hyperlink configuration: ${hostname_value}')
 		env.host(hostname_value)
 	}
 	if wsl_prefix_value := wsl_prefix() {
+		core.debug_message('rg::flags::hiargs', 'found wsl_prefix for hyperlink configuration: ${wsl_prefix_value}')
 		env.wsl_prefix(wsl_prefix_value)
 	}
 	fmt := printer.parse_hyperlink_format(low.hyperlink_format.format)!
+	core.debug_message('rg::flags::hiargs', 'hyperlink format: ${fmt}')
 	low.hyperlink_format = HyperlinkFormat{}
 	return printer.HyperlinkConfig.new(env, fmt)
 }
@@ -1348,16 +1379,62 @@ fn current_dir() !string {
 /// The purpose of `bin` is to make it possible for end users to override how
 /// ripgrep determines the hostname.
 fn hostname(bin ?string) ?string {
-	if bin_value := bin {
-		result := os.execute(bin_value)
-		if result.exit_code == 0 {
-			hostname_value := result.output.trim_space()
-			if hostname_value != '' {
-				return hostname_value
-			}
-		}
+	bin_value := bin or { return platform_hostname() }
+	resolved := cli.resolve_binary(bin_value) or {
+		core.debug_message('rg::flags::hiargs', "failed to run command '${bin_value}' to get hostname (falling back to platform hostname): ${err.msg()}")
+		return platform_hostname()
 	}
-	return platform_hostname()
+	mut command := cli.Command.new(resolved)
+	$if windows {
+		command.stdin_path('NUL')
+	} $else {
+		command.stdin_path('/dev/null')
+	}
+	mut rdr := cli.CommandReader.new(command) or {
+		core.debug_message('rg::flags::hiargs', "failed to spawn command '${resolved}' to get hostname (falling back to platform hostname): ${err.msg()}")
+		return platform_hostname()
+	}
+	defer {
+		rdr.close() or {}
+	}
+	mut out := []u8{}
+	mut buf := []u8{len: 8192}
+	for {
+		nread := rdr.read(mut buf) or {
+			if err is io.Eof {
+				break
+			}
+			core.debug_message('rg::flags::hiargs', "failed to read output from command '${resolved}' to get hostname (falling back to platform hostname): ${err.msg()}")
+			return platform_hostname()
+		}
+		out << buf[..nread]
+	}
+	text := out.bytestr()
+	if !utf8.validate_str(text) {
+		core.debug_message('rg::flags::hiargs', "output from command '${resolved}' is not valid UTF-8 (falling back to platform hostname)")
+		return platform_hostname()
+	}
+	hostname_value := trim_unicode_whitespace(text)
+	if hostname_value == '' {
+		core.debug_message('rg::flags::hiargs', "output from command '${resolved}' is empty after trimming leading and trailing whitespace (falling back to platform hostname)")
+		return platform_hostname()
+	}
+	return hostname_value.to_owned()
+}
+
+// V's `string.trim_space` only recognizes ASCII whitespace, while Rust's
+// `str::trim` recognizes Unicode whitespace.
+fn trim_unicode_whitespace(text string) string {
+	runes := text.runes()
+	mut start := 0
+	for start < runes.len && utf8.is_space(runes[start]) {
+		start++
+	}
+	mut end := runes.len
+	for end > start && utf8.is_space(runes[end - 1]) {
+		end--
+	}
+	return runes[start..end].string()
 }
 
 /// Attempts to get the hostname by using platform specific routines.
@@ -1365,8 +1442,12 @@ fn hostname(bin ?string) ?string {
 /// For example, this will do `gethostname` on Unix and `GetComputerNameExW` on
 /// Windows.
 fn platform_hostname() ?string {
-	hostname_value := cli.hostname() or { return none }
-	if hostname_value == '' {
+	hostname_value := cli.hostname() or {
+		core.debug_message('rg::flags::hiargs', 'could not get hostname: ${err.msg()}')
+		return none
+	}
+	if !utf8.validate_str(hostname_value) {
+		core.debug_message('rg::flags::hiargs', 'got hostname ${hostname_value}, but it is not valid UTF-8')
 		return none
 	}
 	return hostname_value
@@ -1386,7 +1467,10 @@ fn wsl_prefix() ?string {
 		return none
 	}
 	distro := os.getenv('WSL_DISTRO_NAME')
-	if distro == '' {
+	if distro == '' || !utf8.validate_str(distro) {
+		if distro != '' {
+			core.debug_message('rg::flags::hiargs', 'found WSL_DISTRO_NAME=${distro}, but value is not UTF-8')
+		}
 		return none
 	}
 	return 'wsl' + '$/' + distro
@@ -1397,7 +1481,7 @@ fn add_pattern(mut seen map[string]bool, mut patterns []string, pat string) {
 		return
 	}
 	seen[pat] = true
-	patterns << pat.clone()
+	patterns << pat
 }
 
 fn default_thread_count() usize {
@@ -1411,7 +1495,16 @@ fn default_thread_count() usize {
 	return usize(cpus)
 }
 
-fn compute_mmap_choice(mode MmapMode, paths Paths) searcher.MmapChoice {
+fn compute_mmap_choice(mode MmapMode, paths &Paths) searcher.MmapChoice {
+	// SAFETY: Memory maps are difficult to impossible to encapsulate
+	// safely in a portable way that doesn't simultaneously negate some
+	// of the benfits of using memory maps. For ripgrep's use, we never
+	// mutate a memory map and generally never store the contents of
+	// memory map in a data structure that depends on immutability.
+	// Generally speaking, the worst thing that can happen is a SIGBUS
+	// (if the underlying file is truncated while reading it), which
+	// will cause ripgrep to abort. This reasoning should be treated as
+	// suspect.
 	maybe := searcher.MmapChoice.auto()
 	never := searcher.MmapChoice.never()
 	match mode {
@@ -1449,6 +1542,11 @@ fn name_cmp_asc(a &string, b &string) int {
 		return 1
 	}
 	return 0
+}
+
+struct TimestampedHaystack {
+	haystack  core.Haystack
+	timestamp ?i64
 }
 
 fn sort_key_for_haystack(hay &core.Haystack, kind SortModeKind) ?i64 {
@@ -1497,7 +1595,7 @@ fn compare_optional_time(left ?i64, right ?i64) int {
 /// if it's believed to correspond to a syntax error that another engine could
 /// handle, then add a message to suggest the use of the engine flag.
 fn suggest_other_engine(msg string) string {
-	if pcre_msg := suggest_pcre2(msg) {
+	if pcre_msg := suggest_pcre2(&msg) {
 		return pcre_msg
 	}
 	return msg
@@ -1508,11 +1606,14 @@ fn suggest_other_engine(msg string) string {
 /// Inspect an error resulting from building a Rust regex matcher, and if it's
 /// believed to correspond to a syntax error that PCRE2 could handle, then
 /// add a message to suggest the use of -P/--pcre2.
-fn suggest_pcre2(msg string) ?string {
-	if !msg.contains('backreferences') && !msg.contains('look-around') {
+fn suggest_pcre2(msg &string) ?string {
+	$if !pcre2 ? {
 		return none
 	}
-	return '${msg}\n\nConsider enabling PCRE2 with the --pcre2 flag, which can handle backreferences\nand look-around.'
+	if !(*msg).contains('backreferences') && !(*msg).contains('look-around') {
+		return none
+	}
+	return '${*msg}\n\nConsider enabling PCRE2 with the --pcre2 flag, which can handle backreferences\nand look-around.'
 }
 
 /// Possibly suggest multiline mode based on the error message given.

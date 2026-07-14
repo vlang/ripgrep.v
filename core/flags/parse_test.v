@@ -106,13 +106,13 @@ fn test_parse_from_raw_reads_file_patterns() {
 	mut state := State.new()!
 	step_patterns := Patterns.from_low_args(mut state, mut step_low)!
 	assert step_patterns.patterns == ['Sherlock', 'Holmes']
-	step_paths := Paths.from_low_args(mut state, step_patterns, mut step_low)!
+	step_paths := Paths.from_low_args(mut state, &step_patterns, mut step_low)!
 	assert step_paths.paths == ['sherlock']
 	_ = take_color_specs(mut state, mut step_low)!
 	_ = take_hyperlink_config(mut state, mut step_low)!
-	_ = types(step_low)!
-	_ = globs(state, step_low)!
-	_ = preprocessor_globs(state, step_low)!
+	_ = types(&step_low)!
+	_ = globs(&state, &step_low)!
+	_ = preprocessor_globs(&state, &step_low)!
 
 	mut high_low := low
 	hi := HiArgs.from_low_args(mut high_low)!
