@@ -1,7 +1,14 @@
 module regex
 
+import matcher
+
 fn e(pattern string) Seq {
 	hir := Hir.from_pattern(pattern, Config.default())
+	return Extractor.new().extract_untagged(&hir)
+}
+
+fn e_with_config(pattern string, config Config) Seq {
+	hir := Hir.from_pattern(pattern, config)
 	return Extractor.new().extract_untagged(&hir)
 }
 
@@ -89,6 +96,52 @@ fn test_literal() {
 
 	letters := 'ͱͳͷΐάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋ'
 	assert exact([letters]) == e(letters)
+}
+
+fn test_literal_initial_unicode_mode() {
+	mut config := Config.default()
+	config.unicode = false
+	assert exact(['ſ']) == e_with_config('(?i)ſ', config)
+	assert exact(['S', 's', 'ſ']) == e_with_config('(?u:(?i)ſ)', config)
+	assert exact(['ſ']) == e('(?i-u)ſ')
+}
+
+fn test_inner_literals_respect_backend_acceleration() {
+	mut config := Config.default()
+	config.line_terminator = matcher.LineTerminator.default()
+
+	accelerated := ConfiguredHIR.new(config.clone(), ['foo[a-z]+'])!
+	accelerated_re := accelerated.to_regex()!
+	assert accelerated_re.is_accelerated()
+	assert !InnerLiterals.new(&accelerated, &accelerated_re).seq.is_finite()
+
+	unicode_word := ConfiguredHIR.new(config.clone(), [r'foo\b[a-z]+'])!
+	unicode_word_re := unicode_word.to_regex()!
+	assert unicode_word_re.is_accelerated()
+	assert unicode_word_re.contains_word_unicode()
+	assert InnerLiterals.new(&unicode_word, &unicode_word_re).seq == seq([lit_i('foo')])
+
+	ascii_word := ConfiguredHIR.new(config.clone(), [r'foo(?-u:\b)[a-z]+'])!
+	ascii_word_re := ascii_word.to_regex()!
+	assert ascii_word_re.is_accelerated()
+	assert !ascii_word_re.contains_word_unicode()
+	assert !InnerLiterals.new(&ascii_word, &ascii_word_re).seq.is_finite()
+
+	case_folded := ConfiguredHIR.new(config, [r'(?i:e.x|ex)'])!
+	case_folded_re := case_folded.to_regex()!
+	assert !case_folded_re.is_accelerated()
+	assert InnerLiterals.new(&case_folded, &case_folded_re).seq == seq([lit_i('X'),
+		lit_i('x')])
+}
+
+fn test_literal_seq_dedup_preserves_preference_order() {
+	mut non_adjacent := exact(['foo', 'bar', 'foo'])
+	non_adjacent.dedup()
+	assert non_adjacent == exact(['foo', 'bar', 'foo'])
+
+	mut adjacent := seq([lit_e('foo'), lit_i('foo')])
+	adjacent.dedup()
+	assert adjacent == seq([lit_i('foo')])
 }
 
 fn test_class() {

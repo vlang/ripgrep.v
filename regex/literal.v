@@ -1,6 +1,13 @@
 module regex
 
+import log
 import regex.meta
+
+// V-specific: V's standard logger has no trace level, so source trace
+// diagnostics use its debug level.
+fn literal_trace(message string) {
+	log.debug(message)
+}
 
 /// A type that encapsulates "inner" literal extractiong from a regex.
 ///
@@ -44,22 +51,31 @@ struct InnerLiterals implements IClone {
 /// because it will query some state about the compiled regex. That state
 /// may influence inner literal extraction.
 fn InnerLiterals.new(chir &ConfiguredHIR, re &meta.Regex) InnerLiterals {
-	_ = re
+	// If there's no line terminator, then the inner literal optimization
+	// at this level is not valid.
 	if _ := chir.config().line_terminator {
 	} else {
+		literal_trace('skipping inner literal extraction, no line terminator is set')
 		return InnerLiterals.none()
 	}
-	pattern := chir.hir().to_regex()
-	analysis := AstAnalysis.from_pattern(pattern) or { AstAnalysis.new() }
-	config := chir.config()
-	if config.case_insensitive || (config.case_smart && analysis.any_literal()
-		&& !analysis.any_uppercase()) {
-		return InnerLiterals.none()
+	// If we believe the regex is already accelerated, then just let
+	// the regex engine do its thing. We'll skip the inner literal
+	// optimization.
+	//
+	// ... but only if the regex doesn't have any Unicode word boundaries.
+	// If it does, there's enough of a chance of the regex engine falling
+	// back to a slower engine that it's worth trying our own inner literal
+	// optimization.
+	if re.is_accelerated() {
+		if !re.contains_word_unicode() {
+			literal_trace('skipping inner literal extraction, existing regex is believed to already be accelerated')
+			return InnerLiterals.none()
+		}
 	}
-	if pattern_has_inline_case_insensitive_flag(pattern) {
-		return InnerLiterals.none()
-	}
+	// In this case, we pretty much know that the regex engine will handle
+	// it as best as possible, even if it isn't reported as accelerated.
 	if chir.hir().is_alternation_literal() {
+		literal_trace('skipping inner literal extraction, found alternation of literals, deferring to regex engine')
 		return InnerLiterals.none()
 	}
 	seq := Extractor.new().extract_untagged(chir.hir())
@@ -82,26 +98,23 @@ fn InnerLiterals.none() InnerLiterals {
 /// generated these literal sets. The idea here is that the pattern
 /// returned by this method is much cheaper to search for. i.e., It is
 /// usually a single literal or an alternation of literals.
-fn (lits InnerLiterals) one_regex() !MaybeRegex {
+fn (lits &InnerLiterals) one_regex() !MaybeRegex {
 	literals := lits.seq.literals() or { return MaybeRegex.none() }
 	if literals.len == 0 {
 		return MaybeRegex.none()
 	}
 	mut alts := []string{cap: literals.len}
-	for lit in literals {
-		if lit.bytes.len == 0 {
-			continue
-		}
+	for lit in *literals {
 		alts << escape_regex(lit.bytes.bytestr())
-	}
-	if alts.len == 0 {
-		return MaybeRegex.none()
 	}
 	pattern := if alts.len == 1 {
 		alts[0]
 	} else {
 		'(?:${alts.join('|')})'
 	}
+	log.debug('extracted fast line regex: ${pattern}')
+	// V-specific: the local meta engine accepts byte-preserving V strings
+	// directly, which is the counterpart of Rust's `utf8_empty(false)` setup.
 	regex := meta.compile(pattern) or { return Error.regex(err.msg()) }
 	return MaybeRegex.some(regex)
 }
@@ -149,8 +162,11 @@ fn Extractor.new() Extractor {
 /// of literals.
 fn (ex Extractor) extract_untagged(hir &Hir) Seq {
 	mut seq := ex.extract(hir)
+	literal_trace('extracted inner literals: ${seq.seq}')
 	seq.seq.optimize_for_prefix_by_preference()
+	literal_trace('extracted inner literals after optimization: ${seq.seq}')
 	if !seq.is_good() {
+		literal_trace('throwing away inner literals because they might be slow')
 		seq.make_infinite()
 	}
 	return seq.seq
@@ -174,7 +190,7 @@ fn (ex Extractor) extract(hir &Hir) TSeq {
 			ex.extract_alternation(hir.children)
 		}
 		.raw {
-			ex.extract_pattern(hir.pattern)
+			ex.extract_pattern(hir.pattern, hir.unicode)
 		}
 	}
 }
@@ -188,7 +204,14 @@ fn (ex Extractor) extract_concat(hirs []Hir) TSeq {
 	mut seq := TSeq.singleton(Literal.exact([]u8{}))
 	mut prev := ?TSeq(none)
 	for hir in hirs {
+		// If every element in the sequence is inexact, then a cross
+		// product will always be a no-op. Thus, there is nothing else we
+		// can add to it and can quit early. Note that this also includes
+		// infinite sequences.
 		if seq.is_inexact() {
+			// If a concatenation has an empty sequence anywhere, then
+			// it's impossible for the concatenantion to ever match. So we
+			// can just quit now.
 			if seq.is_empty() {
 				return seq
 			}
@@ -203,6 +226,8 @@ fn (ex Extractor) extract_concat(hirs []Hir) TSeq {
 			seq = TSeq.singleton(Literal.exact([]u8{}))
 			seq.make_not_prefix()
 		}
+		// Note that 'cross' also dispatches based on whether we're
+		// extracting prefixes or suffixes.
 		seq = ex.cross(seq, ex.extract(&hir))
 	}
 	if p := prev {
@@ -217,6 +242,10 @@ fn (ex Extractor) extract_concat(hirs []Hir) TSeq {
 fn (ex Extractor) extract_alternation(hirs []Hir) TSeq {
 	mut seq := TSeq.empty()
 	for hir in hirs {
+		// Once our 'seq' is infinite, every subsequent union
+		// operation on it will itself always result in an
+		// infinite sequence. Thus, it can never change and we can
+		// short-circuit.
 		if !seq.is_finite() {
 			break
 		}
@@ -226,20 +255,42 @@ fn (ex Extractor) extract_alternation(hirs []Hir) TSeq {
 	return seq
 }
 
-fn (ex Extractor) extract_pattern(pattern string) TSeq {
-	mut parser := PatternLiteralParser.new(pattern, ex)
+// V-specific: raw local HIR is parsed here because the translated regex
+// module does not expose regex-syntax's fully expanded HIR node variants.
+fn (ex Extractor) extract_pattern(pattern string, unicode bool) TSeq {
+	mut parser := PatternLiteralParser.new(pattern, ex, unicode)
 	return TSeq{
 		seq:    parser.parse()
 		prefix: true
 	}
 }
 
+/// Extract a sequence of literals from the given repetition. We do our
+/// best, Some examples:
+///
+///   'a*'    => [inexact(a), exact("")]
+///   'a*?'   => [exact(""), inexact(a)]
+///   'a+'    => [inexact(a)]
+///   'a{3}'  => [exact(aaa)]
+///   'a{3,5} => [inexact(aaa)]
+///
+/// The key here really is making sure we get the 'inexact' vs 'exact'
+/// attributes correct on each of the literals we add. For example, the
+/// fact that 'a*' gives us an inexact 'a' and an exact empty string means
+/// that a regex like 'ab*c' will result in [inexact(ab), exact(ac)]
+/// literals being extracted, which might actually be a better prefilter
+/// than just 'a'.
+// V-specific: the local raw-HIR parser supplies the already extracted
+// repeated sequence and its quantifier instead of a regex-syntax HIR node.
 fn (ex Extractor) extract_repetition_from_seq(seq TSeq, quant Quantifier) TSeq {
 	mut subseq := seq.clone()
 	if quant.min == 0 && quant.has_max && quant.max == 0 {
 		return TSeq.singleton(Literal.exact([]u8{}))
 	}
 	if quant.min == 0 {
+		// When 'max=1', we can retain exactness, since 'a?' is
+		// equivalent to 'a|'. Similarly below, 'a??' is equivalent to
+		// '|a'.
 		if !(quant.has_max && quant.max == 1) {
 			subseq.make_inexact()
 		}
@@ -296,6 +347,9 @@ fn (ex Extractor) cross(mut seq1 TSeq, mut seq2 TSeq) TSeq {
 		}
 	}
 	seq1.cross_forward(mut seq2)
+	if len := seq1.len() {
+		assert len <= ex.limit_total
+	}
 	ex.enforce_literal_len(mut seq1)
 	return seq1
 }
@@ -306,6 +360,20 @@ fn (ex Extractor) cross(mut seq1 TSeq, mut seq2 TSeq) TSeq {
 fn (ex Extractor) union(mut seq1 TSeq, mut seq2 TSeq) TSeq {
 	if max := seq1.max_union_len(seq2) {
 		if max > ex.limit_total {
+			// We try to trim our literal sequences to see if we can make
+			// room for more literals. The idea is that we'd rather trim down
+			// literals already in our sequence if it means we can add a few
+			// more and retain a finite sequence. Otherwise, we'll union with
+			// an infinite sequence and that infects everything and effectively
+			// stops literal extraction in its tracks.
+			//
+			// We do we keep 4 bytes here? Well, it's a bit of an abstraction
+			// leakage. Downstream, the literals may wind up getting fed to
+			// the Teddy algorithm, which supports searching literals up to
+			// length 4. So that's why we pick that number here. Arguably this
+			// should be a tuneable parameter, but it seems a little tricky to
+			// describe. And I'm still unsure if this is the right way to go
+			// about culling literal sequences.
 			seq1.keep_first_bytes(4)
 			seq2.keep_first_bytes(4)
 			seq1.dedup()
@@ -318,6 +386,9 @@ fn (ex Extractor) union(mut seq1 TSeq, mut seq2 TSeq) TSeq {
 		}
 	}
 	seq1.union(mut seq2)
+	if len := seq1.len() {
+		assert len <= ex.limit_total
+	}
 	seq1.prefix = seq1.prefix && seq2.prefix
 	return seq1
 }
@@ -328,7 +399,7 @@ fn (ex Extractor) enforce_literal_len(mut seq TSeq) {
 	seq.keep_first_bytes(ex.limit_literal_len)
 }
 
-struct TSeq {
+struct TSeq implements IClone {
 mut:
 	seq    Seq
 	prefix bool
@@ -355,15 +426,25 @@ fn TSeq.singleton(lit Literal) TSeq {
 	}
 }
 
-fn (seq TSeq) clone() TSeq {
+// V-specific: this specializes the Rust iterator/`AsRef<[u8]>` constructor
+// to the byte-slice representation used by the translated extractor.
+fn TSeq.new(it [][]u8) TSeq {
+	mut lits := []Literal{cap: it.len}
+	for bytes in it {
+		lits << Literal.exact(bytes)
+	}
 	return TSeq{
-		seq:    seq.seq.clone()
-		prefix: seq.prefix
+		seq:    Seq.new(lits)
+		prefix: true
 	}
 }
 
-fn (seq TSeq) literals() ?[]Literal {
+fn (seq &^a TSeq) literals[^a]() ?&^a []Literal {
 	return seq.seq.literals()
+}
+
+fn (mut seq TSeq) push(lit Literal) {
+	seq.seq.push(lit)
 }
 
 fn (mut seq TSeq) make_inexact() {
@@ -375,6 +456,7 @@ fn (mut seq TSeq) make_infinite() {
 }
 
 fn (mut seq TSeq) cross_forward(mut other TSeq) {
+	assert other.prefix
 	seq.seq.cross_forward(mut other.seq)
 }
 
@@ -384,6 +466,10 @@ fn (mut seq TSeq) union(mut other TSeq) {
 
 fn (mut seq TSeq) dedup() {
 	seq.seq.dedup()
+}
+
+fn (mut seq TSeq) sort() {
+	seq.seq.sort()
 }
 
 fn (mut seq TSeq) keep_first_bytes(len usize) {
@@ -402,6 +488,10 @@ fn (seq TSeq) len() ?usize {
 	return seq.seq.len()
 }
 
+fn (seq TSeq) is_exact() bool {
+	return seq.seq.is_exact()
+}
+
 fn (seq TSeq) is_inexact() bool {
 	return seq.seq.is_inexact()
 }
@@ -411,11 +501,16 @@ fn (seq TSeq) max_union_len(other TSeq) ?usize {
 }
 
 fn (seq TSeq) max_cross_len(other TSeq) ?usize {
+	assert other.prefix
 	return seq.seq.max_cross_len(other.seq)
 }
 
 fn (seq TSeq) min_literal_len() ?usize {
 	return seq.seq.min_literal_len()
+}
+
+fn (seq TSeq) max_literal_len() ?usize {
+	return seq.seq.max_literal_len()
 }
 
 /// Tags this sequence as "not a prefix." When this happens, this sequence
@@ -454,7 +549,7 @@ fn (seq TSeq) is_really_good() bool {
 /// Returns true if the given sequence contains a poisonous literal.
 fn (seq TSeq) has_poisonous_literal() bool {
 	lits := seq.literals() or { return false }
-	for lit in lits {
+	for lit in *lits {
 		if is_poisonous(lit) {
 			return true
 		}
@@ -500,7 +595,7 @@ fn (seq TSeq) choose(other TSeq) TSeq {
 	return seq1
 }
 
-struct Literal {
+struct Literal implements IClone {
 mut:
 	bytes []u8
 	exact bool
@@ -508,22 +603,15 @@ mut:
 
 fn Literal.exact(bytes []u8) Literal {
 	return Literal{
-		bytes: bytes.clone()
+		bytes: bytes
 		exact: true
 	}
 }
 
 fn Literal.inexact(bytes []u8) Literal {
 	return Literal{
-		bytes: bytes.clone()
+		bytes: bytes
 		exact: false
-	}
-}
-
-fn (lit Literal) clone() Literal {
-	return Literal{
-		bytes: lit.bytes.clone()
-		exact: lit.exact
 	}
 }
 
@@ -531,7 +619,7 @@ fn (lit Literal) len() usize {
 	return usize(lit.bytes.len)
 }
 
-struct Seq {
+struct Seq implements IClone {
 mut:
 	infinite bool
 	lits     []Literal
@@ -551,35 +639,28 @@ fn Seq.infinite() Seq {
 
 fn Seq.singleton(lit Literal) Seq {
 	return Seq{
-		lits: [lit.clone()]
+		lits: [lit]
 	}
 }
 
 fn Seq.new(lits []Literal) Seq {
 	return Seq{
-		lits: clone_literals(lits)
+		lits: lits
 	}
 }
 
-fn (seq Seq) clone() Seq {
-	return Seq{
-		infinite: seq.infinite
-		lits:     clone_literals(seq.lits)
-	}
-}
-
-fn (seq Seq) literals() ?[]Literal {
+fn (seq &^a Seq) literals[^a]() ?&^a []Literal {
 	if seq.infinite {
 		return none
 	}
-	return clone_literals(seq.lits)
+	return &seq.lits
 }
 
 fn (mut seq Seq) push(lit Literal) {
 	if seq.infinite {
 		return
 	}
-	seq.lits << lit.clone()
+	seq.lits << lit
 }
 
 fn (mut seq Seq) make_inexact() {
@@ -650,21 +731,28 @@ fn (mut seq Seq) dedup() {
 	}
 	mut deduped := []Literal{cap: seq.lits.len}
 	for lit in seq.lits {
-		mut found := false
-		for i in 0 .. deduped.len {
-			if literal_bytes_equal(deduped[i], lit) {
-				if !lit.exact {
-					deduped[i].exact = false
-				}
-				found = true
-				break
+		if deduped.len > 0 && literal_bytes_equal(deduped[deduped.len - 1], lit) {
+			if !lit.exact {
+				deduped[deduped.len - 1].exact = false
 			}
-		}
-		if !found {
+		} else {
 			deduped << lit.clone()
 		}
 	}
 	seq.lits = deduped
+}
+
+fn (mut seq Seq) sort() {
+	if seq.infinite {
+		return
+	}
+	for i in 1 .. seq.lits.len {
+		mut j := i
+		for j > 0 && literal_less(seq.lits[j], seq.lits[j - 1]) {
+			seq.lits[j], seq.lits[j - 1] = seq.lits[j - 1], seq.lits[j]
+			j--
+		}
+	}
 }
 
 fn (mut seq Seq) keep_first_bytes(len usize) {
@@ -725,14 +813,14 @@ fn (seq Seq) max_union_len(other Seq) ?usize {
 	if seq.infinite || other.infinite {
 		return none
 	}
-	return usize(seq.lits.len + other.lits.len)
+	return saturating_add_usize(usize(seq.lits.len), usize(other.lits.len))
 }
 
 fn (seq Seq) max_cross_len(other Seq) ?usize {
 	if seq.infinite || other.infinite {
 		return none
 	}
-	return usize(seq.lits.len * other.lits.len)
+	return saturating_mul_usize(usize(seq.lits.len), usize(other.lits.len))
 }
 
 fn (seq Seq) min_literal_len() ?usize {
@@ -746,6 +834,19 @@ fn (seq Seq) min_literal_len() ?usize {
 		}
 	}
 	return min
+}
+
+fn (seq Seq) max_literal_len() ?usize {
+	if seq.infinite || seq.lits.len == 0 {
+		return none
+	}
+	mut max := seq.lits[0].len()
+	for lit in seq.lits[1..] {
+		if lit.len() > max {
+			max = lit.len()
+		}
+	}
+	return max
 }
 
 fn (mut seq Seq) optimize_for_prefix_by_preference() {
@@ -798,14 +899,6 @@ fn (mut seq Seq) minimize_by_preference_prefix() {
 	seq.lits = minimized
 }
 
-fn clone_literals(lits []Literal) []Literal {
-	mut cloned := []Literal{cap: lits.len}
-	for lit in lits {
-		cloned << lit.clone()
-	}
-	return cloned
-}
-
 fn literal_bytes_equal(left Literal, right Literal) bool {
 	if left.bytes.len != right.bytes.len {
 		return false
@@ -816,6 +909,33 @@ fn literal_bytes_equal(left Literal, right Literal) bool {
 		}
 	}
 	return true
+}
+
+fn literal_less(left Literal, right Literal) bool {
+	common := if left.bytes.len < right.bytes.len { left.bytes.len } else { right.bytes.len }
+	for i in 0 .. common {
+		if left.bytes[i] != right.bytes[i] {
+			return left.bytes[i] < right.bytes[i]
+		}
+	}
+	if left.bytes.len != right.bytes.len {
+		return left.bytes.len < right.bytes.len
+	}
+	return !left.exact && right.exact
+}
+
+fn saturating_add_usize(left usize, right usize) usize {
+	if left > ~usize(0) - right {
+		return ~usize(0)
+	}
+	return left + right
+}
+
+fn saturating_mul_usize(left usize, right usize) usize {
+	if left != 0 && right > ~usize(0) / left {
+		return ~usize(0)
+	}
+	return left * right
 }
 
 fn literal_has_prefix(lit Literal, prefix Literal) bool {
@@ -885,14 +1005,14 @@ struct PatternToken {
 fn PatternToken.literal(bytes []u8) PatternToken {
 	return PatternToken{
 		kind:  .literal
-		bytes: bytes.clone()
+		bytes: bytes
 	}
 }
 
 fn PatternToken.candidate(seq Seq) PatternToken {
 	return PatternToken{
 		kind:   .candidate
-		seq:    seq.clone()
+		seq:    seq
 		prefix: true
 	}
 }
@@ -900,7 +1020,7 @@ fn PatternToken.candidate(seq Seq) PatternToken {
 fn PatternToken.candidate_tseq(seq TSeq) PatternToken {
 	return PatternToken{
 		kind:   .candidate
-		seq:    seq.seq.clone()
+		seq:    seq.seq
 		prefix: seq.prefix
 	}
 }
@@ -922,12 +1042,12 @@ fn (token PatternToken) to_tseq() TSeq {
 		.literal {
 			TSeq.singleton(Literal.exact(token.bytes))
 		}
-			.candidate {
-				TSeq{
-					seq:    token.seq.clone()
-					prefix: token.prefix
-				}
+		.candidate {
+			TSeq{
+				seq:    token.seq
+				prefix: token.prefix
 			}
+		}
 		.zero_width {
 			TSeq.singleton(Literal.exact([]u8{}))
 		}
@@ -1076,6 +1196,11 @@ fn next_utf8_text(text string, pos int) (string, int) {
 }
 
 fn case_fold_seq(text string, unicode bool) Seq {
+	if !unicode {
+		if text.len != 1 || text[0] >= 0x80 {
+			return exact_case_variants([text])
+		}
+	}
 	if unicode {
 		match text {
 			'S', 's', 'ſ' {
@@ -1119,11 +1244,11 @@ mut:
 	unicode          bool
 }
 
-fn PatternLiteralParser.new(pattern string, ex Extractor) PatternLiteralParser {
+fn PatternLiteralParser.new(pattern string, ex Extractor, unicode bool) PatternLiteralParser {
 	return PatternLiteralParser{
 		pattern: pattern.to_owned()
 		ex:      ex
-		unicode:  true
+		unicode: unicode
 	}
 }
 
@@ -1429,7 +1554,7 @@ fn (mut p PatternLiteralParser) parse_simple_unicode_class(body string) ?Seq {
 
 fn add_seq_strings(mut variants []string, seq Seq) {
 	lits := seq.literals() or { return }
-	for lit in lits {
+	for lit in *lits {
 		add_case_variant(mut variants, lit.bytes.bytestr())
 	}
 }

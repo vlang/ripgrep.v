@@ -332,6 +332,23 @@ pub fn (re &Regex) clone() Regex {
 	}
 }
 
+// V-specific: reports whether the local VM has installed its literal-prefix
+// acceleration, corresponding to `regex_automata::meta::Regex.is_accelerated`.
+pub fn (re &Regex) is_accelerated() bool {
+	return re.has_prefix
+}
+
+// V-specific: the Rust implementation queries this from HIR properties. The
+// local VM retains the same information on compiled word assertions.
+pub fn (re &Regex) contains_word_unicode() bool {
+	for inst in re.prog {
+		if inst.typ == .assert_word && inst.word_unicode {
+			return true
+		}
+	}
+	return false
+}
+
 fn (mut re Regex) drop() {
 	if isnil(re.refs) {
 		return

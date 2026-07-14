@@ -42,6 +42,9 @@ pub struct Hir implements IClone {
 	look     HirLook
 	children []Hir
 	props    HirProperties
+	// V-specific: raw HIR is parsed lazily by the local literal extractor, so
+	// retain the parser's initial Unicode mode with the expression.
+	unicode bool = true
 }
 
 fn Hir.from_pattern(pattern string, config Config) Hir {
@@ -50,6 +53,7 @@ fn Hir.from_pattern(pattern string, config Config) Hir {
 		kind:    .raw
 		pattern: pattern.to_owned()
 		props:   props
+		unicode: config.unicode
 	}
 }
 
@@ -138,6 +142,7 @@ fn (hir Hir) clone() Hir {
 		look:     hir.look
 		children: clone_hir_children(hir.children)
 		props:    hir.props.clone()
+		unicode:  hir.unicode
 	}
 }
 
