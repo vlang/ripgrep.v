@@ -31,14 +31,14 @@ fn loc(text string, start usize, end usize) matcher.Match {
 }
 
 fn prev(text string, pos usize, count usize) usize {
-	return preceding_by_position(text.bytes(), pos, `\n`, count)
+	return preceding_by_pos(text.bytes(), pos, `\n`, count)
 }
 
 fn test_line_count() {
-	assert count_lines(''.bytes(), `\n`) == 0
-	assert count_lines('\n'.bytes(), `\n`) == 1
-	assert count_lines('\n\n'.bytes(), `\n`) == 2
-	assert count_lines('a\nb\nc'.bytes(), `\n`) == 2
+	assert count(''.bytes(), `\n`) == 0
+	assert count('\n'.bytes(), `\n`) == 1
+	assert count('\n\n'.bytes(), `\n`) == 2
+	assert count('a\nb\nc'.bytes(), `\n`) == 2
 }
 
 fn test_line_locate() {
@@ -86,6 +86,17 @@ fn test_line_iter_empty() {
 	assert it.next('abc'.bytes()) == none
 }
 
+fn test_without_terminator_returns_borrowed_view() {
+	bytes := 'abc\r\n'.bytes()
+	line := without_terminator(bytes, matcher.LineTerminator.crlf())
+	assert line.bytestr() == 'abc'
+	assert line.data == bytes.data
+
+	unterminated := without_terminator(bytes[..3], matcher.LineTerminator.crlf())
+	assert unterminated.bytestr() == 'abc'
+	assert unterminated.data == bytes.data
+}
+
 fn test_line_locate_weird() {
 	assert loc('', 0, 0) == matcher.Match.new(0, 0)
 
@@ -107,11 +118,12 @@ fn test_line_locate_weird() {
 }
 
 fn test_preceding_lines_doc() {
+	// These are the examples mentions in the documentation of `preceding`.
 	bytes := 'abc\nxyz\n'
-	assert preceding_by_position(bytes.bytes(), 7, `\n`, 0) == 4
-	assert preceding_by_position(bytes.bytes(), 8, `\n`, 0) == 4
-	assert preceding_by_position(bytes.bytes(), 7, `\n`, 1) == 0
-	assert preceding_by_position(bytes.bytes(), 8, `\n`, 1) == 0
+	assert preceding_by_pos(bytes.bytes(), 7, `\n`, 0) == 4
+	assert preceding_by_pos(bytes.bytes(), 8, `\n`, 0) == 4
+	assert preceding_by_pos(bytes.bytes(), 7, `\n`, 1) == 0
+	assert preceding_by_pos(bytes.bytes(), 8, `\n`, 1) == 0
 }
 
 fn test_preceding_lines_sherlock() {

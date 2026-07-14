@@ -2782,27 +2782,28 @@ pub fn (finish SinkFinish) with_binary_byte_offset(binary_byte_offset ?u64) Sink
 /// yielded by the iterator are guaranteed to be non-empty.
 ///
 /// `'b` refers to the lifetime of the underlying bytes.
-pub struct LineIter[^b] implements IClone {
+pub struct LineIter[^b] {
 	// V-specific: Rust stores this as a borrowed `&'b [u8]`; V's slice value is
 	// the corresponding non-owning view into the active search buffer.
-	bytes_   []u8
-	stepper_ LineStep
+	bytes   []u8
+	stepper LineStep
 }
 
 /// Create a new line iterator that yields lines in the given bytes that
 /// are terminated by `line_term`.
 pub fn LineIter.new[^b](line_term u8, bytes []u8) LineIter[^b] {
 	return LineIter[^b]{
-		bytes_:   bytes
-		stepper_: LineStep.new(line_term, 0, bytes.len)
+		bytes:   bytes
+		stepper: LineStep.new(line_term, 0, bytes.len)
 	}
 }
 
+// V-specific equivalent of consuming Rust's iterator with `count`.
 pub fn (iter &LineIter[^b]) count[^b]() u64 {
-	mut stepper := iter.stepper_
+	mut stepper := iter.stepper
 	mut count := u64(0)
 	for {
-		m := stepper.next_match(iter.bytes_) or { break }
+		m := stepper.next_match(iter.bytes) or { break }
 		_ = m
 		count++
 	}
@@ -2810,8 +2811,8 @@ pub fn (iter &LineIter[^b]) count[^b]() u64 {
 }
 
 pub fn (mut iter LineIter[^b]) next[^b]() ?[]u8 {
-	m := iter.stepper_.next_match(iter.bytes_) or { return none }
-	return iter.bytes_[m.start()..m.end()]
+	m := iter.stepper.next_match(iter.bytes) or { return none }
+	return iter.bytes[m.start()..m.end()]
 }
 
 /// A type that describes a match reported by a searcher.
@@ -2925,7 +2926,7 @@ pub fn (mat &SinkMatch[^b]) lines[^b]() LineIter[^b] {
 ///
 /// Line terminators are considered part of the line they terminate. All lines
 /// yielded by the iterator are guaranteed to be non-empty.
-pub struct LineStep implements IClone {
+pub struct LineStep {
 	line_term u8
 mut:
 	pos usize
@@ -2940,9 +2941,6 @@ mut:
 ///
 /// This panics if `start` is not less than or equal to `end`.
 pub fn LineStep.new(line_term u8, start usize, end usize) LineStep {
-	if start > end {
-		panic('${start} is not <= ${end}')
-	}
 	return LineStep{
 		line_term: line_term
 		pos:       start
@@ -2958,35 +2956,44 @@ pub fn LineStep.new(line_term u8, start usize, end usize) LineStep {
 /// The range returned includes the line terminator. Ranges are always
 /// non-empty.
 pub fn (mut step LineStep) next(bytes []u8) ?(usize, usize) {
-	if step.end > bytes.len {
-		panic('line step end exceeds byte slice length')
-	}
-	mut i := step.pos
-	for i < step.end {
-		if bytes[i] == step.line_term {
-			start := step.pos
-			end := i + 1
-			step.pos = end
-			return start, end
-		}
-		i++
-	}
-	if step.pos < step.end {
+	return step.next_impl(bytes)
+}
+
+/// Like next, but returns a `Match` instead of a tuple.
+@[inline]
+fn (mut step LineStep) next_match(bytes []u8) ?matcher.Match {
+	start, end := step.next_impl(bytes) or { return none }
+	return matcher.Match.new(start, end)
+}
+
+@[inline]
+fn (mut step LineStep) next_impl(bytes_in []u8) ?(usize, usize) {
+	bytes := bytes_in[..step.end]
+	if line_end := find_byte(bytes[step.pos..], step.line_term) {
 		start := step.pos
-		end := step.end
+		end := step.pos + line_end + 1
+		$if debug {
+			assert start <= end
+		}
+
+		step.pos = end
+		return start, end
+	}
+	if step.pos < bytes.len {
+		start := step.pos
+		end := bytes.len
+		$if debug {
+			assert start <= end
+		}
+
 		step.pos = end
 		return start, end
 	}
 	return none
 }
 
-pub fn (mut step LineStep) next_match(bytes []u8) ?matcher.Match {
-	start, end := step.next(bytes) or { return none }
-	return matcher.Match.new(start, end)
-}
-
 /// Count the number of occurrences of `line_term` in `bytes`.
-pub fn count_lines(bytes []u8, line_term u8) u64 {
+fn count(bytes []u8, line_term u8) u64 {
 	mut count := u64(0)
 	for byte in bytes {
 		if byte == line_term {
@@ -2998,44 +3005,36 @@ pub fn count_lines(bytes []u8, line_term u8) u64 {
 
 /// Given a line that possibly ends with a terminator, return that line without
 /// the terminator.
-pub fn without_terminator(bytes []u8, line_term matcher.LineTerminator) []u8 {
+///
+/// V-specific: V cannot annotate a slice descriptor itself with a lifetime;
+/// the returned slice is nevertheless a borrowed view into `bytes`.
+@[inline]
+fn without_terminator(bytes []u8, line_term matcher.LineTerminator) []u8 {
 	term := line_term.as_bytes()
-	if bytes.len < term.len {
-		return bytes.clone()
-	}
-	start := bytes.len - term.len
+	start := if bytes.len > term.len { bytes.len - term.len } else { usize(0) }
 	if bytes[start..] == term {
-		return bytes[..start].clone()
+		return bytes[..bytes.len - term.len]
 	}
-	return bytes.clone()
+	return bytes
 }
 
 /// Return the start and end offsets of the lines containing the given range
 /// of bytes.
 ///
 /// Line terminators are considered part of the line they terminate.
-pub fn locate(bytes []u8, line_term u8, range matcher.Match) matcher.Match {
-	mut line_start := usize(0)
-	mut i := range.start()
-	for i > 0 {
-		i--
-		if bytes[i] == line_term {
-			line_start = i + 1
-			break
-		}
-	}
-	mut line_end := bytes.len
-	if range.end() > line_start && range.end() > 0 && bytes[range.end() - 1] == line_term {
-		line_end = range.end()
+@[inline]
+fn locate(bytes []u8, line_term u8, range matcher.Match) matcher.Match {
+	line_start := if i := rfind_byte(bytes[..range.start()], line_term) {
+		i + 1
 	} else {
-		mut j := range.end()
-		for j < bytes.len {
-			if bytes[j] == line_term {
-				line_end = j + 1
-				break
-			}
-			j++
-		}
+		usize(0)
+	}
+	line_end := if range.end() > line_start && bytes[range.end() - 1] == line_term {
+		range.end()
+	} else if i := find_byte(bytes[range.end()..], line_term) {
+		range.end() + i + 1
+	} else {
+		bytes.len
 	}
 	return matcher.Match.new(line_start, line_end)
 }
@@ -3048,8 +3047,8 @@ pub fn locate(bytes []u8, line_term u8, range matcher.Match) matcher.Match {
 ///
 /// If `bytes` ends with a line terminator, then the terminator itself is
 /// considered part of the last line.
-pub fn preceding(bytes []u8, line_term u8, count usize) usize {
-	return preceding_by_position(bytes, bytes.len, line_term, count)
+fn preceding(bytes []u8, line_term u8, count usize) usize {
+	return preceding_by_pos(bytes, bytes.len, line_term, count)
 }
 
 /// Returns the minimal starting offset of the line that occurs `count` lines
@@ -3061,7 +3060,7 @@ pub fn preceding(bytes []u8, line_term u8, count usize) usize {
 /// the line that it terminates. For example, given `bytes = b"abc\nxyz\n"`
 /// and `pos = 7`, `preceding(bytes, pos, b'\n', 0)` returns `4` (as does `pos
 /// = 8`) and `preceding(bytes, pos, `b'\n', 1)` returns `0`.
-fn preceding_by_position(bytes []u8, pos usize, line_term u8, count usize) usize {
+fn preceding_by_pos(bytes []u8, pos usize, line_term u8, count usize) usize {
 	mut cur_pos := pos
 	mut remaining := count
 	if cur_pos == 0 {
@@ -3070,29 +3069,18 @@ fn preceding_by_position(bytes []u8, pos usize, line_term u8, count usize) usize
 		cur_pos--
 	}
 	for {
-		mut found_idx := usize(0)
-		mut has_found := false
-		mut i := cur_pos
-		for i > 0 {
-			i--
-			if bytes[i] == line_term {
-				found_idx = i
-				has_found = true
-				break
+		if i := rfind_byte(bytes[..cur_pos], line_term) {
+			if remaining == 0 {
+				return i + 1
+			} else if i == 0 {
+				return 0
 			}
-		}
-		if !has_found {
+			remaining--
+			cur_pos = i
+		} else {
 			return 0
 		}
-		if remaining == 0 {
-			return found_idx + 1
-		} else if found_idx == 0 {
-			return 0
-		}
-		remaining--
-		cur_pos = found_idx
 	}
-	return 0
 }
 
 pub enum SinkContextKind {
@@ -4127,7 +4115,7 @@ fn (mut core Core[^s]) count_lines[^s](buf []u8, upto usize) {
 			return
 		}
 		slice := buf[core.last_line_counted..upto]
-		count := count_lines(slice, core.config.line_term.as_byte())
+		count := count(slice, core.config.line_term.as_byte())
 		core.line_number = line_number + count
 		core.last_line_counted = upto
 	}
