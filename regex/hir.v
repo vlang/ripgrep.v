@@ -4,6 +4,7 @@ import matcher
 
 enum HirKind {
 	raw
+	fail
 	empty
 	look
 	literal
@@ -57,7 +58,7 @@ fn Hir.from_pattern(pattern string, config Config) Hir {
 	}
 }
 
-fn Hir.from_fixed_literals(patterns []string) Hir {
+fn Hir.from_fixed_literals(patterns &[]string) Hir {
 	mut alts := []Hir{cap: patterns.len}
 	for p in patterns {
 		alts << Hir.literal(p)
@@ -68,6 +69,15 @@ fn Hir.from_fixed_literals(patterns []string) Hir {
 fn Hir.empty() Hir {
 	return Hir{
 		kind:  .empty
+		props: HirProperties{
+			non_matching_bytes: matcher.ByteSet.full()
+		}
+	}
+}
+
+fn Hir.fail() Hir {
+	return Hir{
+		kind:  .fail
 		props: HirProperties{
 			non_matching_bytes: matcher.ByteSet.full()
 		}
@@ -125,7 +135,7 @@ fn Hir.concat(children []Hir) Hir {
 
 fn Hir.alternation(children []Hir) Hir {
 	if children.len == 0 {
-		return Hir.empty()
+		return Hir.fail()
 	}
 	return Hir{
 		kind:     .alternation
@@ -182,6 +192,9 @@ fn (hir &Hir) to_regex() string {
 	return match hir.kind {
 		.raw {
 			hir.pattern
+		}
+		.fail {
+			r'\b\B'
 		}
 		.empty {
 			''
@@ -256,7 +269,7 @@ fn (hir &Hir) is_alternation_literal() bool {
 	return hir.props.is_alternation_literal
 }
 
-fn (hir Hir) into_whole_line(config Config) Hir {
+fn (hir Hir) into_whole_line(config &Config) Hir {
 	return Hir.concat([
 		Hir.look(line_anchor_start(config)),
 		hir,
@@ -264,7 +277,7 @@ fn (hir Hir) into_whole_line(config Config) Hir {
 	])
 }
 
-fn (hir Hir) into_word(config Config) Hir {
+fn (hir Hir) into_word(config &Config) Hir {
 	start := if config.unicode {
 		HirLook.word_start_half_unicode
 	} else {
@@ -278,14 +291,14 @@ fn (hir Hir) into_word(config Config) Hir {
 	return Hir.concat([Hir.look(start), hir, Hir.look(end)])
 }
 
-fn line_anchor_start(config Config) HirLook {
+fn line_anchor_start(config &Config) HirLook {
 	if config.crlf {
 		return .start_crlf
 	}
 	return .start_lf
 }
 
-fn line_anchor_end(config Config) HirLook {
+fn line_anchor_end(config &Config) HirLook {
 	if config.crlf {
 		return .end_crlf
 	}

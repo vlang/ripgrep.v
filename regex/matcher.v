@@ -55,25 +55,10 @@ pub fn (builder &RegexMatcherBuilder) build(pattern string) !RegexMatcher {
 /// given are joined together into a single alternation. That is, it
 /// reports matches where at least one of the given patterns matches.
 pub fn (builder &RegexMatcherBuilder) build_many(patterns &[]string) !RegexMatcher {
-	if patterns.len == 0 {
-		mut config := builder.config.clone()
-		never := meta.compile(r'\b\B') or { return Error.regex(err.msg()) }
-		config.line_terminator = builder.config.line_terminator
-		return RegexMatcher{
-			config:               config
-			regex:                never
-			byte_literal:         none
-			unicode_case_literal: none
-			simple_ascii:         none
-			fast_line_regex:      none
-			non_matching_bytes:   matcher.ByteSet.full()
-			reject_invalid_empty: false
-		}
-	}
 	needs_backend_normalization := patterns_need_backend_normalization(patterns)
 	allow_fast_line_regex := patterns_allow_fast_line_regex(patterns)
 	reject_invalid_empty := patterns_can_report_backend_invalid_empty(patterns)
-	mut chir := builder.config.build_many(patterns.clone())!
+	mut chir := builder.config.build_many(patterns)!
 	// 'whole_line' is a strict subset of 'word', so when it is enabled,
 	// we don't need to both with any specific to word matching.
 	if chir.config().whole_line {

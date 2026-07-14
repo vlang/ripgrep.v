@@ -175,6 +175,9 @@ fn (ex Extractor) extract_untagged(hir &Hir) Seq {
 /// Execute the extractor and return a sequence of literals.
 fn (ex Extractor) extract(hir &Hir) TSeq {
 	return match hir.kind {
+		.fail {
+			TSeq.empty()
+		}
 		.empty, .look {
 			TSeq.singleton(Literal.exact([]u8{}))
 		}

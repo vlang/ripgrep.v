@@ -44,40 +44,16 @@ pub fn Config.default() Config {
 	}
 }
 
-// V-specific: keep an explicit clone while V2 mark-used/codegen can resolve
-// generated clone helpers for same-named structs across modules inconsistently.
-pub fn (config Config) clone() Config {
-	return Config{
-		case_insensitive:     config.case_insensitive
-		case_smart:           config.case_smart
-		multi_line:           config.multi_line
-		dot_matches_new_line: config.dot_matches_new_line
-		swap_greed:           config.swap_greed
-		ignore_whitespace:    config.ignore_whitespace
-		unicode:              config.unicode
-		octal:                config.octal
-		size_limit:           config.size_limit
-		dfa_size_limit:       config.dfa_size_limit
-		nest_limit:           config.nest_limit
-		line_terminator:      config.line_terminator
-		ban:                  config.ban
-		crlf:                 config.crlf
-		word:                 config.word
-		fixed_strings:        config.fixed_strings
-		whole_line:           config.whole_line
-	}
-}
-
 /// Use this configuration to build an HIR from the given patterns. The HIR
 /// returned corresponds to a single regex that is an alternation of the
 /// patterns given.
-pub fn (config Config) build_many(patterns []string) !ConfiguredHIR {
+pub fn (config &Config) build_many(patterns &[]string) !ConfiguredHIR {
 	return ConfiguredHIR.new(config.clone(), patterns)
 }
 
 /// Accounting for the `smart_case` config knob, return true if and only if
 /// this pattern should be matched case insensitively.
-fn (config Config) is_case_insensitive(analysis AstAnalysis) bool {
+fn (config &Config) is_case_insensitive(analysis &AstAnalysis) bool {
 	if config.case_insensitive {
 		return true
 	}
@@ -95,7 +71,7 @@ fn (config Config) is_case_insensitive(analysis AstAnalysis) bool {
 /// The main idea here is that if this returns true, then it is safe
 /// to build an `regex_syntax::hir::Hir` value directly from the given
 /// patterns as an alternation of `hir::Literal` values.
-fn (config Config) is_fixed_strings(patterns []string) bool {
+fn (config &Config) is_fixed_strings(patterns &[]string) bool {
 	// When these are enabled, we really need to parse the patterns and
 	// let them go through the standard HIR translation process in order
 	// for case folding transforms to be applied.
@@ -157,7 +133,7 @@ pub struct ConfiguredHIR implements IClone {
 
 /// Parse the given patterns into a single HIR expression that represents
 /// an alternation of the patterns given.
-fn ConfiguredHIR.new(config Config, patterns []string) !ConfiguredHIR {
+fn ConfiguredHIR.new(config Config, patterns &[]string) !ConfiguredHIR {
 	mut hir := Hir.empty()
 	if config.is_fixed_strings(patterns) {
 		hir = Hir.from_fixed_literals(patterns)
@@ -176,13 +152,13 @@ fn ConfiguredHIR.new(config Config, patterns []string) !ConfiguredHIR {
 			pattern = strip_ignored_whitespace(pattern)
 		}
 		hir = Hir.from_pattern(pattern, config)
-	}
-	if banned := config.ban {
-		ban_check(hir.to_regex(), banned)!
-	}
-	if line_term := config.line_terminator {
-		stripped := strip_line_terminator_from_match(hir.to_regex(), config)!
-		hir = Hir.from_pattern(stripped, config)
+		if banned := config.ban {
+			ban_check(hir.to_regex(), banned)!
+		}
+		if _ := config.line_terminator {
+			stripped := strip_line_terminator_from_match(hir.to_regex(), config)!
+			hir = Hir.from_pattern(stripped, config)
+		}
 	}
 	return ConfiguredHIR{
 		config: config
@@ -201,7 +177,7 @@ pub fn (chir &^a ConfiguredHIR) hir[^a]() &^a Hir {
 }
 
 /// Convert this HIR to a regex that can be used for matching.
-pub fn (chir ConfiguredHIR) to_regex() !meta.Regex {
+pub fn (chir &ConfiguredHIR) to_regex() !meta.Regex {
 	pattern := chir.backend_pattern()
 	return meta.compile_with_limits(pattern, chir.config.size_limit, chir.config.dfa_size_limit) or {
 		return Error.regex(err.msg())
@@ -209,7 +185,7 @@ pub fn (chir ConfiguredHIR) to_regex() !meta.Regex {
 }
 
 /// Compute the set of non-matching bytes for this HIR expression.
-pub fn (chir ConfiguredHIR) non_matching_bytes() matcher.ByteSet {
+pub fn (chir &ConfiguredHIR) non_matching_bytes() matcher.ByteSet {
 	return chir.hir.non_matching_bytes()
 }
 
@@ -242,7 +218,7 @@ pub fn (chir ConfiguredHIR) non_matching_bytes() matcher.ByteSet {
 /// present even though that's not quite correct...
 ///
 /// See: <https://github.com/BurntSushi/ripgrep/issues/2260>
-pub fn (chir ConfiguredHIR) line_terminator() ?matcher.LineTerminator {
+pub fn (chir &ConfiguredHIR) line_terminator() ?matcher.LineTerminator {
 	if chir.hir.contains_haystack_anchor() {
 		return none
 	}
@@ -252,27 +228,29 @@ pub fn (chir ConfiguredHIR) line_terminator() ?matcher.LineTerminator {
 /// Turns this configured HIR into an equivalent one, but where it must
 /// match at the start and end of a line.
 pub fn (chir ConfiguredHIR) into_whole_line() ConfiguredHIR {
+	hir := chir.hir.into_whole_line(&chir.config)
 	return ConfiguredHIR{
-		config: chir.config.clone()
-		hir:    chir.hir.into_whole_line(chir.config)
+		config: chir.config
+		hir:    hir
 	}
 }
 
 /// Turns this configured HIR into an equivalent one, but where it must
 /// match at word boundaries.
 pub fn (chir ConfiguredHIR) into_word() ConfiguredHIR {
+	hir := chir.hir.into_word(&chir.config)
 	return ConfiguredHIR{
-		config: chir.config.clone()
-		hir:    chir.hir.into_word(chir.config)
+		config: chir.config
+		hir:    hir
 	}
 }
 
-fn (chir ConfiguredHIR) backend_pattern() string {
+fn (chir &ConfiguredHIR) backend_pattern() string {
 	mut flags := ''
 	has_haystack_anchor := chir.hir.contains_haystack_anchor()
 	pattern := normalize_backend_pattern(chir.hir.to_regex(), chir.config, has_haystack_anchor)
 	analysis := AstAnalysis.from_pattern(pattern) or { AstAnalysis.new() }
-	if chir.config.is_case_insensitive(analysis) {
+	if chir.config.is_case_insensitive(&analysis) {
 		flags += if chir.config.unicode { 'i' } else { 'a' }
 	}
 	if (chir.config.multi_line || chir.config.crlf) && !has_haystack_anchor {
@@ -1935,7 +1913,7 @@ fn is_pcre_only_group_kind(ch u8) bool {
 
 /// Returns true if the given literal string contains any byte from the line
 /// terminator given.
-fn has_line_terminator(lineterm matcher.LineTerminator, literal string) bool {
+fn has_line_terminator(lineterm matcher.LineTerminator, literal &string) bool {
 	if lineterm.is_crlf() {
 		return literal.contains_u8(`\r`) || literal.contains_u8(`\n`)
 	}
