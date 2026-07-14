@@ -84,6 +84,42 @@ fn json_nth_line(text string, n int) string {
 	return ''
 }
 
+fn test_json_builder_build_is_reusable() {
+	builder := JSONBuilder.new()
+	first := builder.build(json_buffer())
+	second := builder.build(json_buffer())
+	assert !first.has_written()
+	assert !second.has_written()
+	first_writer := first.into_inner()
+	second_writer := second.into_inner()
+	assert first_writer.as_slice().len == 0
+	assert second_writer.as_slice().len == 0
+}
+
+fn test_json_sink_stats_accumulate_across_searches() {
+	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
+	mut printer := JSONBuilder.new().build(json_buffer())
+	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	built := searcher.SearcherBuilder.new().build()
+	assert sink.begin(built)!
+	sink.finish(built, searcher.SinkFinish.new(3))!
+	assert sink.begin(built)!
+	sink.finish(built, searcher.SinkFinish.new(5))!
+	assert sink.stats().searches() == u64(2)
+	assert sink.stats().bytes_searched() == u64(8)
+}
+
+fn test_json_binary_callback_does_not_publish_offset_before_finish() {
+	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
+	mut printer := JSONBuilder.new().build(json_buffer())
+	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut builder := searcher.SearcherBuilder.new()
+	builder.binary_detection(searcher.BinaryDetection.quit(`\x00`))
+	built := builder.build()
+	assert sink.binary_data(built, 17)!
+	assert sink.binary_byte_offset() == none
+}
+
 fn test_json_binary_detection() {
 	binary := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
@@ -174,6 +210,22 @@ fn test_json_always_begin_end_no_match() {
 
 	assert json_line_count(got) == 2
 	assert got.contains('begin') && got.contains('end')
+}
+
+fn test_json_pretty() {
+	matcher_ := regex.RegexMatcher.new(r'DOES NOT MATCH') or { panic(err) }
+	mut builder := JSONBuilder.new()
+	builder.pretty(true)
+	builder.always_begin_end(true)
+	mut printer := builder.build(json_buffer())
+	mut built := searcher.SearcherBuilder.new().build()
+	mut rdr := JsonByteSliceReader.from_string(json_sherlock)
+	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	built.search_reader(matcher_, mut rdr, &sink)!
+	got := json_printer_contents(mut printer)
+
+	assert got.starts_with('{\n  "type": "begin",\n')
+	assert json_line_count(got) > 2
 }
 
 fn test_json_missing_crlf() {

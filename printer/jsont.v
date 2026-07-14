@@ -1,6 +1,7 @@
 module printer
 
 import encoding.utf8
+import time
 
 // This module defines the types we use for JSON serialization. We specifically
 // omit deserialization, partially because there isn't a clear use case for
@@ -60,6 +61,74 @@ pub fn (msg Message) to_json() string {
 		.end { '{"type":"end","data":${msg.end.to_json()}}' }
 		.match_ { '{"type":"match","data":${msg.match_.to_json()}}' }
 		.context { '{"type":"context","data":${msg.context.to_json()}}' }
+	}
+}
+
+// V-specific: the translated JSON printer serializes its wire types directly,
+// so pretty formatting is applied to the compact encoding here.
+pub fn (msg Message) to_json_pretty() string {
+	compact := msg.to_json()
+	mut out := []u8{cap: compact.len + 64}
+	mut empty := []bool{}
+	mut depth := 0
+	mut in_string := false
+	mut escaped := false
+	for i, byte in compact.bytes() {
+		if in_string {
+			out << byte
+			if escaped {
+				escaped = false
+			} else if byte == `\\` {
+				escaped = true
+			} else if byte == `"` {
+				in_string = false
+			}
+			continue
+		}
+		match byte {
+			`"` {
+				in_string = true
+				out << byte
+			}
+			`{`, `[` {
+				out << byte
+				closing := if byte == `{` { u8(`}`) } else { u8(`]`) }
+				is_empty := i + 1 < compact.len && compact[i + 1] == closing
+				empty << is_empty
+				if !is_empty {
+					depth++
+					json_pretty_newline(mut out, depth)
+				}
+			}
+			`}`, `]` {
+				is_empty := empty[empty.len - 1]
+				empty.delete(empty.len - 1)
+				if !is_empty {
+					depth--
+					json_pretty_newline(mut out, depth)
+				}
+				out << byte
+			}
+			`,` {
+				out << byte
+				json_pretty_newline(mut out, depth)
+			}
+			`:` {
+				out << byte
+				out << u8(` `)
+			}
+			else {
+				out << byte
+			}
+		}
+	}
+	return out.bytestr()
+}
+
+fn json_pretty_newline(mut out []u8, depth int) {
+	out << u8(`\n`)
+	for _ in 0 .. depth * 2 {
+		out << u8(` `)
 	}
 }
 
@@ -164,22 +233,39 @@ fn path_to_json(path ?string) string {
 
 fn stats_to_json(stats Stats) string {
 	duration := stats.elapsed()
-	secs := u64(duration.seconds())
+	secs := u64(duration / time.second)
+	nanos := u32(duration % time.second)
 	human := NiceDuration{
 		duration: duration
 	}.str()
-	return '{"elapsed":{"secs":${secs},"nanos":0,"human":${json_quote(human)}},"searches":${stats.searches()},"searches_with_match":${stats.searches_with_match()},"bytes_searched":${stats.bytes_searched()},"bytes_printed":${stats.bytes_printed()},"matched_lines":${stats.matched_lines()},"matches":${stats.matches()}}'
+	return '{"elapsed":{"secs":${secs},"nanos":${nanos},"human":${json_quote(human)}},"searches":${stats.searches()},"searches_with_match":${stats.searches_with_match()},"bytes_searched":${stats.bytes_searched()},"bytes_printed":${stats.bytes_printed()},"matched_lines":${stats.matched_lines()},"matches":${stats.matches()}}'
 }
 
 fn json_quote(text string) string {
 	mut out := '"'
 	for byte in text.bytes() {
 		match byte {
-			`"` { out += '\\"' }
-			`\\` { out += '\\\\' }
-			`\n` { out += '\\n' }
-			`\r` { out += '\\r' }
-			`\t` { out += '\\t' }
+			`"` {
+				out += '\\"'
+			}
+			`\\` {
+				out += '\\\\'
+			}
+			`\b` {
+				out += '\\b'
+			}
+			`\f` {
+				out += '\\f'
+			}
+			`\n` {
+				out += '\\n'
+			}
+			`\r` {
+				out += '\\r'
+			}
+			`\t` {
+				out += '\\t'
+			}
 			else {
 				if byte < 0x20 {
 					out += '\\u00${hex_digit(byte >> 4)}${hex_digit(byte & 0x0f)}'
