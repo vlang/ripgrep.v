@@ -3,6 +3,7 @@ module searcher
 import io
 import matcher
 import regex
+import regex.meta as regex_meta
 import strings
 
 const glue_sherlock = 'For the Doctor Watsons of this world, as opposed to the Sherlock
@@ -62,14 +63,8 @@ mut:
 	every_line_is_candidate bool
 }
 
-fn (m &RegexMatcher) clone() RegexMatcher {
-	return RegexMatcher{
-		regex:                   m.regex.clone()
-		line_term:               m.line_term
-		every_line_is_candidate: m.every_line_is_candidate
-	}
-}
-
+// V-specific: the translated regex matcher explicitly releases its owned
+// matcher because that dependency implements `Drop`.
 fn (mut m RegexMatcher) drop() {
 	m.regex.drop()
 }
@@ -77,7 +72,7 @@ fn (mut m RegexMatcher) drop() {
 /// Create a new regex matcher.
 fn RegexMatcher.new(pattern string) RegexMatcher {
 	mut builder := regex.RegexMatcherBuilder.new()
-	builder.multi_line(true)
+	builder.multi_line(true) // permits ^ and $ to match at \n boundaries
 	regex_ := builder.build(pattern) or { panic(err) }
 	return RegexMatcher{
 		regex:                   regex_
@@ -145,6 +140,8 @@ fn (m &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMat
 		if haystack.len == 0 {
 			return matcher.FallibleLineMatchKind.absent()
 		}
+		// Make it interesting and return the last byte in the current
+		// line.
 		mut i := 0
 		for i < haystack.len {
 			if haystack[i] == line_term.as_byte() {
@@ -179,8 +176,8 @@ fn KitchenSink.new() KitchenSink {
 }
 
 /// Return the data written to this sink.
-fn (sink KitchenSink) as_bytes() []u8 {
-	return sink.bytes.clone()
+fn (sink &^a KitchenSink) as_bytes[^a]() &^a []u8 {
+	return &sink.bytes
 }
 
 fn (mut sink KitchenSink) write_str(s string) {
@@ -228,6 +225,8 @@ fn (mut sink KitchenSink) context_break(searcher_ Searcher) !bool {
 	return true
 }
 
+// V-specific implementations of the source `Sink` defaults required by V's
+// sink interface.
 fn (mut sink KitchenSink) binary_data(searcher_ Searcher, binary_byte_offset u64) !bool {
 	_ = searcher_
 	_ = binary_byte_offset
@@ -262,6 +261,8 @@ fn (mut sink KitchenSink) finish(searcher_ Searcher, sink_finish SinkFinish) ! {
 struct SearcherTester {
 	haystack                        string
 	pattern                         string
+	filter                          ?regex_meta.Regex
+	print_labels                    bool
 	expected_no_line_number         ?string
 	expected_with_line_number       ?string
 	expected_slice_no_line_number   ?string
@@ -283,6 +284,8 @@ fn SearcherTester.new(haystack string, pattern string) SearcherTester {
 	return SearcherTester{
 		haystack:        haystack.to_owned()
 		pattern:         pattern.to_owned()
+		filter:          none
+		print_labels:    false
 		by_line:         true
 		multi_line:      true
 		invert_match:    false
@@ -297,7 +300,8 @@ fn SearcherTester.new(haystack string, pattern string) SearcherTester {
 
 /// Execute the test. If the test succeeds, then this returns successfully.
 /// If the test fails, then it panics with an informative message.
-fn (tester SearcherTester) test() {
+fn (tester &SearcherTester) test() {
+	// Check for configuration errors.
 	if tester.expected_no_line_number == none {
 		panic("an 'expected' string with NO line numbers must be given")
 	}
@@ -309,15 +313,54 @@ fn (tester SearcherTester) test() {
 	if configs.len == 0 {
 		panic('test configuration resulted in nothing being tested')
 	}
+	if tester.print_labels {
+		for config in configs {
+			labels := ['reader-${config.label}', 'slice-${config.label}']
+			for label in labels {
+				if tester.include(label) {
+					println(label)
+				} else {
+					println('${label} (ignored)')
+				}
+			}
+		}
+	}
 	for config in configs {
 		label_reader := 'reader-${config.label}'
-		got_reader := config.search_reader(tester.haystack)
-		glue_assert_eq_printed(config.expected_reader, got_reader, label_reader)
+		if tester.include(label_reader) {
+			got_reader := config.search_reader(tester.haystack)
+			glue_assert_eq_printed(config.expected_reader, got_reader, label_reader)
+		}
 
 		label_slice := 'slice-${config.label}'
-		got_slice := config.search_slice(tester.haystack)
-		glue_assert_eq_printed(config.expected_slice, got_slice, label_slice)
+		if tester.include(label_slice) {
+			got_slice := config.search_slice(tester.haystack)
+			glue_assert_eq_printed(config.expected_slice, got_slice, label_slice)
+		}
 	}
+}
+
+/// Set a regex pattern to filter the tests that are run.
+///
+/// By default, no filter is present. When a filter is set, only test
+/// configurations with a label matching the given pattern will be run.
+///
+/// This is often useful when debugging tests, e.g., when you want to do
+/// printf debugging and only want one particular test configuration to
+/// execute.
+fn (mut tester SearcherTester) filter(pattern string) &SearcherTester {
+	tester.filter = regex_meta.compile(pattern) or { panic(err) }
+	return tester
+}
+
+/// When set, the labels for all test configurations are printed before
+/// executing any test.
+///
+/// Note that in order to see these in tests that aren't failing, you'll
+/// want to use `cargo test -- --nocapture`.
+fn (mut tester SearcherTester) print_labels(yes bool) &SearcherTester {
+	tester.print_labels = yes
+	return tester
 }
 
 /// Set the expected search results, without line numbers.
@@ -391,6 +434,14 @@ fn (mut tester SearcherTester) binary_detection(detection BinaryDetection) &Sear
 }
 
 /// Whether to automatically attempt to test the heap limit setting or not.
+///
+/// By default, one of the test configurations includes setting the heap
+/// limit to its minimal value for normal operation, which checks that
+/// everything works even at the extremes. However, in some cases, the heap
+/// limit can (expectedly) alter the output slightly. For example, it can
+/// impact the number of bytes searched when performing binary detection.
+/// For convenience, it can be useful to disable the automatic heap limit
+/// test.
 fn (mut tester SearcherTester) auto_heap_limit(yes bool) &SearcherTester {
 	tester.auto_heap_limit = yes
 	return tester
@@ -425,11 +476,19 @@ fn (mut tester SearcherTester) passthru(yes bool) &SearcherTester {
 }
 
 /// Return the minimum size of a buffer required for a successful search.
-fn (tester SearcherTester) minimal_heap_limit(multi_line bool) usize {
+///
+/// Generally, this corresponds to the maximum length of a line (including
+/// its terminator), but if context settings are enabled, then this must
+/// include the sum of the longest N lines.
+///
+/// Note that this must account for whether the test is using multi line
+/// search or not, since multi line search requires being able to fit the
+/// entire haystack into memory.
+fn (tester &SearcherTester) minimal_heap_limit(multi_line bool) usize {
 	if multi_line {
 		return usize(1 + tester.haystack.len)
 	}
-	mut lines := tester.haystack.split_into_lines()
+	lines := testutil_string_lines(tester.haystack)
 	if tester.before_context == 0 && tester.after_context == 0 {
 		mut max_len := 0
 		for line in lines {
@@ -447,10 +506,18 @@ fn (tester SearcherTester) minimal_heap_limit(multi_line bool) usize {
 	context_count := if tester.passthru {
 		lines.len
 	} else {
+		// Why do we add 2 here? Well, we need to add 1 in order to
+		// have room to search at least one line. We add another
+		// because the implementation will occasionally include
+		// an additional line when handling the context. There's
+		// no particularly good reason, other than keeping the
+		// implementation simple.
 		2 + int(tester.before_context) + int(tester.after_context)
 	}
 	mut sum := 0
 	mut i := 0
+	// We add 1 to each line since `str::lines` doesn't include the
+	// line terminator.
 	for i < context_count && i < lens.len {
 		sum += lens[i] + 1
 		i++
@@ -458,10 +525,42 @@ fn (tester SearcherTester) minimal_heap_limit(multi_line bool) usize {
 	return usize(sum)
 }
 
+/// Returns true if and only if the given label should be included as part
+/// of executing `test`.
+///
+/// Inclusion is determined by the filter specified. If no filter has been
+/// given, then this always returns `true`.
+fn (tester &SearcherTester) include(label string) bool {
+	if tester.filter == none {
+		return true
+	}
+	filter := unsafe { &tester.filter? }
+	return filter.find(label) != none
+}
+
+// V-specific equivalent of Rust's `str::lines`, which recognizes `\n` and
+// `\r\n` terminators but does not treat a bare `\r` as a line boundary.
+fn testutil_string_lines(text string) []string {
+	if text == '' {
+		return []string{}
+	}
+	mut lines := text.split('\n')
+	ends_with_line_feed := text.ends_with('\n')
+	if ends_with_line_feed {
+		lines.pop()
+	}
+	for i, line in lines {
+		if (i + 1 < lines.len || ends_with_line_feed) && line.ends_with('\r') {
+			lines[i] = line[..line.len - 1]
+		}
+	}
+	return lines
+}
+
 /// Configs generates a set of all search configurations that should be
 /// tested. The configs generated are based on the configuration in this
 /// builder.
-fn (tester SearcherTester) configs() []TesterConfig {
+fn (tester &SearcherTester) configs() []TesterConfig {
 	mut configs := []TesterConfig{}
 	matcher_base := RegexMatcher.new(tester.pattern)
 	mut builder_base := SearcherBuilder.new()
@@ -478,7 +577,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		expected_reader := tester.expected_no_line_number or { panic('missing expected output') }
 		expected_slice := tester.expected_slice_no_line_number or { expected_reader.clone() }
 		configs << TesterConfig{
-			label:           'byline-noterm-nonumber'
+			label:           'byline-noterm-nonumber'.to_owned()
 			expected_reader: expected_reader.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -487,7 +586,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		if tester.auto_heap_limit {
 			builder.heap_limit(tester.minimal_heap_limit(false))
 			configs << TesterConfig{
-				label:           'byline-noterm-nonumber-heaplimit'
+				label:           'byline-noterm-nonumber-heaplimit'.to_owned()
 				expected_reader: expected_reader.clone()
 				expected_slice:  expected_slice.clone()
 				builder:         builder.clone()
@@ -497,7 +596,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		}
 		matcher_.set_line_term(matcher.LineTerminator.byte(`\n`))
 		configs << TesterConfig{
-			label:           'byline-term-nonumber'
+			label:           'byline-term-nonumber'.to_owned()
 			expected_reader: expected_reader.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -505,7 +604,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		}
 		matcher_.every_line_is_candidate(true)
 		configs << TesterConfig{
-			label:           'byline-term-nonumber-candidates'
+			label:           'byline-term-nonumber-candidates'.to_owned()
 			expected_reader: expected_reader.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -519,7 +618,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		expected_slice := tester.expected_slice_with_line_number or { expected_reader.clone() }
 		builder.line_number(true)
 		configs << TesterConfig{
-			label:           'byline-noterm-number'
+			label:           'byline-noterm-number'.to_owned()
 			expected_reader: expected_reader.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -527,7 +626,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		}
 		matcher_.set_line_term(matcher.LineTerminator.byte(`\n`))
 		configs << TesterConfig{
-			label:           'byline-term-number'
+			label:           'byline-term-number'.to_owned()
 			expected_reader: expected_reader.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -535,7 +634,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		}
 		matcher_.every_line_is_candidate(true)
 		configs << TesterConfig{
-			label:           'byline-term-number-candidates'
+			label:           'byline-term-number-candidates'.to_owned()
 			expected_reader: expected_reader.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -548,7 +647,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		expected_slice := tester.expected_slice_no_line_number or { expected_no_line.clone() }
 		builder.multi_line(true)
 		configs << TesterConfig{
-			label:           'multiline-nonumber'
+			label:           'multiline-nonumber'.to_owned()
 			expected_reader: expected_slice.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -557,7 +656,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		if tester.auto_heap_limit {
 			builder.heap_limit(tester.minimal_heap_limit(true))
 			configs << TesterConfig{
-				label:           'multiline-nonumber-heaplimit'
+				label:           'multiline-nonumber-heaplimit'.to_owned()
 				expected_reader: expected_slice.clone()
 				expected_slice:  expected_slice.clone()
 				builder:         builder.clone()
@@ -573,7 +672,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		builder.multi_line(true)
 		builder.line_number(true)
 		configs << TesterConfig{
-			label:           'multiline-number'
+			label:           'multiline-number'.to_owned()
 			expected_reader: expected_slice.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -581,7 +680,7 @@ fn (tester SearcherTester) configs() []TesterConfig {
 		}
 		builder.heap_limit(tester.minimal_heap_limit(true))
 		configs << TesterConfig{
-			label:           'multiline-number-heaplimit'
+			label:           'multiline-number-heaplimit'.to_owned()
 			expected_reader: expected_slice.clone()
 			expected_slice:  expected_slice.clone()
 			builder:         builder.clone()
@@ -603,7 +702,7 @@ struct TesterConfig {
 /// Execute a search using a reader. This exercises the incremental search
 /// strategy, where the entire contents of the corpus aren't necessarily
 /// in memory at once.
-fn (config TesterConfig) search_reader(haystack string) string {
+fn (config &TesterConfig) search_reader(haystack string) string {
 	mut sink := KitchenSink.new()
 	mut builder := config.builder.clone()
 	mut searcher_ := builder.build()
@@ -612,12 +711,12 @@ fn (config TesterConfig) search_reader(haystack string) string {
 	searcher_.search_reader(matcher_, mut rdr, &sink) or {
 		panic("error running 'reader-${config.label}': ${err.msg()}")
 	}
-	return sink.as_bytes().bytestr()
+	return (*sink.as_bytes()).bytestr()
 }
 
 /// Execute a search using a slice. This exercises the search routines that
 /// have the entire contents of the corpus in memory at one time.
-fn (config TesterConfig) search_slice(haystack string) string {
+fn (config &TesterConfig) search_slice(haystack string) string {
 	mut sink := KitchenSink.new()
 	mut builder := config.builder.clone()
 	mut searcher_ := builder.build()
@@ -625,7 +724,7 @@ fn (config TesterConfig) search_slice(haystack string) string {
 	searcher_.search_slice(matcher_, haystack.bytes(), &sink) or {
 		panic("error running 'slice-${config.label}': ${err.msg()}")
 	}
-	return sink.as_bytes().bytestr()
+	return (*sink.as_bytes()).bytestr()
 }
 
 fn glue_assert_eq_printed(expected string, got string, label string) {
@@ -756,6 +855,23 @@ fn test_searcher_testutil_empty_line6() {
 	glue_assert_match(matcher_.find_at(haystack, 0)!, glue_m(2, 2))
 	glue_assert_match(matcher_.find_at(haystack, 1)!, glue_m(2, 2))
 	glue_assert_match(matcher_.find_at(haystack, 2)!, glue_m(2, 2))
+}
+
+fn test_searcher_testutil_filter_and_print_labels_configuration() {
+	mut tester := SearcherTester.new('haystack', 'pattern')
+	assert tester.include('reader-byline-noterm-nonumber')
+	tester.filter(r'^reader-byline-noterm-nonumber$')
+	assert tester.include('reader-byline-noterm-nonumber')
+	assert !tester.include('slice-byline-noterm-nonumber')
+	tester.print_labels(true)
+	assert tester.print_labels
+}
+
+fn test_searcher_testutil_uses_rust_line_boundaries_for_heap_limits() {
+	assert testutil_string_lines('a\r') == ['a\r']
+	assert testutil_string_lines('a\r\nb\r') == ['a', 'b\r']
+	tester := SearcherTester.new('a\r', 'a')
+	assert tester.minimal_heap_limit(false) == 3
 }
 
 fn test_glue_basic2() {
