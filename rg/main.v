@@ -131,6 +131,7 @@ fn search(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	return search_stream(args, mode)
 }
 
+// V-specific: the Rust iterator remains streaming when no sort was requested.
 fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
 	mut stats := args.stats()
@@ -157,12 +158,6 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 			break
 		}
 	}
-	if err := visitor.err {
-		if cli.is_broken_pipe_error(err) {
-			return visitor.matched
-		}
-		return err
-	}
 	stats = visitor.stats
 	if args.has_implicit_path() && !visitor.searched {
 		eprint_nothing_searched()
@@ -185,7 +180,6 @@ mut:
 	stats    ?printer.Stats
 	matched  bool
 	searched bool
-	err      ?IError
 }
 
 fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.WalkState {
@@ -193,7 +187,6 @@ fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.Walk
 	visitor.searched = true
 	search_result := visitor.searcher.search(&haystack) or {
 		if cli.is_broken_pipe_error(err) {
-			visitor.err = err
 			haystack.free_path_cache()
 			return .quit
 		}
@@ -203,9 +196,8 @@ fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.Walk
 	}
 	visitor.matched = visitor.matched || search_result.has_match()
 	if stats_value := visitor.stats {
-		if result_stats := search_result.stats() {
-			visitor.stats = stats_value + *result_stats
-		}
+		result_stats := search_result.stats() or { panic('stats enabled without search stats') }
+		visitor.stats = stats_value + *result_stats
 	}
 	state := if visitor.matched && visitor.args.quit_after_match() {
 		ignore.WalkState.quit
@@ -216,6 +208,7 @@ fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.Walk
 	return state
 }
 
+// V-specific: Rust's sorting iterator buffers only when sorting was requested.
 fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
 	haystacks := collect_haystacks(args)!
@@ -235,16 +228,15 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		searched = true
 		search_result := searcher.search(&haystack) or {
 			if cli.is_broken_pipe_error(err) {
-				return matched
+				break
 			}
 			core.err_message('${*haystack.path()}: ${err.msg()}')
 			continue
 		}
 		matched = matched || search_result.has_match()
 		if stats_value := stats {
-			if result_stats := search_result.stats() {
-				stats = stats_value + *result_stats
-			}
+			result_stats := search_result.stats() or { panic('stats enabled without search stats') }
+			stats = stats_value + *result_stats
 		}
 		if matched && args.quit_after_match() {
 			break
@@ -263,10 +255,13 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	return matched
 }
 
-/// The top-level entry point for search when multiple threads were requested.
+/// The top-level entry point for multi-threaded search.
 ///
 /// The parallelism is itself achieved by the recursive directory traversal.
 /// All we need to do is feed it a worker for performing a search on each file.
+///
+/// Requesting a sorted output from ripgrep (such as with `--sort path`) will
+/// automatically disable parallelism and hence sorting is not handled here.
 fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	started_at := time.now()
 	bufwtr := args.buffer_writer()
@@ -308,9 +303,6 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	walk.run(mut factory)
 	matched := shared_state.matched.load()
-	if shared_state.output_broken_pipe.load() {
-		return matched
-	}
 	if args.has_implicit_path() && !shared_state.searched.load() {
 		eprint_nothing_searched()
 	}
@@ -378,9 +370,8 @@ fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.Wa
 	}
 	if visitor.state.has_stats {
 		visitor.state.stats_lock.lock()
-		if result_stats := search_result.stats() {
-			visitor.state.stats = visitor.state.stats + *result_stats
-		}
+		result_stats := search_result.stats() or { panic('stats enabled without search stats') }
+		visitor.state.stats = visitor.state.stats + *result_stats
 		visitor.state.stats_lock.unlock()
 	}
 	visitor.state.output_lock.lock()
@@ -437,7 +428,7 @@ fn files(args &flags.HiArgs) !bool {
 		}
 		path_printer.write(haystack.path()) or {
 			if cli.is_broken_pipe_error(err) {
-				return matched
+				break
 			}
 			return err
 		}
@@ -448,8 +439,14 @@ fn files(args &flags.HiArgs) !bool {
 	return matched
 }
 
-/// The top-level entry point for file listing when multiple threads were
-/// requested.
+/// The top-level entry point for multi-threaded file listing without
+/// searching.
+///
+/// This recursively steps through the file list (current directory by default)
+/// and prints each path sequentially using multiple threads.
+///
+/// Requesting a sorted output from ripgrep (such as with `--sort path`) will
+/// automatically disable parallelism and hence sorting is not handled here.
 fn files_parallel(args &flags.HiArgs) !bool {
 	if args.sort_requires_buffering() {
 		return files(args)
@@ -457,7 +454,7 @@ fn files_parallel(args &flags.HiArgs) !bool {
 	stop := stdatomic.new_atomic(false)
 	results := chan FilesParallelResult{cap: parallel_job_queue_capacity}
 	walk := args.walk_builder()!.build_parallel()
-	producer := spawn files_parallel_producer(walk, args.has_implicit_path(),
+	producer := spawn files_parallel_producer(walk, args.haystack_builder(),
 		args.quit_after_match(), results, stop)
 
 	mut matched := false
@@ -479,10 +476,9 @@ fn files_parallel(args &flags.HiArgs) !bool {
 	}
 	producer.wait()
 	if err := output_err {
-		if cli.is_broken_pipe_error(err) {
-			return matched
+		if !cli.is_broken_pipe_error(err) {
+			return err
 		}
-		return err
 	}
 	// Rust flushes the buffered stdout writer when it is dropped and ignores
 	// any error at that point, so the final flush error is ignored here too.
@@ -502,7 +498,7 @@ fn (mut result FilesParallelResult) free() {
 	result.path = ''
 }
 
-fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit_after_match bool, results chan FilesParallelResult, stop &stdatomic.AtomicVal[bool]) bool {
+fn files_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, quit_after_match bool, results chan FilesParallelResult, stop &stdatomic.AtomicVal[bool]) bool {
 	events := chan ignore.WalkParallelStreamResult{cap: parallel_job_queue_capacity}
 	stream := spawn walk_parallel_stream_runner(walk, events, stop)
 	for {
@@ -514,16 +510,7 @@ fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit
 			event.result.free()
 			continue
 		}
-		if event.result.is_error {
-			core.err_message(event.result.err.msg())
-			event.result.free()
-			continue
-		}
-		dent := event.result.entry
-		if err := dent.error() {
-			core.ignore_message(err.msg())
-		}
-		if !files_should_print(&dent) {
+		mut haystack := haystack_builder.build_from_result(event.result) or {
 			event.result.free()
 			continue
 		}
@@ -532,10 +519,12 @@ fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit
 				matched: true
 			}
 			stop.store(true)
+			haystack.free_path_cache()
 			event.result.free()
 			continue
 		}
-		path := files_print_path(&dent, strip_dot_prefix)
+		path := (*haystack.path()).to_owned()
+		haystack.free_path_cache()
 		event.result.free()
 		results <- FilesParallelResult{
 			matched:  true
@@ -553,7 +542,7 @@ fn files_parallel_producer(walk ignore.WalkParallel, strip_dot_prefix bool, quit
 fn files_stream(args &flags.HiArgs) !bool {
 	mut visitor := FilesParallelVisitor{
 		args:             args
-		strip_dot_prefix: args.has_implicit_path()
+		haystack_builder: args.haystack_builder()
 		path_printer:     args.path_printer_builder().build(args.stdout())
 	}
 	mut walk := args.walk_builder()!.build()
@@ -566,10 +555,9 @@ fn files_stream(args &flags.HiArgs) !bool {
 		}
 	}
 	if err := visitor.err {
-		if cli.is_broken_pipe_error(err) {
-			return visitor.matched
+		if !cli.is_broken_pipe_error(err) {
+			return err
 		}
-		return err
 	}
 	// Rust flushes the buffered stdout writer when it is dropped and ignores
 	// any error at that point, so the final flush error is ignored here too.
@@ -579,7 +567,7 @@ fn files_stream(args &flags.HiArgs) !bool {
 
 struct FilesParallelVisitor {
 	args             &flags.HiArgs
-	strip_dot_prefix bool
+	haystack_builder core.HaystackBuilder
 mut:
 	path_printer printer.PathPrinter[cli.StandardStream]
 	matched      bool
@@ -587,53 +575,19 @@ mut:
 }
 
 fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	if result.is_error {
-		core.err_message(result.err.msg())
-		return .continue_
-	}
-	dent := result.entry
-	if err := dent.error() {
-		core.ignore_message(err.msg())
-	}
-	if !files_should_print(&dent) {
-		return .continue_
+	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
+	defer {
+		haystack.free_path_cache()
 	}
 	visitor.matched = true
 	if visitor.args.quit_after_match() {
 		return .quit
 	}
-	visitor.write_path(&dent) or {
+	visitor.path_printer.write(haystack.path()) or {
 		visitor.err = err
 		return .quit
 	}
 	return .continue_
-}
-
-fn (mut visitor FilesParallelVisitor) write_path(dent &ignore.DirEntry) ! {
-	mut path_value := files_print_path(dent, visitor.strip_dot_prefix)
-	defer {
-		unsafe { path_value.free() }
-	}
-	visitor.path_printer.write(&path_value)!
-}
-
-fn files_print_path(dent &ignore.DirEntry, strip_dot_prefix bool) string {
-	path := *dent.path()
-	if strip_dot_prefix && path.starts_with('./') {
-		return path[2..].to_owned()
-	}
-	return path.to_owned()
-}
-
-fn files_should_print(dent &ignore.DirEntry) bool {
-	if dent.is_stdin() {
-		return true
-	}
-	if dent.depth() == 0 && !dent.is_dir() {
-		return true
-	}
-	ft := dent.file_type() or { return false }
-	return ft == .file
 }
 
 /// The top-level entry point for `--type-list`.

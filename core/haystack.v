@@ -171,5 +171,5 @@ fn (hay &Haystack) is_dir() bool {
 /// Returns true if and only if this haystack points to a file.
 fn (hay &Haystack) is_file() bool {
 	ft := hay.dent.file_type() or { return false }
-	return ft == .file
+	return ft == .regular
 }

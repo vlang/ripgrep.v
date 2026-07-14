@@ -40,6 +40,26 @@ fn test_haystack_omits_directory() {
 	}
 }
 
+fn test_haystack_builds_file_discovered_during_walk() {
+	td := haystack_tmpdir()
+	defer {
+		os.rmdir_all(td) or {}
+	}
+	file := os.join_path(td, 'file.txt')
+	os.write_file(file, 'abc') or { panic(err.msg()) }
+	mut walk := ignore.WalkBuilder.new(td).build()
+	root_result := walk.next() or { panic('expected a root walk result') }
+	if _ := HaystackBuilder.new().build_from_result(root_result) {
+		assert false
+	}
+	file_result := walk.next() or { panic('expected a file walk result') }
+	hay := HaystackBuilder.new().build_from_result(file_result) or {
+		panic('expected discovered file haystack')
+	}
+	assert *hay.path() == file
+	assert !hay.is_explicit()
+}
+
 fn test_haystack_strip_dot_prefix() {
 	td := haystack_tmpdir()
 	defer {
