@@ -104,6 +104,10 @@ fn (m LiteralMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	return matcher.FallibleMatch.absent()
 }
 
+fn (m LiteralMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+	return matcher.shortest_match_at(m, haystack, at)
+}
+
 fn (m LiteralMatcher) new_captures() !matcher.NoCaptures {
 	_ = m
 	return matcher.NoCaptures.new()
@@ -143,6 +147,61 @@ fn (m LiteralMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMa
 		return matcher.FallibleLineMatchKind.absent()
 	}
 	return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(mat.end()))
+}
+
+struct ShortestMatchOnlyMatcher {}
+
+fn (m ShortestMatchOnlyMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+	_ = m
+	_ = haystack
+	_ = at
+	return error('search core called find_at instead of shortest_match_at')
+}
+
+fn (m ShortestMatchOnlyMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+	_ = m
+	for i := at; i < haystack.len; i++ {
+		if haystack[i] == `x` {
+			return matcher.FallibleUsize.some(i + 1)
+		}
+	}
+	return matcher.FallibleUsize.absent()
+}
+
+fn (m ShortestMatchOnlyMatcher) new_captures() !matcher.NoCaptures {
+	_ = m
+	return matcher.NoCaptures.new()
+}
+
+fn (m ShortestMatchOnlyMatcher) capture_count() usize {
+	_ = m
+	return matcher.default_capture_count()
+}
+
+fn (m ShortestMatchOnlyMatcher) capture_index(name string) ?usize {
+	_ = m
+	return matcher.default_capture_index(name)
+}
+
+fn (m ShortestMatchOnlyMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+	_ = m
+	return matcher.default_captures_at(haystack, at, mut caps)
+}
+
+fn (m &^a ShortestMatchOnlyMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
+	_ = m
+	return none
+}
+
+fn (m ShortestMatchOnlyMatcher) line_terminator() ?matcher.LineTerminator {
+	_ = m
+	return none
+}
+
+fn (m ShortestMatchOnlyMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+	_ = m
+	_ = haystack
+	return error('slow line search should not request a candidate line')
 }
 
 struct CollectSink {
@@ -246,6 +305,16 @@ fn test_search_slice_reports_line_matches() {
 	]
 	assert sink.finished
 	assert sink.byte_count == u64(text.len)
+}
+
+fn test_search_slice_slow_path_uses_shortest_match() {
+	mut searcher_ := Searcher.new()
+	mut sink := CollectSink{}
+	searcher_.search_slice(ShortestMatchOnlyMatcher{}, 'x\n'.bytes(), &sink)!
+
+	assert sink.matches == [
+		'1:0:x\n',
+	]
 }
 
 fn test_search_slice_invert_and_context() {

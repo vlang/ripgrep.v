@@ -661,6 +661,10 @@ pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLi
 	return matcher.default_find_candidate_line(re, haystack)
 }
 
+pub fn (re &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+	return matcher.shortest_match_at(re, haystack, at)
+}
+
 /// A borrowed matcher adapter for APIs that currently use V interface values.
 ///
 /// The interface contains this pointer-only adapter instead of copying the
@@ -677,6 +681,10 @@ pub fn RegexMatcherRef.new[^a](re &^a RegexMatcher) RegexMatcherRef[^a] {
 
 pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.FallibleMatch {
 	return re.re.find_at(haystack, at)
+}
+
+pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack []u8, at usize) !matcher.FallibleUsize {
+	return re.re.shortest_match_at(haystack, at)
 }
 
 pub fn (re RegexMatcherRef[^a]) new_captures[^a]() !matcher.NoCaptures {

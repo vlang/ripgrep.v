@@ -3,6 +3,7 @@ module searcher
 import encoding.iconv
 import encoding.utf8.validate
 import io
+import log
 import matcher
 import os
 
@@ -3606,6 +3607,8 @@ enum FastMatchResult {
 }
 
 struct Core[^s] {
+	// V-specific: interfaces replace the Rust matcher's and sink's generic
+	// parameters while preserving the same owned values.
 	config   &^s Config
 	matcher_ matcher.Matcher
 	searcher &^s Searcher
@@ -3629,7 +3632,7 @@ fn Core.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, sink Sink, bina
 	if searcher.config.line_number {
 		line_number = u64(1)
 	}
-	return Core[^s]{
+	core := Core[^s]{
 		config:      &searcher.config
 		matcher_:    matcher_
 		searcher:    searcher
@@ -3637,9 +3640,19 @@ fn Core.new[^s](searcher &^s Searcher, matcher_ matcher.Matcher, sink Sink, bina
 		binary:      binary
 		line_number: line_number
 	}
+	if !core.searcher.multi_line_with_matcher(&core.matcher_) {
+		// V-specific: V's standard logger has no trace level, so Rust trace
+		// records use its least verbose level, debug.
+		if core.is_line_by_line_fast() {
+			log.debug('searcher core: will use fast line searcher')
+		} else {
+			log.debug('searcher core: will use slow line searcher')
+		}
+	}
+	return core
 }
 
-fn (core Core[^s]) pos[^s]() usize {
+fn (core &Core[^s]) pos[^s]() usize {
 	return core.pos
 }
 
@@ -3647,7 +3660,7 @@ fn (mut core Core[^s]) set_pos[^s](pos usize) {
 	core.pos = pos
 }
 
-fn (core Core[^s]) count[^s]() u64 {
+fn (core &Core[^s]) count[^s]() u64 {
 	return core.count_
 }
 
@@ -3655,11 +3668,15 @@ fn (mut core Core[^s]) increment_count[^s]() {
 	core.count_++
 }
 
-fn (core Core[^s]) binary_byte_offset[^s]() ?u64 {
+fn (core &Core[^s]) binary_byte_offset[^s]() ?u64 {
 	if offset := core.binary_byte_offset_ {
 		return u64(offset)
 	}
 	return none
+}
+
+fn (core &^a Core[^s]) matcher[^a, ^s]() &^a matcher.Matcher {
+	return &core.matcher_
 }
 
 fn (mut core Core[^s]) matched[^s](buf []u8, range matcher.Match) !bool {
@@ -3670,21 +3687,25 @@ fn (mut core Core[^s]) binary_data[^s](binary_byte_offset u64) !bool {
 	return core.sink.binary_data(core.searcher, binary_byte_offset)!
 }
 
-fn (mut core Core[^s]) is_match[^s](line []u8) !bool {
+fn (core &Core[^s]) is_match[^s](line []u8) !bool {
 	// We need to strip the line terminator here to match the
 	// semantics of line-by-line searching. Namely, regexes
 	// like `(?m)^$` can match at the final position beyond a
 	// line terminator, which is non-sensical in line oriented
 	// matching.
 	line_without_term := without_terminator(line, core.config.line_term)
-	return core.matcher_.find_at(line_without_term, 0)!.is_some()
+	shortest := core.matcher_.shortest_match_at(line_without_term, 0)!
+	if _ := shortest.get() {
+		return true
+	}
+	return false
 }
 
 fn (mut core Core[^s]) find[^s](slice []u8) !matcher.FallibleMatch {
 	if core.has_exceeded_match_limit() {
 		return matcher.FallibleMatch.absent()
 	}
-	maybe_match := core.matcher_.find_at(slice, 0)!
+	maybe_match := core.matcher().find_at(slice, 0)!
 	if mat := maybe_match.get() {
 		core.increment_count()
 		return matcher.FallibleMatch.some(mat)
@@ -3696,11 +3717,7 @@ fn (mut core Core[^s]) shortest_match[^s](slice []u8) !matcher.FallibleUsize {
 	if core.has_exceeded_match_limit() {
 		return matcher.FallibleUsize.absent()
 	}
-	maybe_match := core.matcher_.find_at(slice, 0)!
-	if mat := maybe_match.get() {
-		return matcher.FallibleUsize.some(mat.end())
-	}
-	return matcher.FallibleUsize.absent()
+	return core.matcher_.shortest_match_at(slice, 0)!
 }
 
 fn (mut core Core[^s]) begin[^s]() !bool {
@@ -3847,6 +3864,9 @@ fn (mut core Core[^s]) other_context_by_line[^s](buf []u8, upto usize) !bool {
 }
 
 fn (mut core Core[^s]) match_by_line_slow[^s](buf []u8) !bool {
+	$if debug {
+		assert !core.searcher.multi_line_with_matcher(&core.matcher_)
+	}
 	range := matcher.Match.new(core.pos(), buf.len)
 	mut stepper := LineStep.new(core.config.line_term.as_byte(), range.start(), range.end())
 	for {
@@ -3892,6 +3912,9 @@ fn (mut core Core[^s]) match_by_line_slow[^s](buf []u8) !bool {
 }
 
 fn (mut core Core[^s]) match_by_line_fast[^s](buf []u8) !FastMatchResult {
+	$if debug {
+		assert !core.config.passthru
+	}
 	for core.pos() < buf.len {
 		if core.config.stop_on_nonmatch && core.has_matched {
 			return .switch_to_slow
@@ -3932,7 +3955,10 @@ fn (mut core Core[^s]) match_by_line_fast[^s](buf []u8) !FastMatchResult {
 	return .continue_search
 }
 
+@[inline]
 fn (mut core Core[^s]) match_by_line_fast_invert[^s](buf []u8) !bool {
+	assert core.config.invert_match
+
 	maybe_line := core.find_by_line_fast(buf)!
 	invert_match := if line := maybe_line.get() {
 		range := matcher.Match.new(core.pos(), line.start())
@@ -3967,7 +3993,12 @@ fn (mut core Core[^s]) match_by_line_fast_invert[^s](buf []u8) !bool {
 	return true
 }
 
+@[inline]
 fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
+	$if debug {
+		assert !core.searcher.multi_line_with_matcher(&core.matcher_)
+		assert core.is_line_by_line_fast()
+	}
 	mut pos := core.pos()
 	for pos < buf.len {
 		if core.has_exceeded_match_limit() {
@@ -3996,6 +4027,7 @@ fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
 	return matcher.FallibleMatch.absent()
 }
 
+@[inline]
 fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
 	if core.binary && core.detect_binary(buf, range)! {
 		return false
@@ -4095,7 +4127,10 @@ fn (mut core Core[^s]) count_lines[^s](buf []u8, upto usize) {
 	}
 }
 
-fn (core Core[^s]) is_line_by_line_fast[^s]() bool {
+fn (core &Core[^s]) is_line_by_line_fast[^s]() bool {
+	$if debug {
+		assert !core.searcher.multi_line_with_matcher(&core.matcher_)
+	}
 	if core.config.passthru {
 		return false
 	}
@@ -4130,7 +4165,7 @@ fn (core Core[^s]) is_line_by_line_fast[^s]() bool {
 	return false
 }
 
-fn (core Core[^s]) has_exceeded_match_limit[^s]() bool {
+fn (core &Core[^s]) has_exceeded_match_limit[^s]() bool {
 	if limit := core.config.max_matches {
 		return core.count() >= limit
 	}

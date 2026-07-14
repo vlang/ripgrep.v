@@ -66,6 +66,13 @@ fn (pm &PrinterMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch 
 	}
 }
 
+fn (pm &PrinterMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+	return match pm.kind {
+		.rust_regex { pm.regex.shortest_match_at(haystack, at)! }
+		.pcre2 { pm.pcre2.shortest_match_at(haystack, at)! }
+	}
+}
+
 fn (pm &PrinterMatcher) new_captures() !matcher.NoCaptures {
 	// V-specific: the Matcher interface cannot express the capture type of
 	// either printer backend. Replacement uses `capture_groups_at` below.

@@ -639,6 +639,25 @@ pub interface Matcher {
 	/// context into consideration. For example, the `\A` anchor can only
 	/// match when `at == 0`.
 	find_at(haystack []u8, at usize) !FallibleMatch
+	/// Returns an end location of the first match in `haystack` starting at
+	/// the given position. If no match exists, then `none` is returned.
+	///
+	/// Note that the end location reported by this method may be less than the
+	/// same end location reported by `find`. For example, running `find` with
+	/// the pattern `a+` on the haystack `aaa` should report a range of `[0,
+	/// 3)`, but `shortest_match` may report `1` as the ending location since
+	/// that is the place at which a match is guaranteed to occur.
+	///
+	/// This method should never report false positives or false negatives. The
+	/// point of this method is that some implementors may be able to provide
+	/// a faster implementation of this than what `find` does.
+	///
+	/// By default, this method is implemented by calling `find_at`.
+	///
+	/// The significance of the starting point is that it takes the surrounding
+	/// context into consideration. For example, the `\A` anchor can only
+	/// match when `at == 0`.
+	shortest_match_at(haystack []u8, at usize) !FallibleUsize
 	/// Creates an empty group of captures suitable for use with the capturing
 	/// APIs of this interface.
 	///

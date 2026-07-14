@@ -101,6 +101,10 @@ fn (m &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	return m.regex.find_at(haystack, at)!
 }
 
+fn (m &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+	return m.regex.shortest_match_at(haystack, at)!
+}
+
 fn (m &RegexMatcher) new_captures() !matcher.NoCaptures {
 	_ = m
 	return matcher.NoCaptures.new()

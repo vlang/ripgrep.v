@@ -761,6 +761,10 @@ pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.Fa
 	return re.re.find_at(haystack, at)
 }
 
+pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack []u8, at usize) !matcher.FallibleUsize {
+	return re.re.shortest_match_at(haystack, at)
+}
+
 pub fn (re RegexMatcherRef[^a]) new_captures[^a]() !matcher.NoCaptures {
 	return matcher.NoCaptures.new()
 }
