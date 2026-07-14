@@ -76,17 +76,17 @@ enum BinaryDetectionKind {
 	convert
 }
 
-/// Binary detection is the process of heuristically identifying whether a
-/// particular portion of data is binary or not.
+/// The behavior of binary detection while searching.
 ///
-/// Binary detection generally works by indicating that a particular byte in
-/// a search should be treated as a binary byte.
+/// Binary detection is the process of _heuristically_ identifying whether a
+/// given chunk of data is binary or not, and then taking an action based on
+/// the result of that heuristic. The motivation behind detecting binary data
+/// is that binary data often indicates data that is undesirable to search
+/// using textual patterns. Of course, there are many cases in which this isn't
+/// true, which is why binary detection is disabled by default.
 ///
-/// When binary detection is enabled and binary data is found, then the
-/// search will either halt (as if it reached EOF) or convert the binary
-/// byte to a line terminator.
-///
-/// Binary detection is performed in one of two ways:
+/// Unfortunately, binary detection works differently depending on the type of
+/// search being executed:
 ///
 /// 1. When performing a search using a fixed size buffer, binary detection is
 ///    applied to the buffer's contents as it is filled. Binary detection must
@@ -541,22 +541,16 @@ pub struct Config implements IClone {
 	max_matches ?u64
 }
 
-pub fn (config Config) clone() Config {
+fn Config.default() Config {
 	return Config{
-		line_term:        config.line_term
-		invert_match:     config.invert_match
-		after_context:    config.after_context
-		before_context:   config.before_context
-		passthru:         config.passthru
-		line_number:      config.line_number
-		heap_limit:       config.heap_limit
-		mmap:             config.mmap
-		binary:           config.binary
-		multi_line:       config.multi_line
-		encoding:         config.encoding
-		bom_sniffing:     config.bom_sniffing
-		stop_on_nonmatch: config.stop_on_nonmatch
-		max_matches:      config.max_matches
+		line_term:    matcher.LineTerminator.default()
+		line_number:  true
+		mmap:         MmapChoice{
+			kind: .never
+		}
+		bom_sniffing: true
+		heap_limit:   none
+		max_matches:  none
 	}
 }
 
@@ -607,6 +601,7 @@ pub fn ConfigError.unknown_encoding(label []u8) ConfigError {
 	}
 }
 
+// V-specific: `msg` formats this configuration error for `IError`.
 pub fn (err ConfigError) msg() string {
 	return match err.kind {
 		.search_unavailable {
@@ -616,11 +611,12 @@ pub fn (err ConfigError) msg() string {
 			'grep config error: mismatched line terminators, matcher has ${err.matcher_line_term} but searcher has ${err.searcher_line_term}'
 		}
 		.unknown_encoding {
-			'grep config error: unknown encoding: ${err.label.bytestr()}'
+			'grep config error: unknown encoding: ${lossy_utf8_string(err.label)}'
 		}
 	}
 }
 
+// V-specific: configuration errors do not use distinct V error codes.
 pub fn (err ConfigError) code() int {
 	_ = err
 	return 0
@@ -630,7 +626,7 @@ pub fn (err ConfigError) code() int {
 /// context.
 ///
 /// If this returns `0`, then no context is ever needed.
-fn (config Config) max_context() usize {
+fn (config &Config) max_context() usize {
 	return if config.before_context > config.after_context {
 		config.before_context
 	} else {
@@ -639,7 +635,7 @@ fn (config Config) max_context() usize {
 }
 
 /// Build a line buffer from this configuration.
-fn (config Config) line_buffer() LineBuffer {
+fn (config &Config) line_buffer() LineBuffer {
 	mut builder := LineBufferBuilder.new()
 	builder.line_terminator(config.line_term.as_byte())
 	builder.binary_detection(config.binary)
@@ -676,21 +672,12 @@ mut:
 /// Create a new searcher builder with a default configuration.
 pub fn SearcherBuilder.new() SearcherBuilder {
 	return SearcherBuilder{
-		config: Config{
-			line_term:    matcher.LineTerminator.default()
-			line_number:  true
-			mmap:         MmapChoice{
-				kind: .never
-			}
-			bom_sniffing: true
-			heap_limit:   none
-			max_matches:  none
-		}
+		config: Config.default()
 	}
 }
 
 /// Build a searcher with the given matcher.
-pub fn (builder SearcherBuilder) build() Searcher {
+pub fn (builder &SearcherBuilder) build() Searcher {
 	mut config := builder.config.clone()
 	if config.passthru {
 		config.before_context = 0
@@ -818,6 +805,35 @@ pub fn (mut builder SearcherBuilder) heap_limit(bytes ?usize) &SearcherBuilder {
 }
 
 /// Set the strategy to employ use of memory maps.
+///
+/// Currently, there are only two strategies that can be employed:
+///
+/// * **Automatic** - A searcher will use heuristics, including but not
+///   limited to file size and platform, to determine whether to use memory
+///   maps or not.
+/// * **Never** - Memory maps will never be used. If multi line search is
+///   enabled, then the entire contents will be read on to the heap before
+///   searching begins.
+///
+/// The default behavior is **never**. Generally speaking, and perhaps
+/// against conventional wisdom, memory maps don't necessarily enable
+/// faster searching. For example, depending on the platform, using memory
+/// maps while searching a large directory can actually be quite a bit
+/// slower than using normal read calls because of the overhead of managing
+/// the memory maps.
+///
+/// Memory maps can be faster in some cases however. On some platforms,
+/// when searching a very large file that *is already in memory*, it can
+/// be slightly faster to search it as a memory map instead of using
+/// normal read calls.
+///
+/// Finally, memory maps have a somewhat complicated safety story in Rust.
+/// If you aren't sure whether enabling memory maps is worth it, then just
+/// don't bother with it.
+///
+/// **WARNING**: If your process is searching a file backed memory map
+/// at the same time that file is truncated, then it's possible for the
+/// process to terminate with a bus error.
 pub fn (mut builder SearcherBuilder) memory_map(strategy MmapChoice) &SearcherBuilder {
 	builder.config.mmap = strategy
 	return builder
@@ -836,6 +852,20 @@ pub fn (mut builder SearcherBuilder) binary_detection(detection BinaryDetection)
 }
 
 /// Set the encoding used to read the source data before searching.
+///
+/// When an encoding is provided, then the source data is _unconditionally_
+/// transcoded using the encoding, unless a BOM is present. If a BOM is
+/// present, then the encoding indicated by the BOM is used instead. If the
+/// transcoding process encounters an error, then bytes are replaced with
+/// the Unicode replacement codepoint.
+///
+/// When no encoding is specified (the default), then BOM sniffing is
+/// used (if it's enabled, which it is, by default) to determine whether
+/// the source data is UTF-8 or UTF-16, and transcoding will be performed
+/// automatically. If no BOM could be found, then the source data is
+/// searched _as if_ it were UTF-8. However, so long as the source data is
+/// at least ASCII compatible, then it is possible for a search to produce
+/// useful results.
 pub fn (mut builder SearcherBuilder) encoding(encoding ?Encoding) &SearcherBuilder {
 	builder.config.encoding = encoding
 	return builder
@@ -911,33 +941,12 @@ mut:
 	multi_line_buffer []u8
 }
 
+/// Create a new searcher with a default configuration.
+///
+/// To configure the searcher (e.g., invert matching, enable memory maps,
+/// enable contexts, etc.), use the [`SearcherBuilder`].
 pub fn Searcher.new() Searcher {
-	config := Config{
-		line_term:    matcher.LineTerminator.default()
-		line_number:  true
-		mmap:         MmapChoice{
-			kind: .never
-		}
-		bom_sniffing: true
-		heap_limit:   none
-		max_matches:  none
-	}
-	line_buffer := LineBuffer{
-		config: LineBufferConfig{
-			capacity:     usize(default_buffer_capacity)
-			lineterm:     config.line_term.as_byte()
-			buffer_alloc: BufferAllocation{
-				kind: .eager
-			}
-			binary:       config.binary
-		}
-		buf:    []u8{len: int(default_buffer_capacity)}
-	}
-	return Searcher{
-		config:            config
-		line_buffer:       line_buffer
-		multi_line_buffer: []u8{}
-	}
+	return SearcherBuilder.new().build()
 }
 
 // V-specific: release reusable search buffers when a worker is retired.
@@ -950,21 +959,26 @@ pub fn (mut s Searcher) free() {
 	s.multi_line_buffer = []u8{}
 }
 
-pub fn (s Searcher) multi_line_with_matcher(matcher_ &matcher.Matcher) bool {
-	if !s.multi_line() {
-		return false
+// V-specific: adapt a borrowed byte slice to `io.Reader` for transcoding.
+struct SearchSliceReader[^a] {
+	bytes &^a []u8
+mut:
+	pos int
+}
+
+fn SearchSliceReader.new[^a](slice &^a []u8) SearchSliceReader[^a] {
+	return SearchSliceReader[^a]{
+		bytes: slice
 	}
-	if line_term := matcher_.line_terminator() {
-		if line_term.equals(s.line_terminator()) {
-			return false
-		}
+}
+
+fn (mut rdr SearchSliceReader[^a]) read[^a](mut buf []u8) !int {
+	if rdr.pos >= rdr.bytes.len {
+		return io.Eof{}
 	}
-	if non_matching := matcher_.non_matching_bytes() {
-		if matcher.byte_set_contains(non_matching, s.line_terminator().as_byte()) {
-			return false
-		}
-	}
-	return true
+	nread := copy(mut buf, rdr.bytes[rdr.pos..])
+	rdr.pos += nread
+	return nread
 }
 
 /// Execute a search over the file with the given path and write the
@@ -1004,7 +1018,7 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file o
 	s.check_config(matcher_)!
 	mut needs_transcoding := false
 	if !s.multi_line_with_matcher(matcher_) {
-		needs_transcoding = file_needs_transcoding(s.config, mut file, path, has_path)
+		needs_transcoding = file_needs_transcoding(&s.config, mut file, path, has_path)
 	}
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_file(mut file, path, has_path)!
@@ -1012,7 +1026,7 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file o
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if needs_transcoding {
-		mut decoded := TranscodingReader.new(&file, s.config)
+		mut decoded := TranscodingReader.new(&file, &s.config)
 		defer {
 			decoded.close()
 		}
@@ -1029,6 +1043,15 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &matcher.Matcher, mut file o
 
 /// Execute a search over any implementation of `std::io::Read` and write
 /// the results to the given sink.
+///
+/// When possible, this implementation will search the reader incrementally
+/// without reading it into memory. In some cases---for example, if multi
+/// line search is enabled---an incremental search isn't possible and the
+/// given reader is consumed completely and placed on the heap before
+/// searching begins. For this reason, when multi line search is enabled,
+/// one should try to use higher level APIs (e.g., searching by file or
+/// file path) so that memory maps can be used if they are available and
+/// enabled.
 pub fn (mut s Searcher) search_reader(matcher_ &matcher.Matcher, mut read_from io.Reader, write_to Sink) ! {
 	s.check_config(matcher_)!
 
@@ -1038,7 +1061,7 @@ pub fn (mut s Searcher) search_reader(matcher_ &matcher.Matcher, mut read_from i
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if s.config.encoding != none || s.config.bom_sniffing {
-		mut decoded := TranscodingReader.new(&read_from, s.config)
+		mut decoded := TranscodingReader.new(&read_from, &s.config)
 		defer {
 			decoded.close()
 		}
@@ -1059,17 +1082,8 @@ pub fn (mut s Searcher) search_slice(matcher_ &matcher.Matcher, slice []u8, writ
 
 	// We can search the slice directly, unless we need to do transcoding.
 	if s.slice_needs_transcoding(slice) {
-		transcoded := s.transcode_slice(slice)!
-		if s.multi_line_with_matcher(matcher_) {
-				mut search := MultiLine.new(s, matcher_ref_value(matcher_), &transcoded,
-					sink_ref_value(&write_to))
-			search.run()!
-		} else {
-				mut search := SliceByLine.new(s, matcher_ref_value(matcher_), &transcoded,
-					sink_ref_value(&write_to))
-			search.run()!
-		}
-		return
+		mut read_from := SearchSliceReader.new(&slice)
+		return s.search_reader(matcher_, mut read_from, write_to)
 	}
 	if s.multi_line_with_matcher(matcher_) {
 			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &slice, sink_ref_value(&write_to))
@@ -1083,7 +1097,7 @@ pub fn (mut s Searcher) search_slice(matcher_ &matcher.Matcher, slice []u8, writ
 
 /// Check that the searcher's configuration and the matcher are consistent
 /// with each other.
-fn (s Searcher) check_config(matcher_ &matcher.Matcher) ! {
+fn (s &Searcher) check_config(matcher_ &matcher.Matcher) ! {
 	if limit := s.config.heap_limit {
 		if limit == 0 && !s.config.mmap.is_enabled() {
 			return ConfigError.search_unavailable()
@@ -1098,11 +1112,11 @@ fn (s Searcher) check_config(matcher_ &matcher.Matcher) ! {
 }
 
 /// Returns true if and only if the given slice needs to be transcoded.
-fn (s Searcher) slice_needs_transcoding(slice []u8) bool {
+fn (s &Searcher) slice_needs_transcoding(slice []u8) bool {
 	return s.config.encoding != none || (s.config.bom_sniffing && slice_has_bom(slice))
 }
 
-fn file_needs_transcoding(config Config, mut file os.File, path string, has_path bool) bool {
+fn file_needs_transcoding(config &Config, mut file os.File, path string, has_path bool) bool {
 	if config.encoding != none {
 		return true
 	}
@@ -1155,11 +1169,11 @@ fn file_has_bom_at(mut file os.File, pos i64) bool {
 	}
 }
 
-fn (s Searcher) transcode_slice(slice []u8) ![]u8 {
-	return transcode_slice_with_config(s.config, slice)
+fn (s &Searcher) transcode_slice(slice []u8) ![]u8 {
+	return transcode_slice_with_config(&s.config, slice)
 }
 
-fn transcode_slice_with_config(config Config, slice []u8) ![]u8 {
+fn transcode_slice_with_config(config &Config, slice []u8) ![]u8 {
 	if config.bom_sniffing {
 		if slice_has_utf8_bom(slice) {
 			return decode_utf8_lossy(slice[3..], true).bytes
@@ -1218,26 +1232,6 @@ fn decode_iconv(slice []u8, label string) ![]u8 {
 	}
 }
 
-fn (mut s Searcher) fill_transcoded_buffer_from_file(mut file os.File, path string, has_path bool) ! {
-	if s.config.heap_limit != none {
-		s.fill_transcoded_buffer_from_reader(mut file)!
-		return
-	}
-	capacity := mmap_file_size(mut file, path, has_path) or { usize(0) }
-	s.multi_line_buffer = []u8{cap: int(capacity + 1)}
-	s.read_all_into_multi_line_buffer(mut file)!
-}
-
-fn (mut s Searcher) fill_transcoded_buffer_from_reader(mut read_from io.Reader) ! {
-	s.multi_line_buffer = []u8{}
-	if limit := s.config.heap_limit {
-		if limit == 0 {
-			return alloc_error(limit)
-		}
-	}
-	s.read_all_into_multi_line_buffer(mut read_from)!
-}
-
 struct TranscodingReader[^r] {
 mut:
 	rdr         &^r io.Reader
@@ -1254,10 +1248,10 @@ mut:
 	finished    bool
 }
 
-fn TranscodingReader.new[^r](rdr &^r io.Reader, config Config) TranscodingReader[^r] {
+fn TranscodingReader.new[^r](rdr &^r io.Reader, config &Config) TranscodingReader[^r] {
 	return TranscodingReader[^r]{
 		rdr:    rdr
-		config: config
+		config: config.clone()
 	}
 }
 
@@ -1328,7 +1322,7 @@ fn (mut rdr TranscodingReader[^r]) initialize[^r]() ! {
 			else {
 				mut raw := prefix.clone()
 				read_to_end(mut rdr.rdr, mut raw)!
-				rdr.pending = transcode_slice_with_config(rdr.config, raw)!
+				rdr.pending = transcode_slice_with_config(&rdr.config, raw)!
 			}
 		}
 		return
@@ -2502,14 +2496,19 @@ fn append_utf8(mut bytes []u8, codepoint u32) {
 /// contents exceed the configured heap limit, then an error is returned.
 fn (mut s Searcher) fill_multi_line_buffer_from_file(mut file os.File, path string, has_path bool) ! {
 	assert s.config.multi_line
+	mut read_from := TranscodingReader.new(&file, &s.config)
+	defer {
+		read_from.close()
+	}
 
 	if s.config.heap_limit != none {
-		s.fill_multi_line_buffer_from_reader(mut file)!
+		s.multi_line_buffer = []u8{}
+		s.read_all_into_multi_line_buffer(mut read_from)!
 		return
 	}
 	capacity := mmap_file_size(mut file, path, has_path) or { usize(0) }
 	s.multi_line_buffer = []u8{cap: int(capacity + 1)}
-	s.read_all_into_multi_line_buffer(mut file)!
+	s.read_all_into_multi_line_buffer(mut read_from)!
 }
 
 /// Fill the buffer for use with multi-line searching from the given
@@ -2518,6 +2517,10 @@ fn (mut s Searcher) fill_multi_line_buffer_from_file(mut file os.File, path stri
 /// returned.
 fn (mut s Searcher) fill_multi_line_buffer_from_reader(mut read_from io.Reader) ! {
 	assert s.config.multi_line
+	mut decoded := TranscodingReader.new(&read_from, &s.config)
+	defer {
+		decoded.close()
+	}
 
 	s.multi_line_buffer = []u8{}
 	if limit := s.config.heap_limit {
@@ -2525,7 +2528,7 @@ fn (mut s Searcher) fill_multi_line_buffer_from_reader(mut read_from io.Reader) 
 			return alloc_error(limit)
 		}
 	}
-	s.read_all_into_multi_line_buffer(mut read_from)!
+	s.read_all_into_multi_line_buffer(mut decoded)!
 }
 
 fn (mut s Searcher) read_all_into_multi_line_buffer(mut read_from io.Reader) ! {
@@ -2547,66 +2550,123 @@ fn (mut s Searcher) read_all_into_multi_line_buffer(mut read_from io.Reader) ! {
 		}
 		s.multi_line_buffer << scratch[..nread]
 	}
-	if s.slice_needs_transcoding(s.multi_line_buffer) {
-		transcoded := s.transcode_slice(s.multi_line_buffer)!
-		s.multi_line_buffer = transcoded
-	}
 }
 
-pub fn (s Searcher) line_terminator() matcher.LineTerminator {
+/// The following methods permit querying the configuration of a searcher.
+/// These can be useful in generic implementations of [`Sink`], where the
+/// output may be tailored based on how the searcher is configured.
+
+/// Returns the line terminator used by this searcher.
+pub fn (s &Searcher) line_terminator() matcher.LineTerminator {
 	return s.config.line_term
 }
 
-pub fn (s Searcher) binary_detection() BinaryDetection {
-	return s.config.binary
+/// Returns the type of binary detection configured on this searcher.
+pub fn (s &^a Searcher) binary_detection[^a]() &^a BinaryDetection {
+	return &s.config.binary
 }
 
-pub fn (s Searcher) invert_match() bool {
+/// Returns true if and only if this searcher is configured to invert its
+/// search results. That is, matching lines are lines that do **not** match
+/// the searcher's matcher.
+pub fn (s &Searcher) invert_match() bool {
 	return s.config.invert_match
 }
 
-pub fn (s Searcher) line_number() bool {
+/// Returns true if and only if this searcher is configured to count line
+/// numbers.
+pub fn (s &Searcher) line_number() bool {
 	return s.config.line_number
 }
 
-pub fn (s Searcher) multi_line() bool {
+/// Returns true if and only if this searcher is configured to perform
+/// multi line search.
+pub fn (s &Searcher) multi_line() bool {
 	return s.config.multi_line
 }
 
-pub fn (s Searcher) stop_on_nonmatch() bool {
+/// Returns true if and only if this searcher is configured to stop when it
+/// finds a non-matching line after a matching one.
+pub fn (s &Searcher) stop_on_nonmatch() bool {
 	return s.config.stop_on_nonmatch
 }
 
-pub fn (s Searcher) max_matches() ?u64 {
+/// Returns the maximum number of matches emitted by this searcher, if
+/// such a limit was set.
+///
+/// If multi line search is enabled and a match spans multiple lines, then
+/// that match is counted exactly once for the purposes of enforcing this
+/// limit, regardless of how many lines it spans.
+///
+/// Note that `0` is a legal value. This will cause the searcher to
+/// immediately quick without searching anything.
+pub fn (s &Searcher) max_matches() ?u64 {
 	return s.config.max_matches
 }
 
-pub fn (s Searcher) after_context() usize {
+/// Returns true if and only if this searcher will choose a multi-line
+/// strategy given the provided matcher.
+///
+/// This may diverge from the result of `multi_line` in cases where the
+/// searcher has been configured to execute a search that can report
+/// matches over multiple lines, but where the matcher guarantees that it
+/// will never produce a match over multiple lines.
+pub fn (s &Searcher) multi_line_with_matcher(matcher_ &matcher.Matcher) bool {
+	if !s.multi_line() {
+		return false
+	}
+	if line_term := matcher_.line_terminator() {
+		if line_term.equals(s.line_terminator()) {
+			return false
+		}
+	}
+	if non_matching := matcher_.non_matching_bytes() {
+		// If the line terminator is CRLF, we don't actually need to care
+		// whether the regex can match `\r` or not. Namely, a `\r` is
+		// neither necessary nor sufficient to terminate a line. A `\n` is
+		// always required.
+		if matcher.byte_set_contains(non_matching, s.line_terminator().as_byte()) {
+			return false
+		}
+	}
+	return true
+}
+
+/// Returns the number of "after" context lines to report. When context
+/// reporting is not enabled, this returns `0`.
+pub fn (s &Searcher) after_context() usize {
 	return s.config.after_context
 }
 
-pub fn (s Searcher) before_context() usize {
+/// Returns the number of "before" context lines to report. When context
+/// reporting is not enabled, this returns `0`.
+pub fn (s &Searcher) before_context() usize {
 	return s.config.before_context
 }
 
-pub fn (s Searcher) passthru() bool {
+/// Returns true if and only if the searcher has "passthru" mode enabled.
+pub fn (s &Searcher) passthru() bool {
 	return s.config.passthru
 }
 
+// V-specific: update multi-line mode on an existing searcher.
 pub fn (mut s Searcher) set_multi_line(yes bool) {
 	s.config.multi_line = yes
 }
 
+// V-specific: update the line terminator on an existing searcher.
 pub fn (mut s Searcher) set_line_terminator(line_terminator matcher.LineTerminator) {
 	s.config.line_term = line_terminator
 	s.line_buffer.config.lineterm = line_terminator.as_byte()
 }
 
+/// Set the binary detection method used on this searcher.
 pub fn (mut s Searcher) set_binary_detection(binary_detection BinaryDetection) {
 	s.config.binary = binary_detection
 	s.line_buffer.set_binary_detection(binary_detection)
 }
 
+// V-specific: update inverted matching on an existing searcher.
 pub fn (mut s Searcher) set_invert_match(yes bool) {
 	s.config.invert_match = yes
 }

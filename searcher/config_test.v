@@ -81,6 +81,8 @@ fn test_searcher_builder_sets_and_clears_encoding() {
 	assert got.label == 'UTF-16LE'
 
 	builder.encoding(none)
+	still_owned := searcher.config.encoding or { panic('built searcher lost its encoding') }
+	assert still_owned.label == 'UTF-16LE'
 	cleared := builder.build()
 	assert_no_encoding(cleared.config.encoding)
 }
@@ -124,6 +126,11 @@ fn test_searcher_encoding_rejects_unknown_label() {
 		return
 	}
 	assert false
+}
+
+fn test_searcher_unknown_encoding_error_replaces_invalid_utf8() {
+	err := ConfigError.unknown_encoding([u8(0xff), `x`])
+	assert err.msg() == 'grep config error: unknown encoding: �x'
 }
 
 fn test_searcher_builder_heap_limit_configures_line_buffer() {

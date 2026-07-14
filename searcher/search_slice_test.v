@@ -333,7 +333,7 @@ fn test_transcode_explicit_windows1252_encoding() {
 	builder.encoding(encoding)
 	searcher_ := builder.build()
 
-	got := transcode_slice_with_config(searcher_.config, haystack)!
+	got := transcode_slice_with_config(&searcher_.config, haystack)!
 	assert got == [u8(0xe2), 0x82, 0xac, 0xc2, 0x81, `\n`]
 }
 
@@ -347,13 +347,13 @@ fn test_transcode_explicit_utf8_replaces_malformed_sequences() {
 	mut builder := SearcherBuilder.new()
 	builder.encoding(Encoding.new('utf-8')!)
 	searcher_ := builder.build()
-	got := transcode_slice_with_config(searcher_.config, [u8(`a`), 0xc2, `b`, 0xe2, 0x82])!
+	got := transcode_slice_with_config(&searcher_.config, [u8(`a`), 0xc2, `b`, 0xe2, 0x82])!
 	assert got == [u8(`a`), 0xef, 0xbf, 0xbd, `b`, 0xef, 0xbf, 0xbd]
 }
 
 fn test_bom_sniffed_utf8_replaces_malformed_sequences() {
 	config := SearcherBuilder.new().build().config
-	got := transcode_slice_with_config(config, [u8(0xef), 0xbb, 0xbf, `a`, 0xff, `b`])!
+	got := transcode_slice_with_config(&config, [u8(0xef), 0xbb, 0xbf, `a`, 0xff, `b`])!
 	assert got == [u8(`a`), 0xef, 0xbf, 0xbd, `b`]
 }
 
@@ -393,7 +393,7 @@ fn test_transcode_explicit_x_user_defined_encoding() {
 	builder.encoding(encoding)
 	searcher_ := builder.build()
 
-	got := transcode_slice_with_config(searcher_.config, haystack)!
+	got := transcode_slice_with_config(&searcher_.config, haystack)!
 	assert got == [u8(`A`), 0xef, 0x9e, 0x80, `B`]
 }
 
@@ -737,6 +737,20 @@ fn test_search_reader_multi_line_heap_limit_errors_at_limit() {
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
 	searcher_.search_reader(LiteralMatcher.new('Sherlock'), mut source, &sink) or {
+		assert err.msg().contains('configured allocation limit')
+		return
+	}
+	assert false
+}
+
+fn test_search_slice_multi_line_heap_limit_applies_to_transcoded_bytes() {
+	mut builder := SearcherBuilder.new()
+	builder.multi_line(true)
+	builder.heap_limit(usize(2))
+	builder.encoding(Encoding.new('windows-1252')!)
+	mut searcher_ := builder.build()
+	mut sink := CollectSink{}
+	searcher_.search_slice(LiteralMatcher.new('€'), [u8(0x80)], &sink) or {
 		assert err.msg().contains('configured allocation limit')
 		return
 	}
