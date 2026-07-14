@@ -156,38 +156,38 @@ mut:
 	binary_reports []u64
 }
 
-fn (mut sink CollectSink) matched(searcher_ Searcher, mat SinkMatch) !bool {
+fn (mut sink CollectSink) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher_
 	line := mat.line_number() or { u64(0) }
 	sink.matches << '${line}:${mat.absolute_byte_offset()}:${mat.bytes().bytestr()}'
 	return true
 }
 
-fn (mut sink CollectSink) context(searcher_ Searcher, ctx SinkContext) !bool {
+fn (mut sink CollectSink) context[^b](searcher_ &Searcher, ctx &SinkContext[^b]) !bool {
 	_ = searcher_
 	line := ctx.line_number() or { u64(0) }
-	sink.contexts << '${ctx.kind()}:${line}:${ctx.absolute_byte_offset()}:${ctx.bytes().bytestr()}'
+	sink.contexts << '${*ctx.kind()}:${line}:${ctx.absolute_byte_offset()}:${ctx.bytes().bytestr()}'
 	return true
 }
 
-fn (mut sink CollectSink) context_break(searcher_ Searcher) !bool {
+fn (mut sink CollectSink) context_break(searcher_ &Searcher) !bool {
 	_ = searcher_
 	sink.breaks++
 	return true
 }
 
-fn (mut sink CollectSink) binary_data(searcher_ Searcher, binary_byte_offset u64) !bool {
+fn (mut sink CollectSink) binary_data(searcher_ &Searcher, binary_byte_offset u64) !bool {
 	_ = searcher_
 	sink.binary_reports << binary_byte_offset
 	return true
 }
 
-fn (mut sink CollectSink) begin(searcher_ Searcher) !bool {
+fn (mut sink CollectSink) begin(searcher_ &Searcher) !bool {
 	_ = searcher_
 	return true
 }
 
-fn (mut sink CollectSink) finish(searcher_ Searcher, finish SinkFinish) ! {
+fn (mut sink CollectSink) finish(searcher_ &Searcher, finish &SinkFinish) ! {
 	_ = searcher_
 	sink.finished = true
 	sink.byte_count = finish.byte_count()

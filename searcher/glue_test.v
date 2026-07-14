@@ -184,7 +184,7 @@ fn (mut sink KitchenSink) write_str(s string) {
 	sink.bytes << s.bytes()
 }
 
-fn (mut sink KitchenSink) matched(searcher_ Searcher, mat SinkMatch) !bool {
+fn (mut sink KitchenSink) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher_
 	assert mat.bytes().len > 0
 	assert mat.lines().count() >= 1
@@ -192,7 +192,7 @@ fn (mut sink KitchenSink) matched(searcher_ Searcher, mat SinkMatch) !bool {
 	mut line_number := mat.line_number()
 	mut byte_offset := mat.absolute_byte_offset()
 	bytes := mat.bytes()
-	mut step := LineStep.new(mat.line_term_, 0, bytes.len)
+	mut step := LineStep.new(mat.line_term_.as_byte(), 0, bytes.len)
 	for {
 		start, end := step.next(bytes) or { break }
 		if n := line_number {
@@ -206,7 +206,7 @@ fn (mut sink KitchenSink) matched(searcher_ Searcher, mat SinkMatch) !bool {
 	return true
 }
 
-fn (mut sink KitchenSink) context(searcher_ Searcher, ctx SinkContext) !bool {
+fn (mut sink KitchenSink) context[^b](searcher_ &Searcher, ctx &SinkContext[^b]) !bool {
 	_ = searcher_
 	assert ctx.bytes().len > 0
 	assert ctx.lines().count() == 1
@@ -219,7 +219,7 @@ fn (mut sink KitchenSink) context(searcher_ Searcher, ctx SinkContext) !bool {
 	return true
 }
 
-fn (mut sink KitchenSink) context_break(searcher_ Searcher) !bool {
+fn (mut sink KitchenSink) context_break(searcher_ &Searcher) !bool {
 	_ = searcher_
 	sink.write_str('--\n')
 	return true
@@ -227,18 +227,18 @@ fn (mut sink KitchenSink) context_break(searcher_ Searcher) !bool {
 
 // V-specific implementations of the source `Sink` defaults required by V's
 // sink interface.
-fn (mut sink KitchenSink) binary_data(searcher_ Searcher, binary_byte_offset u64) !bool {
+fn (mut sink KitchenSink) binary_data(searcher_ &Searcher, binary_byte_offset u64) !bool {
 	_ = searcher_
 	_ = binary_byte_offset
 	return true
 }
 
-fn (mut sink KitchenSink) begin(searcher_ Searcher) !bool {
+fn (mut sink KitchenSink) begin(searcher_ &Searcher) !bool {
 	_ = searcher_
 	return true
 }
 
-fn (mut sink KitchenSink) finish(searcher_ Searcher, sink_finish SinkFinish) ! {
+fn (mut sink KitchenSink) finish(searcher_ &Searcher, sink_finish &SinkFinish) ! {
 	_ = searcher_
 	sink.write_str('\n')
 	sink.write_str('byte count:${sink_finish.byte_count()}\n')
@@ -1850,6 +1850,7 @@ fn test_glue_regression_2260() {
 	mut matcher_builder := regex.RegexMatcherBuilder.new()
 	matcher_builder.line_terminator(`\n`)
 	matcher_ := matcher_builder.build(r'^\w+$') or { panic(err) }
+	matcher_ref := regex.RegexMatcherRef.new(&matcher_)
 	mut builder := SearcherBuilder.new()
 	builder.line_number(true)
 	mut searcher_ := builder.build()
@@ -1859,6 +1860,6 @@ fn test_glue_regression_2260() {
 		matched = true
 		return true
 	})
-	searcher_.search_slice(matcher_, 'GATC\n'.bytes(), &sink)!
+	searcher_.search_slice(matcher_ref, 'GATC\n'.bytes(), &sink)!
 	assert matched
 }

@@ -501,7 +501,7 @@ pub fn (sink &^a SummarySink[^p, ^s, W]) stats[^a, ^p, ^s]() ?&^a Stats {
 /// line mode, but also checks if the matter can match over multiple lines.
 /// If it can't, then we don't need multi line handling, even if the
 /// searcher has multi line mode enabled.
-fn (sink &SummarySink[^p, ^s, W]) multi_line[^p, ^s](searcher_ searcher.Searcher) bool {
+fn (sink &SummarySink[^p, ^s, W]) multi_line[^p, ^s](searcher_ &searcher.Searcher) bool {
 	return printer_matcher_multi_line(searcher_, sink.matcher)
 }
 
@@ -509,7 +509,7 @@ fn (sink &SummarySink[^p, ^s, W]) multi_line[^p, ^s](searcher_ searcher.Searcher
 /// write that path to the underlying writer followed by a line terminator.
 /// (If a path terminator is set, then that is used instead of the line
 /// terminator.)
-fn (mut sink SummarySink[^p, ^s, W]) write_path_line[^p, ^s](searcher_ searcher.Searcher) ! {
+fn (mut sink SummarySink[^p, ^s, W]) write_path_line[^p, ^s](searcher_ &searcher.Searcher) ! {
 	if sink.path != none {
 		sink.write_path()!
 		if term := sink.summary.config.path_terminator {
@@ -561,7 +561,7 @@ fn (mut sink SummarySink[^p, ^s, W]) end_hyperlink[^p, ^s](status InterpolatorSt
 }
 
 /// Write the line terminator configured on the given searcher.
-fn (mut sink SummarySink[^p, ^s, W]) write_line_term[^p, ^s](searcher_ searcher.Searcher) ! {
+fn (mut sink SummarySink[^p, ^s, W]) write_line_term[^p, ^s](searcher_ &searcher.Searcher) ! {
 	sink.write_all(searcher_.line_terminator().as_bytes())!
 }
 
@@ -584,7 +584,7 @@ fn (mut sink SummarySink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
 	}
 }
 
-pub fn (mut sink SummarySink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
+pub fn (mut sink SummarySink[^p, ^s, W]) matched[^b, ^p, ^s](searcher_ &searcher.Searcher, mat &searcher.SinkMatch[^b]) !bool {
 	is_multi_line := sink.multi_line(searcher_)
 	sink_match_count := if sink.stats == none && !is_multi_line {
 		u64(1)
@@ -626,20 +626,20 @@ pub fn (mut sink SummarySink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sear
 }
 
 // V-specific: these no-op callbacks complete the translated `Sink` interface.
-pub fn (mut sink SummarySink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Searcher, ctx searcher.SinkContext) !bool {
+pub fn (mut sink SummarySink[^p, ^s, W]) context[^b, ^p, ^s](searcher_ &searcher.Searcher, ctx &searcher.SinkContext[^b]) !bool {
 	_ = sink
 	_ = searcher_
 	_ = ctx
 	return true
 }
 
-pub fn (mut sink SummarySink[^p, ^s, W]) context_break[^p, ^s](searcher_ searcher.Searcher) !bool {
+pub fn (mut sink SummarySink[^p, ^s, W]) context_break[^p, ^s](searcher_ &searcher.Searcher) !bool {
 	_ = sink
 	_ = searcher_
 	return true
 }
 
-pub fn (mut sink SummarySink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher.Searcher, binary_byte_offset u64) !bool {
+pub fn (mut sink SummarySink[^p, ^s, W]) binary_data[^p, ^s](searcher_ &searcher.Searcher, binary_byte_offset u64) !bool {
 	if searcher_.binary_detection().quit_byte() != none {
 		if sink.path != none {
 			path := unsafe { &sink.path? }
@@ -649,7 +649,7 @@ pub fn (mut sink SummarySink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher.
 	return true
 }
 
-pub fn (mut sink SummarySink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Searcher) !bool {
+pub fn (mut sink SummarySink[^p, ^s, W]) begin[^p, ^s](_searcher &searcher.Searcher) !bool {
 	if sink.path == none && sink.summary.config.kind.requires_path() {
 		return error('output kind ${sink.summary.config.kind} requires a file path')
 	}
@@ -660,7 +660,7 @@ pub fn (mut sink SummarySink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Search
 	return true
 }
 
-pub fn (mut sink SummarySink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Searcher, finish searcher.SinkFinish) ! {
+pub fn (mut sink SummarySink[^p, ^s, W]) finish[^p, ^s](searcher_ &searcher.Searcher, finish &searcher.SinkFinish) ! {
 	sink.binary_byte_offset = finish.binary_byte_offset()
 	if sink.stats != none {
 		mut stats := unsafe { &sink.stats? }

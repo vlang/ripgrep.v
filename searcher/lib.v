@@ -2671,6 +2671,55 @@ pub fn (mut s Searcher) set_invert_match(yes bool) {
 	s.config.invert_match = yes
 }
 
+/// A trait that describes errors that can be reported by searchers and
+/// implementations of `Sink`.
+///
+/// Unless you have a specialized use case, you probably don't need to
+/// implement this trait explicitly. It's likely that using `std::io::Error`
+/// (which implements this trait) for your error type is good enough,
+/// largely because most errors that occur during search will likely be an
+/// `std::io::Error`.
+///
+/// V-specific: V's structural error interface supplies `msg` and `code`, while
+/// the associated constructors are the functions below.
+pub interface SinkError {
+	msg() string
+	code() int
+}
+
+/// A constructor for converting any value that satisfies the
+/// `std::fmt::Display` trait into an error.
+///
+/// V-specific: V results use the common `IError` interface instead of an
+/// associated `Sink::Error` type, so the `SinkError` constructors are exposed
+/// as functions.
+pub fn sink_error_message(message string) IError {
+	return error(message)
+}
+
+/// A constructor for converting I/O errors that occur while searching into
+/// an error of this type.
+///
+/// By default, this is implemented via the `error_message` constructor.
+pub fn sink_error_io(err IError) IError {
+	return err
+}
+
+/// A constructor for converting configuration errors that occur while
+/// building a searcher into an error of this type.
+///
+/// By default, this is implemented via the `error_message` constructor.
+pub fn sink_error_config(err ConfigError) IError {
+	return error(err.msg())
+}
+
+// An `std::io::Error` can be used as an error for `Sink` implementations out
+// of the box.
+//
+// A `Box<dyn std::error::Error>` can be used as an error for `Sink`
+// implementations out of the box. V's corresponding common representation
+// for both is `IError`.
+
 /// Summary data reported at the end of a search.
 ///
 /// This reports data such as the total number of bytes searched and the
@@ -2684,6 +2733,7 @@ pub struct SinkFinish implements IClone {
 	binary_byte_offset_ ?u64
 }
 
+// V-specific constructor used where Rust initializes crate-private fields.
 pub fn SinkFinish.new(byte_count u64) SinkFinish {
 	return SinkFinish{
 		byte_count_: byte_count
@@ -2691,7 +2741,7 @@ pub fn SinkFinish.new(byte_count u64) SinkFinish {
 }
 
 /// Return the total number of bytes searched.
-pub fn (finish SinkFinish) byte_count() u64 {
+pub fn (finish &SinkFinish) byte_count() u64 {
 	return finish.byte_count_
 }
 
@@ -2701,10 +2751,11 @@ pub fn (finish SinkFinish) byte_count() u64 {
 ///
 /// Note that since this is an absolute byte offset, it cannot be relied
 /// upon to index into any addressable memory.
-pub fn (finish SinkFinish) binary_byte_offset() ?u64 {
+pub fn (finish &SinkFinish) binary_byte_offset() ?u64 {
 	return finish.binary_byte_offset_
 }
 
+// V-specific builder used where Rust initializes crate-private fields.
 pub fn (finish SinkFinish) with_binary_byte_offset(binary_byte_offset ?u64) SinkFinish {
 	return SinkFinish{
 		byte_count_:         finish.byte_count_
@@ -2718,7 +2769,7 @@ pub fn (finish SinkFinish) with_binary_byte_offset(binary_byte_offset ?u64) Sink
 /// yielded by the iterator are guaranteed to be non-empty.
 ///
 /// `'b` refers to the lifetime of the underlying bytes.
-pub struct LineIter implements IClone {
+pub struct LineIter[^b] implements IClone {
 	// V-specific: Rust stores this as a borrowed `&'b [u8]`; V's slice value is
 	// the corresponding non-owning view into the active search buffer.
 	bytes_   []u8
@@ -2727,14 +2778,14 @@ pub struct LineIter implements IClone {
 
 /// Create a new line iterator that yields lines in the given bytes that
 /// are terminated by `line_term`.
-pub fn LineIter.new(line_term u8, bytes []u8) LineIter {
-	return LineIter{
+pub fn LineIter.new[^b](line_term u8, bytes []u8) LineIter[^b] {
+	return LineIter[^b]{
 		bytes_:   bytes
 		stepper_: LineStep.new(line_term, 0, bytes.len)
 	}
 }
 
-pub fn (iter LineIter) count() u64 {
+pub fn (iter &LineIter[^b]) count[^b]() u64 {
 	mut stepper := iter.stepper_
 	mut count := u64(0)
 	for {
@@ -2745,17 +2796,16 @@ pub fn (iter LineIter) count() u64 {
 	return count
 }
 
-pub fn (mut iter LineIter) next() ?[]u8 {
+pub fn (mut iter LineIter[^b]) next[^b]() ?[]u8 {
 	m := iter.stepper_.next_match(iter.bytes_) or { return none }
 	return iter.bytes_[m.start()..m.end()]
 }
 
 /// A type that describes a match reported by a searcher.
-pub struct SinkMatch implements IClone {
-	line_term_             u8 = `\n`
-	// V-specific: Rust stores `bytes` and `buffer` as borrowed `&'b [u8]`.
-	// V slices are descriptors into the active search buffer, so these fields and
-	// their accessors preserve the same borrowed views without copying bytes.
+pub struct SinkMatch[^b] implements IClone {
+	line_term_             matcher.LineTerminator = matcher.LineTerminator.default()
+	// V-specific: V slices are already borrowed descriptors, while `^b` keeps
+	// the Rust lifetime relationship explicit in the type and API.
 	bytes_                 []u8
 	absolute_byte_offset_  u64
 	line_number_           ?u64
@@ -2763,16 +2813,18 @@ pub struct SinkMatch implements IClone {
 	bytes_range_in_buffer_ matcher.Match
 }
 
-pub fn SinkMatch.new(buffer []u8, bytes_range_in_buffer matcher.Match) SinkMatch {
-	return SinkMatch{
+// V-specific constructor used where Rust initializes crate-private fields.
+pub fn SinkMatch.new[^b](buffer []u8, bytes_range_in_buffer matcher.Match) SinkMatch[^b] {
+	return SinkMatch[^b]{
 		bytes_:                 buffer[bytes_range_in_buffer.start()..bytes_range_in_buffer.end()]
 		buffer_:                buffer
 		bytes_range_in_buffer_: bytes_range_in_buffer
 	}
 }
 
-pub fn (mat SinkMatch) with_absolute_byte_offset(absolute_byte_offset u64) SinkMatch {
-	return SinkMatch{
+// V-specific builder used where Rust initializes crate-private fields.
+pub fn (mat SinkMatch[^b]) with_absolute_byte_offset[^b](absolute_byte_offset u64) SinkMatch[^b] {
+	return SinkMatch[^b]{
 		line_term_:             mat.line_term_
 		bytes_:                 mat.bytes_
 		absolute_byte_offset_:  absolute_byte_offset
@@ -2782,8 +2834,9 @@ pub fn (mat SinkMatch) with_absolute_byte_offset(absolute_byte_offset u64) SinkM
 	}
 }
 
-pub fn (mat SinkMatch) with_line_number(line_number ?u64) SinkMatch {
-	return SinkMatch{
+// V-specific builder used where Rust initializes crate-private fields.
+pub fn (mat SinkMatch[^b]) with_line_number[^b](line_number ?u64) SinkMatch[^b] {
+	return SinkMatch[^b]{
 		line_term_:             mat.line_term_
 		bytes_:                 mat.bytes_
 		absolute_byte_offset_:  mat.absolute_byte_offset_
@@ -2793,8 +2846,9 @@ pub fn (mat SinkMatch) with_line_number(line_number ?u64) SinkMatch {
 	}
 }
 
-pub fn (mat SinkMatch) with_line_term(line_term u8) SinkMatch {
-	return SinkMatch{
+// V-specific builder used where Rust initializes crate-private fields.
+pub fn (mat SinkMatch[^b]) with_line_term[^b](line_term matcher.LineTerminator) SinkMatch[^b] {
+	return SinkMatch[^b]{
 		line_term_:             line_term
 		bytes_:                 mat.bytes_
 		absolute_byte_offset_:  mat.absolute_byte_offset_
@@ -2805,25 +2859,25 @@ pub fn (mat SinkMatch) with_line_term(line_term u8) SinkMatch {
 }
 
 /// Exposes as much of the underlying buffer that was search as possible.
-pub fn (mat SinkMatch) buffer() []u8 {
+pub fn (mat &SinkMatch[^b]) buffer[^b]() []u8 {
 	return mat.buffer_
 }
 
 /// Returns a range that corresponds to where [`SinkMatch::bytes`] appears
 /// in [`SinkMatch::buffer`].
-pub fn (mat SinkMatch) bytes_range_in_buffer() matcher.Match {
-	return mat.bytes_range_in_buffer_
+pub fn (mat &SinkMatch[^b]) bytes_range_in_buffer[^b]() matcher.Match {
+	return mat.bytes_range_in_buffer_.clone()
 }
 
 /// Returns the bytes for all matching lines, including the line
 /// terminators, if they exist.
-pub fn (mat SinkMatch) bytes() []u8 {
+pub fn (mat &SinkMatch[^b]) bytes[^b]() []u8 {
 	return mat.bytes_
 }
 
 // V-specific: exposes the active search-buffer slice for printer internals
 // that consume it before the search buffer is reused.
-pub fn (mat SinkMatch) bytes_view() []u8 {
+pub fn (mat &SinkMatch[^b]) bytes_view[^b]() []u8 {
 	return mat.bytes_
 }
 
@@ -2831,7 +2885,7 @@ pub fn (mat SinkMatch) bytes_view() []u8 {
 /// offset is absolute in that it is relative to the very beginning of the
 /// input in a search, and can never be relied upon to be a valid index
 /// into an in-memory slice.
-pub fn (mat SinkMatch) absolute_byte_offset() u64 {
+pub fn (mat &SinkMatch[^b]) absolute_byte_offset[^b]() u64 {
 	return mat.absolute_byte_offset_
 }
 
@@ -2839,7 +2893,7 @@ pub fn (mat SinkMatch) absolute_byte_offset() u64 {
 ///
 /// Line numbers are only available when the search builder is instructed
 /// to compute them.
-pub fn (mat SinkMatch) line_number() ?u64 {
+pub fn (mat &SinkMatch[^b]) line_number[^b]() ?u64 {
 	return mat.line_number_
 }
 
@@ -2851,8 +2905,8 @@ pub fn (mat SinkMatch) line_number() ?u64 {
 /// the line terminator).
 ///
 /// Lines yielded by this iterator include their terminators.
-pub fn (mat SinkMatch) lines() LineIter {
-	return LineIter.new(mat.line_term_, mat.bytes())
+pub fn (mat &SinkMatch[^b]) lines[^b]() LineIter[^b] {
+	return LineIter.new(mat.line_term_.as_byte(), mat.bytes())
 }
 
 /// An explicit iterator over lines in a particular slice of bytes.
@@ -3035,37 +3089,48 @@ fn preceding_by_position(bytes []u8, pos usize, line_term u8, count usize) usize
 }
 
 pub enum SinkContextKind {
-	// The line reported occurred before a match.
+	/// The line reported occurred before a match.
 	before
-	// The line reported occurred after a match.
+	/// The line reported occurred after a match.
 	after
-	// Any other type of context reported, e.g., as a result of a searcher's
-	// "passthru" mode.
+	/// Any other type of context reported, e.g., as a result of a searcher's
+	/// "passthru" mode.
 	other
 }
 
 /// A type that describes a contextual line reported by a searcher.
-pub struct SinkContext implements IClone {
+pub struct SinkContext[^b] implements IClone {
 	// V-specific: Rust only stores this under `#[cfg(test)]` for
 	// `SinkContext::lines`, but translated V tests compile as normal module
 	// files and still need it.
-	line_term_             u8 = `\n`
-	// V-specific: Rust stores this as a borrowed `&'b [u8]`; V represents the
-	// same borrow as a slice view into the active search buffer.
+	line_term_             matcher.LineTerminator = matcher.LineTerminator.default()
+	// V-specific: V slices are already borrowed descriptors, while `^b` keeps
+	// the Rust lifetime relationship explicit in the type and API.
 	bytes_                 []u8
 	kind_                  SinkContextKind
 	absolute_byte_offset_  u64
 	line_number_           ?u64
 }
 
+// V-specific constructor used where Rust initializes crate-private fields.
+fn SinkContext.new[^b](line_term matcher.LineTerminator, bytes []u8, kind SinkContextKind, absolute_byte_offset u64, line_number ?u64) SinkContext[^b] {
+	return SinkContext[^b]{
+		line_term_:            line_term
+		bytes_:                bytes
+		kind_:                 kind
+		absolute_byte_offset_: absolute_byte_offset
+		line_number_:          line_number
+	}
+}
+
 /// Returns the context bytes, including line terminators.
-pub fn (ctx SinkContext) bytes() []u8 {
+pub fn (ctx &SinkContext[^b]) bytes[^b]() []u8 {
 	return ctx.bytes_
 }
 
 /// Returns the type of context.
-pub fn (ctx SinkContext) kind() SinkContextKind {
-	return ctx.kind_
+pub fn (ctx &^a SinkContext[^b]) kind[^a, ^b]() &^a SinkContextKind {
+	return &ctx.kind_
 }
 
 /// Return an iterator over the lines in this match.
@@ -3074,15 +3139,15 @@ pub fn (ctx SinkContext) kind() SinkContextKind {
 /// the line terminator).
 ///
 /// Lines yielded by this iterator include their terminators.
-fn (ctx SinkContext) lines() LineIter {
-	return LineIter.new(ctx.line_term_, ctx.bytes())
+fn (ctx &SinkContext[^b]) lines[^b]() LineIter[^b] {
+	return LineIter.new(ctx.line_term_.as_byte(), ctx.bytes())
 }
 
 /// Returns the absolute byte offset of the start of this context. This
 /// offset is absolute in that it is relative to the very beginning of the
 /// input in a search, and can never be relied upon to be a valid index
 /// into an in-memory slice.
-pub fn (ctx SinkContext) absolute_byte_offset() u64 {
+pub fn (ctx &SinkContext[^b]) absolute_byte_offset[^b]() u64 {
 	return ctx.absolute_byte_offset_
 }
 
@@ -3090,20 +3155,200 @@ pub fn (ctx SinkContext) absolute_byte_offset() u64 {
 ///
 /// Line numbers are only available when the search builder is instructed to
 /// compute them.
-pub fn (ctx SinkContext) line_number() ?u64 {
+pub fn (ctx &SinkContext[^b]) line_number[^b]() ?u64 {
 	return ctx.line_number_
 }
 
+/// A trait that defines how results from searchers are handled.
+///
+/// In this crate, a searcher follows the "push" model. What that means is that
+/// the searcher drives execution, and pushes results back to the caller. This
+/// is in contrast to a "pull" model where the caller drives execution and
+/// takes results as they need them. These are also known as "internal" and
+/// "external" iteration strategies, respectively.
+///
+/// For a variety of reasons, including the complexity of the searcher
+/// implementation, this crate chooses the "push" or "internal" model of
+/// execution. Thus, in order to act on search results, callers must provide
+/// an implementation of this trait to a searcher, and the searcher is then
+/// responsible for calling the methods on this trait.
+///
+/// This trait defines several behaviors:
+///
+/// * What to do when a match is found. Callers must provide this.
+/// * What to do when an error occurs. Callers must provide this via the
+///   [`SinkError`] trait. Generally, callers can just use `std::io::Error` for
+///   this, which already implements `SinkError`.
+/// * What to do when a contextual line is found. By default, these are
+///   ignored.
+/// * What to do when a gap between contextual lines has been found. By
+///   default, this is ignored.
+/// * What to do when a search has started. By default, this does nothing.
+/// * What to do when a search has finished successfully. By default, this does
+///   nothing.
+///
+/// Callers must, at minimum, specify the behavior when an error occurs and
+/// the behavior when a match occurs. The rest is optional. For each behavior,
+/// callers may report an error (say, if writing the result to another
+/// location failed) or simply return `false` if they want the search to stop
+/// (e.g., when implementing a cap on the number of search results to show).
+///
+/// When errors are reported (whether in the searcher or in the implementation
+/// of `Sink`), then searchers quit immediately without calling `finish`.
+///
+/// For simpler uses of `Sink`, callers may elect to use one of
+/// the more convenient but less flexible implementations in the
+/// [`sinks`] module.
+///
+/// The type of an error that should be reported by a searcher.
+///
+/// Errors of this type are not only returned by the methods on this
+/// trait, but the constructors defined in `SinkError` are also used in
+/// the searcher implementation itself. e.g., When a I/O error occurs when
+/// reading data from a file.
+///
+/// V-specific: `IError` is the common result error type. Since V interfaces do
+/// not provide default method bodies, implementations can embed `SinkDefaults`
+/// for the optional behavior or provide equivalent methods directly.
 pub interface Sink {
 mut:
-	matched(searcher Searcher, mat SinkMatch) !bool
-	context(searcher Searcher, ctx SinkContext) !bool
-	context_break(searcher Searcher) !bool
-	binary_data(searcher Searcher, binary_byte_offset u64) !bool
-	begin(searcher Searcher) !bool
-	finish(searcher Searcher, finish SinkFinish) !
+	/// This method is called whenever a match is found.
+	///
+	/// If multi line is enabled on the searcher, then the match reported here
+	/// may span multiple lines and it may include multiple matches. When multi
+	/// line is disabled, then the match is guaranteed to span exactly one
+	/// non-empty line (where a single line is, at minimum, a line terminator).
+	///
+	/// If this returns `true`, then searching continues. If this returns
+	/// `false`, then searching is stopped immediately and `finish` is called.
+	///
+	/// If this returns an error, then searching is stopped immediately,
+	/// `finish` is not called and the error is bubbled back up to the caller
+	/// of the searcher.
+	matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool
+	/// This method is called whenever a context line is found, and is optional
+	/// to implement. By default, it does nothing and returns `true`.
+	///
+	/// In all cases, the context given is guaranteed to span exactly one
+	/// non-empty line (where a single line is, at minimum, a line terminator).
+	///
+	/// If this returns `true`, then searching continues. If this returns
+	/// `false`, then searching is stopped immediately and `finish` is called.
+	///
+	/// If this returns an error, then searching is stopped immediately,
+	/// `finish` is not called and the error is bubbled back up to the caller
+	/// of the searcher.
+	context[^b](searcher &Searcher, ctx &SinkContext[^b]) !bool
+	/// This method is called whenever a break in contextual lines is found,
+	/// and is optional to implement. By default, it does nothing and returns
+	/// `true`.
+	///
+	/// A break can only occur when context reporting is enabled (that is,
+	/// either or both of `before_context` or `after_context` are greater than
+	/// `0`). More precisely, a break occurs between non-contiguous groups of
+	/// lines.
+	///
+	/// If this returns `true`, then searching continues. If this returns
+	/// `false`, then searching is stopped immediately and `finish` is called.
+	///
+	/// If this returns an error, then searching is stopped immediately,
+	/// `finish` is not called and the error is bubbled back up to the caller
+	/// of the searcher.
+	context_break(searcher &Searcher) !bool
+	/// This method is called whenever binary detection is enabled and binary
+	/// data is found. If binary data is found, then this is called at least
+	/// once for the first occurrence with the absolute byte offset at which
+	/// the binary data begins.
+	///
+	/// If this returns `true`, then searching continues. If this returns
+	/// `false`, then searching is stopped immediately and `finish` is called.
+	///
+	/// If this returns an error, then searching is stopped immediately,
+	/// `finish` is not called and the error is bubbled back up to the caller
+	/// of the searcher.
+	///
+	/// By default, it does nothing and returns `true`.
+	binary_data(searcher &Searcher, binary_byte_offset u64) !bool
+	/// This method is called when a search has begun, before any search is
+	/// executed. By default, this does nothing.
+	///
+	/// If this returns `true`, then searching continues. If this returns
+	/// `false`, then searching is stopped immediately and `finish` is called.
+	///
+	/// If this returns an error, then searching is stopped immediately,
+	/// `finish` is not called and the error is bubbled back up to the caller
+	/// of the searcher.
+	begin(searcher &Searcher) !bool
+	/// This method is called when a search has completed. By default, this
+	/// does nothing.
+	///
+	/// If this returns an error, the error is bubbled back up to the caller of
+	/// the searcher.
+	finish(searcher &Searcher, finish &SinkFinish) !
 }
 
+/// Default implementations of the optional `Sink` behavior.
+pub struct SinkDefaults {}
+
+pub fn (mut sink SinkDefaults) context[^b](searcher &Searcher, ctx &SinkContext[^b]) !bool {
+	_ = sink
+	_ = searcher
+	_ = ctx
+	return true
+}
+
+pub fn (mut sink SinkDefaults) context_break(searcher &Searcher) !bool {
+	_ = sink
+	_ = searcher
+	return true
+}
+
+pub fn (mut sink SinkDefaults) binary_data(searcher &Searcher, binary_byte_offset u64) !bool {
+	_ = sink
+	_ = searcher
+	_ = binary_byte_offset
+	return true
+}
+
+pub fn (mut sink SinkDefaults) begin(searcher &Searcher) !bool {
+	_ = sink
+	_ = searcher
+	return true
+}
+
+pub fn (mut sink SinkDefaults) finish(searcher &Searcher, finish &SinkFinish) ! {
+	_ = sink
+	_ = searcher
+	_ = finish
+}
+
+/// A collection of convenience implementations of `Sink`.
+///
+/// Each implementation in this module makes some kind of sacrifice in the name
+/// of making common cases easier to use. Most frequently, each type is a
+/// wrapper around a closure specified by the caller that provides limited
+/// access to the full suite of information available to implementors of
+/// `Sink`.
+///
+/// For example, the `UTF8` sink makes the following sacrifices:
+///
+/// * All matches must be UTF-8. An arbitrary `Sink` does not have this
+///   restriction and can deal with arbitrary data. If this sink sees invalid
+///   UTF-8, then an error is returned and searching stops. (Use the `Lossy`
+///   sink instead to suppress this error.)
+/// * The searcher must be configured to report line numbers. If it isn't,
+///   an error is reported at the first match and searching stops.
+/// * Context lines, context breaks and summary data reported at the end of
+///   a search are all ignored.
+/// * Implementors are forced to use `std::io::Error` as their error type.
+///
+/// If you need more flexibility, then you're advised to implement the `Sink`
+/// trait directly.
+///
+/// V-specific: these types are in the `searcher` module because V modules are
+/// directory based.
+// V-specific callback aliases represent the closure types used by the Rust
+// convenience sinks. V slices and strings are borrowed descriptors here.
 pub type BytesSinkCallback = fn (u64, []u8) !bool
 
 pub type StringSinkCallback = fn (u64, string) !bool
@@ -3124,61 +3369,25 @@ pub type StringSinkCallback = fn (u64, string) !bool
 /// If multi line mode was enabled, the line number refers to the line
 /// number of the first line in the match.
 pub struct UTF8 implements IClone {
+	SinkDefaults
 	callback StringSinkCallback
 }
 
+// V-specific constructor for the Rust tuple struct.
 pub fn UTF8.new(callback StringSinkCallback) UTF8 {
 	return UTF8{
 		callback: callback
 	}
 }
 
-pub fn (sink UTF8) clone() UTF8 {
-	return UTF8{
-		callback: sink.callback
-	}
-}
-
-pub fn (mut sink UTF8) matched(searcher Searcher, mat SinkMatch) !bool {
+pub fn (mut sink UTF8) matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher
 	matched := mat.bytes()
-	if !is_valid_utf8_bytes(matched) {
-		return error('invalid UTF-8 in search match')
+	if err := first_utf8_error(matched) {
+		return error(err.msg())
 	}
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
 	return sink.callback(line_number, matched.bytestr())!
-}
-
-pub fn (mut sink UTF8) context(searcher Searcher, ctx SinkContext) !bool {
-	_ = sink
-	_ = searcher
-	_ = ctx
-	return true
-}
-
-pub fn (mut sink UTF8) context_break(searcher Searcher) !bool {
-	_ = sink
-	_ = searcher
-	return true
-}
-
-pub fn (mut sink UTF8) binary_data(searcher Searcher, binary_byte_offset u64) !bool {
-	_ = sink
-	_ = searcher
-	_ = binary_byte_offset
-	return true
-}
-
-pub fn (mut sink UTF8) begin(searcher Searcher) !bool {
-	_ = sink
-	_ = searcher
-	return true
-}
-
-pub fn (mut sink UTF8) finish(searcher Searcher, finish SinkFinish) ! {
-	_ = sink
-	_ = searcher
-	_ = finish
 }
 
 /// A sink that provides line numbers and matches as (lossily converted)
@@ -3199,57 +3408,21 @@ pub fn (mut sink UTF8) finish(searcher Searcher, finish SinkFinish) ! {
 /// If multi line mode was enabled, the line number refers to the line
 /// number of the first line in the match.
 pub struct Lossy implements IClone {
+	SinkDefaults
 	callback StringSinkCallback
 }
 
+// V-specific constructor for the Rust tuple struct.
 pub fn Lossy.new(callback StringSinkCallback) Lossy {
 	return Lossy{
 		callback: callback
 	}
 }
 
-pub fn (sink Lossy) clone() Lossy {
-	return Lossy{
-		callback: sink.callback
-	}
-}
-
-pub fn (mut sink Lossy) matched(searcher Searcher, mat SinkMatch) !bool {
+pub fn (mut sink Lossy) matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
 	return sink.callback(line_number, lossy_utf8_string(mat.bytes()))!
-}
-
-pub fn (mut sink Lossy) context(searcher Searcher, ctx SinkContext) !bool {
-	_ = sink
-	_ = searcher
-	_ = ctx
-	return true
-}
-
-pub fn (mut sink Lossy) context_break(searcher Searcher) !bool {
-	_ = sink
-	_ = searcher
-	return true
-}
-
-pub fn (mut sink Lossy) binary_data(searcher Searcher, binary_byte_offset u64) !bool {
-	_ = sink
-	_ = searcher
-	_ = binary_byte_offset
-	return true
-}
-
-pub fn (mut sink Lossy) begin(searcher Searcher) !bool {
-	_ = sink
-	_ = searcher
-	return true
-}
-
-pub fn (mut sink Lossy) finish(searcher Searcher, finish SinkFinish) ! {
-	_ = sink
-	_ = searcher
-	_ = finish
 }
 
 /// A sink that provides line numbers and matches as raw bytes while
@@ -3266,57 +3439,21 @@ pub fn (mut sink Lossy) finish(searcher Searcher, finish SinkFinish) ! {
 /// If multi line mode was enabled, the line number refers to the line
 /// number of the first line in the match.
 pub struct Bytes implements IClone {
+	SinkDefaults
 	callback BytesSinkCallback
 }
 
+// V-specific constructor for the Rust tuple struct.
 pub fn Bytes.new(callback BytesSinkCallback) Bytes {
 	return Bytes{
 		callback: callback
 	}
 }
 
-pub fn (sink Bytes) clone() Bytes {
-	return Bytes{
-		callback: sink.callback
-	}
-}
-
-pub fn (mut sink Bytes) matched(searcher Searcher, mat SinkMatch) !bool {
+pub fn (mut sink Bytes) matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
 	return sink.callback(line_number, mat.bytes())!
-}
-
-pub fn (mut sink Bytes) context(searcher Searcher, ctx SinkContext) !bool {
-	_ = sink
-	_ = searcher
-	_ = ctx
-	return true
-}
-
-pub fn (mut sink Bytes) context_break(searcher Searcher) !bool {
-	_ = sink
-	_ = searcher
-	return true
-}
-
-pub fn (mut sink Bytes) binary_data(searcher Searcher, binary_byte_offset u64) !bool {
-	_ = sink
-	_ = searcher
-	_ = binary_byte_offset
-	return true
-}
-
-pub fn (mut sink Bytes) begin(searcher Searcher) !bool {
-	_ = sink
-	_ = searcher
-	return true
-}
-
-pub fn (mut sink Bytes) finish(searcher Searcher, finish SinkFinish) ! {
-	_ = sink
-	_ = searcher
-	_ = finish
 }
 
 fn is_valid_utf8_bytes(bytes []u8) bool {
@@ -3326,85 +3463,122 @@ fn is_valid_utf8_bytes(bytes []u8) bool {
 	return validate.utf8_data(&bytes[0], bytes.len)
 }
 
+struct Utf8ErrorInfo {
+	valid_up_to usize
+	error_len   ?usize
+}
+
+fn (err Utf8ErrorInfo) msg() string {
+	if error_len := err.error_len {
+		return 'invalid utf-8 sequence of ${error_len} bytes from index ${err.valid_up_to}'
+	}
+	return 'incomplete utf-8 byte sequence from index ${err.valid_up_to}'
+}
+
+fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
+	mut i := usize(0)
+	for i < usize(bytes.len) {
+		first := bytes[i]
+		if first < 0x80 {
+			i++
+			continue
+		}
+		width := utf8_sequence_width(first)
+		if width == 0 {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   usize(1)
+			}
+		}
+		if i + 1 >= usize(bytes.len) {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   none
+			}
+		}
+		if !is_valid_utf8_second(first, bytes[i + 1]) {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   usize(1)
+			}
+		}
+		if width == 2 {
+			i += 2
+			continue
+		}
+		if i + 2 >= usize(bytes.len) {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   none
+			}
+		}
+		if !is_utf8_continuation(bytes[i + 2]) {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   usize(2)
+			}
+		}
+		if width == 3 {
+			i += 3
+			continue
+		}
+		if i + 3 >= usize(bytes.len) {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   none
+			}
+		}
+		if !is_utf8_continuation(bytes[i + 3]) {
+			return Utf8ErrorInfo{
+				valid_up_to: i
+				error_len:   usize(3)
+			}
+		}
+		i += 4
+	}
+	return none
+}
+
 fn lossy_utf8_string(bytes []u8) string {
 	if is_valid_utf8_bytes(bytes) {
 		return bytes.bytestr()
 	}
 	mut out := []u8{cap: bytes.len}
-	mut i := 0
-	for i < bytes.len {
-		n := valid_utf8_sequence_len(bytes, i)
-		if n > 0 {
-			append_bytes(mut out, bytes[i..i + n])
-			i += n
-			continue
+	mut start := usize(0)
+	for start < usize(bytes.len) {
+		err := first_utf8_error(bytes[start..]) or {
+			append_bytes(mut out, bytes[start..])
+			break
 		}
+		valid_end := start + err.valid_up_to
+		append_bytes(mut out, bytes[start..valid_end])
 		append_utf8(mut out, u32(0xfffd))
-		i++
+		error_len := err.error_len or { break }
+		start = valid_end + error_len
 	}
 	return out.bytestr()
 }
 
-fn valid_utf8_sequence_len(bytes []u8, i int) int {
-	first := bytes[i]
-	if first < 0x80 {
-		return 1
+fn utf8_sequence_width(first u8) usize {
+	return if first >= 0xc2 && first <= 0xdf {
+		2
+	} else if first >= 0xe0 && first <= 0xef {
+		3
+	} else if first >= 0xf0 && first <= 0xf4 {
+		4
+	} else {
+		0
 	}
-	if first >= 0xc2 && first <= 0xdf {
-		if i + 1 < bytes.len && is_utf8_continuation(bytes[i + 1]) {
-			return 2
-		}
-		return 0
+}
+
+fn is_valid_utf8_second(first u8, second u8) bool {
+	return match first {
+		0xe0 { second >= 0xa0 && second <= 0xbf }
+		0xed { second >= 0x80 && second <= 0x9f }
+		0xf0 { second >= 0x90 && second <= 0xbf }
+		0xf4 { second >= 0x80 && second <= 0x8f }
+		else { is_utf8_continuation(second) }
 	}
-	if first == 0xe0 {
-		if i + 2 < bytes.len && bytes[i + 1] >= 0xa0 && bytes[i + 1] <= 0xbf
-			&& is_utf8_continuation(bytes[i + 2]) {
-			return 3
-		}
-		return 0
-	}
-	if first >= 0xe1 && first <= 0xec {
-		if i + 2 < bytes.len && is_utf8_continuation(bytes[i + 1])
-			&& is_utf8_continuation(bytes[i + 2]) {
-			return 3
-		}
-		return 0
-	}
-	if first == 0xed {
-		if i + 2 < bytes.len && bytes[i + 1] >= 0x80 && bytes[i + 1] <= 0x9f
-			&& is_utf8_continuation(bytes[i + 2]) {
-			return 3
-		}
-		return 0
-	}
-	if first >= 0xee && first <= 0xef {
-		if i + 2 < bytes.len && is_utf8_continuation(bytes[i + 1])
-			&& is_utf8_continuation(bytes[i + 2]) {
-			return 3
-		}
-		return 0
-	}
-	if first == 0xf0 {
-		if i + 3 < bytes.len && bytes[i + 1] >= 0x90 && bytes[i + 1] <= 0xbf
-			&& is_utf8_continuation(bytes[i + 2]) && is_utf8_continuation(bytes[i + 3]) {
-			return 4
-		}
-		return 0
-	}
-	if first >= 0xf1 && first <= 0xf3 {
-		if i + 3 < bytes.len && is_utf8_continuation(bytes[i + 1])
-			&& is_utf8_continuation(bytes[i + 2]) && is_utf8_continuation(bytes[i + 3]) {
-			return 4
-		}
-		return 0
-	}
-	if first == 0xf4 {
-		if i + 3 < bytes.len && bytes[i + 1] >= 0x80 && bytes[i + 1] <= 0x8f
-			&& is_utf8_continuation(bytes[i + 2]) && is_utf8_continuation(bytes[i + 3]) {
-			return 4
-		}
-	}
-	return 0
 }
 
 fn is_utf8_continuation(byte u8) bool {
@@ -3493,7 +3667,7 @@ fn (mut core Core[^s]) matched[^s](buf []u8, range matcher.Match) !bool {
 }
 
 fn (mut core Core[^s]) binary_data[^s](binary_byte_offset u64) !bool {
-	return core.sink.binary_data(*core.searcher, binary_byte_offset)!
+	return core.sink.binary_data(core.searcher, binary_byte_offset)!
 }
 
 fn (mut core Core[^s]) is_match[^s](line []u8) !bool {
@@ -3530,14 +3704,15 @@ fn (mut core Core[^s]) shortest_match[^s](slice []u8) !matcher.FallibleUsize {
 }
 
 fn (mut core Core[^s]) begin[^s]() !bool {
-	return core.sink.begin(*core.searcher)!
+	return core.sink.begin(core.searcher)!
 }
 
 fn (mut core Core[^s]) finish[^s](byte_count u64, binary_byte_offset ?u64) ! {
-	core.sink.finish(*core.searcher, SinkFinish{
+	finish := SinkFinish{
 		byte_count_:         byte_count
 		binary_byte_offset_: binary_byte_offset
-	})!
+	}
+	core.sink.finish(core.searcher, &finish)!
 }
 
 fn (mut core Core[^s]) match_by_line[^s](buf []u8) !bool {
@@ -3830,14 +4005,11 @@ fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.matched(*core.searcher, SinkMatch{
-		line_term_:             core.config.line_term.as_byte()
-		bytes_:                 buf[range.start()..range.end()]
-		absolute_byte_offset_:  offset
-		line_number_:           core.line_number
-		buffer_:                buf
-		bytes_range_in_buffer_: range
-	})!
+	mut mat := SinkMatch.new(buf, range)
+	mat = mat.with_line_term(core.config.line_term)
+	mat = mat.with_absolute_byte_offset(offset)
+	mat = mat.with_line_number(core.line_number)
+	keepgoing := core.sink.matched(core.searcher, &mat)!
 	if !keepgoing {
 		return false
 	}
@@ -3853,13 +4025,9 @@ fn (mut core Core[^s]) sink_before_context[^s](buf []u8, range matcher.Match) !b
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.context(*core.searcher, SinkContext{
-		line_term_:            core.config.line_term.as_byte()
-		bytes_:                buf[range.start()..range.end()].clone()
-		kind_:                 .before
-		absolute_byte_offset_: offset
-		line_number_:          core.line_number
-	})!
+	ctx := SinkContext.new(core.config.line_term, buf[range.start()..range.end()],
+		.before, offset, core.line_number)
+	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
 		return false
 	}
@@ -3876,13 +4044,9 @@ fn (mut core Core[^s]) sink_after_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.context(*core.searcher, SinkContext{
-		line_term_:            core.config.line_term.as_byte()
-		bytes_:                buf[range.start()..range.end()].clone()
-		kind_:                 .after
-		absolute_byte_offset_: offset
-		line_number_:          core.line_number
-	})!
+	ctx := SinkContext.new(core.config.line_term, buf[range.start()..range.end()],
+		.after, offset, core.line_number)
+	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
 		return false
 	}
@@ -3898,13 +4062,9 @@ fn (mut core Core[^s]) sink_other_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	keepgoing := core.sink.context(*core.searcher, SinkContext{
-		line_term_:            core.config.line_term.as_byte()
-		bytes_:                buf[range.start()..range.end()].clone()
-		kind_:                 .other
-		absolute_byte_offset_: offset
-		line_number_:          core.line_number
-	})!
+	ctx := SinkContext.new(core.config.line_term, buf[range.start()..range.end()],
+		.other, offset, core.line_number)
+	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
 		return false
 	}
@@ -3920,7 +4080,7 @@ fn (mut core Core[^s]) sink_break_context[^s](start_of_line usize) !bool {
 	if !any_context || !core.has_sunk || !is_gap {
 		return true
 	}
-	return core.sink.context_break(*core.searcher)!
+	return core.sink.context_break(core.searcher)!
 }
 
 fn (mut core Core[^s]) count_lines[^s](buf []u8, upto usize) {

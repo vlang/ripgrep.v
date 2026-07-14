@@ -151,7 +151,7 @@ fn printer_find_iter_at(matcher_ &PrinterMatcher, haystack []u8, at usize, match
 	}
 }
 
-fn printer_matcher_multi_line(searcher_ searcher.Searcher, matcher_ &PrinterMatcher) bool {
+fn printer_matcher_multi_line(searcher_ &searcher.Searcher, matcher_ &PrinterMatcher) bool {
 	if !searcher_.multi_line() {
 		return false
 	}
@@ -322,7 +322,7 @@ pub fn trim_ascii_prefix(line_term matcher.LineTerminator, slice []u8, range mat
 	return range.with_start(range.start() + count)
 }
 
-pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ &PrinterMatcher, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
+pub fn find_iter_at_in_context(searcher_ &searcher.Searcher, matcher_ &PrinterMatcher, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {
 	mut bytes := bytes_in
 	// This strange dance is to account for the possibility of look-ahead in
 	// the regex. The problem here is that mat.bytes() doesn't include the
@@ -447,7 +447,7 @@ pub fn Replacer.new() Replacer {
 /// replacement, use the `replacement` method.
 ///
 /// This can fail if the underlying matcher reports an error.
-pub fn (mut replacer Replacer) replace_all(searcher_ searcher.Searcher, matcher_ &PrinterMatcher, haystack_in []u8, range matcher.Match, replacement []u8) ! {
+pub fn (mut replacer Replacer) replace_all(searcher_ &searcher.Searcher, matcher_ &PrinterMatcher, haystack_in []u8, range matcher.Match, replacement []u8) ! {
 	mut haystack := haystack_in.clone()
 	mut line_terminator := []u8{}
 	is_multi_line := printer_matcher_multi_line(searcher_, matcher_)
@@ -558,9 +558,8 @@ pub struct Replacement implements IClone {
 /// results of the replacement instead of the bytes reported directly by the
 /// searcher.
 pub struct Sunk implements IClone {
-	// V-specific: Rust's `Sunk<'a>` borrows all slices and context kind values.
-	// The current V sink path owns these values because `SinkMatch`,
-	// `SinkContext` and replacements are passed as value structs.
+	// V-specific: the slices copied from `SinkMatch` and `SinkContext` remain
+	// borrowed views; replacement payloads are currently owned values.
 	bytes_                []u8
 	absolute_byte_offset_ u64
 	line_number_          ?u64
@@ -573,7 +572,7 @@ pub fn Sunk.empty() Sunk {
 	return Sunk{}
 }
 
-pub fn Sunk.from_sink_match(sunk searcher.SinkMatch, original_matches []matcher.Match, replacement ?Replacement) Sunk {
+pub fn Sunk.from_sink_match[^b](sunk &searcher.SinkMatch[^b], original_matches []matcher.Match, replacement ?Replacement) Sunk {
 	if repl := replacement {
 		return Sunk{
 			bytes_:                repl.bytes.clone()
@@ -592,13 +591,13 @@ pub fn Sunk.from_sink_match(sunk searcher.SinkMatch, original_matches []matcher.
 	}
 }
 
-pub fn Sunk.from_sink_context(sunk searcher.SinkContext, original_matches []matcher.Match, replacement ?Replacement) Sunk {
+pub fn Sunk.from_sink_context[^b](sunk &searcher.SinkContext[^b], original_matches []matcher.Match, replacement ?Replacement) Sunk {
 	if repl := replacement {
 		return Sunk{
 			bytes_:                repl.bytes.clone()
 			absolute_byte_offset_: sunk.absolute_byte_offset()
 			line_number_:          sunk.line_number()
-			context_kind_:         sunk.kind()
+			context_kind_:         *sunk.kind()
 			matches_:              repl.matches.clone()
 			original_matches_:     original_matches.clone()
 		}
@@ -607,7 +606,7 @@ pub fn Sunk.from_sink_context(sunk searcher.SinkContext, original_matches []matc
 		bytes_:                sunk.bytes()
 		absolute_byte_offset_: sunk.absolute_byte_offset()
 		line_number_:          sunk.line_number()
-		context_kind_:         sunk.kind()
+		context_kind_:         *sunk.kind()
 		matches_:              original_matches.clone()
 		original_matches_:     original_matches.clone()
 	}
@@ -629,7 +628,7 @@ pub fn (sunk Sunk) original_matches() []matcher.Match {
 	return sunk.original_matches_
 }
 
-pub fn (sunk Sunk) lines(line_term u8) searcher.LineIter {
+pub fn (sunk Sunk) lines[^b](line_term u8) searcher.LineIter[^b] {
 	return searcher.LineIter.new(line_term, sunk.bytes())
 }
 
@@ -641,7 +640,7 @@ pub fn (sunk Sunk) line_number() ?u64 {
 	return sunk.line_number_
 }
 
-fn trim_line_terminator(searcher_ searcher.Searcher, buf []u8, line matcher.Match) (matcher.Match, []u8) {
+fn trim_line_terminator(searcher_ &searcher.Searcher, buf []u8, line matcher.Match) (matcher.Match, []u8) {
 	lineterm := searcher_.line_terminator()
 	if lineterm.is_suffix(buf[line.start()..line.end()]) {
 		mut end := line.end() - 1

@@ -644,7 +644,7 @@ pub fn (sink &^a StandardSink[^p, ^s, W]) stats[^a, ^p, ^s]() ?&^a Stats {
 
 /// Execute the matcher over the given bytes and record the match
 /// locations if the current configuration demands match granularity.
-fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ searcher.Searcher, bytes []u8, range matcher.Match) ! {
+fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
 	sink.standard.matches = []matcher.Match{}
 	if !sink.needs_match_granularity {
 		return
@@ -676,14 +676,14 @@ fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ searcher.
 /// replacement, lazily allocating memory if necessary.
 ///
 /// To access the result of a replacement, use `replacer.replacement()`.
-fn (mut sink StandardSink[^p, ^s, W]) replace[^p, ^s](searcher_ searcher.Searcher, bytes []u8, range matcher.Match) ! {
+fn (mut sink StandardSink[^p, ^s, W]) replace[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
 	sink.replacer.clear()
 	if replacement := sink.standard.config.replacement {
 		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, replacement)!
 	}
 }
 
-pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
+pub fn (mut sink StandardSink[^p, ^s, W]) matched[^b, ^p, ^s](searcher_ &searcher.Searcher, mat &searcher.SinkMatch[^b]) !bool {
 	sink.match_count++
 	sink.record_matches(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
 	sink.replace(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
@@ -696,12 +696,12 @@ pub fn (mut sink StandardSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sea
 			return false
 		}
 	}
-	mut imp := StandardImpl.from_match(searcher_, &sink, mat)
+	mut imp := StandardImpl.from_match(*searcher_, &sink, mat)
 	imp.sink()!
 	return true
 }
 
-pub fn (mut sink StandardSink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Searcher, ctx searcher.SinkContext) !bool {
+pub fn (mut sink StandardSink[^p, ^s, W]) context[^b, ^p, ^s](searcher_ &searcher.Searcher, ctx &searcher.SinkContext[^b]) !bool {
 	sink.standard.matches.clear()
 	sink.replacer.clear()
 	if searcher_.invert_match() {
@@ -714,18 +714,18 @@ pub fn (mut sink StandardSink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Sea
 			return false
 		}
 	}
-	mut imp := StandardImpl.from_context(searcher_, &sink, ctx)
+	mut imp := StandardImpl.from_context(*searcher_, &sink, ctx)
 	imp.sink()!
 	return true
 }
 
-pub fn (mut sink StandardSink[^p, ^s, W]) context_break[^p, ^s](searcher_ searcher.Searcher) !bool {
-	mut imp := StandardImpl.new(searcher_, &sink)
+pub fn (mut sink StandardSink[^p, ^s, W]) context_break[^p, ^s](searcher_ &searcher.Searcher) !bool {
+	mut imp := StandardImpl.new(*searcher_, &sink)
 	imp.write_context_separator()!
 	return true
 }
 
-pub fn (mut sink StandardSink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher.Searcher, binary_byte_offset u64) !bool {
+pub fn (mut sink StandardSink[^p, ^s, W]) binary_data[^p, ^s](searcher_ &searcher.Searcher, binary_byte_offset u64) !bool {
 	if searcher_.binary_detection().quit_byte() != none {
 		if sink.path != none {
 			log.debug('ignoring file: found binary data at offset ${binary_byte_offset}')
@@ -735,7 +735,7 @@ pub fn (mut sink StandardSink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher
 	return true
 }
 
-pub fn (mut sink StandardSink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Searcher) !bool {
+pub fn (mut sink StandardSink[^p, ^s, W]) begin[^p, ^s](_searcher &searcher.Searcher) !bool {
 	sink.standard.wtr.reset_count()
 	sink.start_time = time.now()
 	sink.match_count = 0
@@ -743,9 +743,9 @@ pub fn (mut sink StandardSink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Searc
 	return true
 }
 
-pub fn (mut sink StandardSink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Searcher, finish searcher.SinkFinish) ! {
+pub fn (mut sink StandardSink[^p, ^s, W]) finish[^p, ^s](searcher_ &searcher.Searcher, finish &searcher.SinkFinish) ! {
 	if offset := sink.binary_byte_offset {
-		mut imp := StandardImpl.new(searcher_, &sink)
+		mut imp := StandardImpl.new(*searcher_, &sink)
 		imp.write_binary_message(offset)!
 	}
 	if sink.has_stats {
@@ -784,7 +784,7 @@ fn StandardImpl.new[^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSin
 
 /// Bundle self with a searcher and return the core implementation of Sink
 /// for use with handling matching lines.
-fn StandardImpl.from_match[^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W], mat searcher.SinkMatch) StandardImpl[^p, ^s, W] {
+fn StandardImpl.from_match[^b, ^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W], mat &searcher.SinkMatch[^b]) StandardImpl[^p, ^s, W] {
 	sunk := Sunk.from_sink_match(mat, sink.standard.matches, sink.replacer.replacement())
 	return StandardImpl[^p, ^s, W]{
 		searcher: searcher_
@@ -795,7 +795,7 @@ fn StandardImpl.from_match[^p, ^s, W](searcher_ searcher.Searcher, sink &^s Stan
 
 /// Bundle self with a searcher and return the core implementation of Sink
 /// for use with handling contextual lines.
-fn StandardImpl.from_context[^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W], ctx searcher.SinkContext) StandardImpl[^p, ^s, W] {
+fn StandardImpl.from_context[^b, ^p, ^s, W](searcher_ searcher.Searcher, sink &^s StandardSink[^p, ^s, W], ctx &searcher.SinkContext[^b]) StandardImpl[^p, ^s, W] {
 	sunk := Sunk.from_sink_context(ctx, sink.standard.matches, sink.replacer.replacement())
 	return StandardImpl[^p, ^s, W]{
 		searcher: searcher_

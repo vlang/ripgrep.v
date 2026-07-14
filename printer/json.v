@@ -632,7 +632,7 @@ pub fn (sink &^a JSONSink[^p, ^s, W]) stats[^a, ^p, ^s]() &^a Stats {
 
 /// Execute the matcher over the given bytes and record the match
 /// locations if the current configuration demands match granularity.
-fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ searcher.Searcher, bytes []u8, range matcher.Match) ! {
+fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
 	// If printing requires knowing the location of each individual match,
 	// then compute and stored those right now for use later. While this
 	// adds an extra copy for storing the matches, we do amortize the
@@ -660,7 +660,7 @@ fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ searcher.Sear
 /// replacement, lazily allocating memory if necessary.
 ///
 /// To access the result of a replacement, use `replacer.replacement()`.
-fn (mut sink JSONSink[^p, ^s, W]) replace[^p, ^s](searcher_ searcher.Searcher, bytes []u8, range matcher.Match) ! {
+fn (mut sink JSONSink[^p, ^s, W]) replace[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
 	sink.replacer.clear()
 	if replacement := sink.json.config.replacement {
 		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, replacement)!
@@ -688,7 +688,7 @@ fn (sink &JSONSink[^p, ^s, W]) path_value[^p, ^s]() ?string {
 	return none
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
+pub fn (mut sink JSONSink[^p, ^s, W]) matched[^b, ^p, ^s](searcher_ &searcher.Searcher, mat &searcher.SinkMatch[^b]) !bool {
 	sink.match_count_++
 	sink.write_begin_message()!
 	sink.record_matches(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
@@ -707,7 +707,7 @@ pub fn (mut sink JSONSink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searche
 	return true
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Searcher, ctx searcher.SinkContext) !bool {
+pub fn (mut sink JSONSink[^p, ^s, W]) context[^b, ^p, ^s](searcher_ &searcher.Searcher, ctx &searcher.SinkContext[^b]) !bool {
 	sink.write_begin_message()!
 	sink.json.matches.clear()
 	mut submatches := []SubMatch{}
@@ -729,13 +729,13 @@ pub fn (mut sink JSONSink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Searche
 }
 
 // V-specific: this no-op callback completes the translated `Sink` interface.
-pub fn (mut sink JSONSink[^p, ^s, W]) context_break[^p, ^s](searcher_ searcher.Searcher) !bool {
+pub fn (mut sink JSONSink[^p, ^s, W]) context_break[^p, ^s](searcher_ &searcher.Searcher) !bool {
 	_ = sink
 	_ = searcher_
 	return true
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher.Searcher, binary_byte_offset u64) !bool {
+pub fn (mut sink JSONSink[^p, ^s, W]) binary_data[^p, ^s](searcher_ &searcher.Searcher, binary_byte_offset u64) !bool {
 	if searcher_.binary_detection().quit_byte() != none {
 		if path := sink.path {
 			log.debug('ignoring ${*path}: found binary data at offset ${binary_byte_offset}')
@@ -744,7 +744,7 @@ pub fn (mut sink JSONSink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher.Sea
 	return true
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Searcher) !bool {
+pub fn (mut sink JSONSink[^p, ^s, W]) begin[^p, ^s](_searcher &searcher.Searcher) !bool {
 	sink.json.wtr.reset_count()
 	sink.start_time = time.now()
 	sink.match_count_ = 0
@@ -756,7 +756,7 @@ pub fn (mut sink JSONSink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Searcher)
 	return true
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) finish[^p, ^s](_searcher searcher.Searcher, finish searcher.SinkFinish) ! {
+pub fn (mut sink JSONSink[^p, ^s, W]) finish[^p, ^s](_searcher &searcher.Searcher, finish &searcher.SinkFinish) ! {
 	sink.binary_byte_offset = finish.binary_byte_offset()
 	sink.stats_.add_elapsed(time.since(sink.start_time))
 	sink.stats_.add_searches(1)
