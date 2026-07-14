@@ -1,6 +1,5 @@
 module printer
 
-import os
 import matcher
 import pcre2
 import regex
@@ -243,7 +242,7 @@ fn (pp PrinterPath[^a]) as_bytes_view[^a]() []u8 {
 /// This port uses an optional cached hyperlink value instead of a `OnceCell`.
 pub fn (mut pp PrinterPath[^a]) as_hyperlink[^a]() ?&^a HyperlinkPath {
 	if !pp.has_hyperlink {
-		hyperlink := HyperlinkPath.from_path(*pp.path) or { return none }
+		hyperlink := HyperlinkPath.from_path(pp.path) or { return none }
 		pp.hyperlink = hyperlink
 		pp.has_hyperlink = true
 	}
@@ -323,14 +322,6 @@ pub fn trim_ascii_prefix(line_term matcher.LineTerminator, slice []u8, range mat
 		count++
 	}
 	return range.with_start(range.start() + count)
-}
-
-pub fn normalize_hyperlink_path(path string) ?string {
-	canonical := os.real_path(path)
-	if canonical == '' || !os.is_abs_path(canonical) {
-		return none
-	}
-	return canonical.clone()
 }
 
 pub fn find_iter_at_in_context(searcher_ searcher.Searcher, matcher_ &PrinterMatcher, bytes_in []u8, range matcher.Match, matched fn (matcher.Match) bool) ! {

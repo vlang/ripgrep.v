@@ -1,11 +1,14 @@
 module printer
 
+import os
+
 fn assert_hyperlink_parse_ok(input string) HyperlinkFormat {
 	return parse_hyperlink_format(input) or { panic(err.msg()) }
 }
 
 fn assert_hyperlink_parse_error(input string, expected HyperlinkFormatError) {
 	parse_hyperlink_format(input) or {
+		assert err is HyperlinkFormatError
 		assert err.msg() == expected.msg()
 		return
 	}
@@ -62,6 +65,31 @@ fn test_hyperlink_parse_valid() {
 	assert_hyperlink_parse_ok('+:{path}')
 	assert_hyperlink_parse_ok('F42:{path}')
 	assert_hyperlink_parse_ok('F42://foo{{bar}}{path}')
+	assert assert_hyperlink_parse_ok('foo://café/{path}').str() == 'foo://café/{path}'
+}
+
+fn test_hyperlink_text_display_is_lossy() {
+	part := HyperlinkPart{
+		kind: .text
+		text: [u8(0xff)]
+	}
+	assert part.str() == '�'
+}
+
+fn test_hyperlink_interpolate_values() {
+	mut env := HyperlinkEnvironment.new()
+	env.host('example.com'.to_owned())
+	env.wsl_prefix('wsl$/Ubuntu'.to_owned())
+	path := HyperlinkPath{
+		bytes: '/tmp/example'.bytes()
+	}
+	values := Values.new(&path).line(42).column(7)
+	format := assert_hyperlink_parse_ok('foo://{host}/{wslprefix}{path}:{line}:{column}')
+	mut dest := []u8{}
+	for part in format.parts_ {
+		part.interpolate_to(&env, &values, mut dest)
+	}
+	assert dest.bytestr() == 'foo://example.com/wsl$/Ubuntu/tmp/example:42:7'
 }
 
 fn test_hyperlink_parse_invalid() {
@@ -123,7 +151,7 @@ fn test_hyperlink_parse_invalid() {
 fn test_hyperlink_convert_to_hyperlink_path() {
 	$if windows {
 		convert := fn (path string) string {
-			hyperpath := HyperlinkPath.from_path(path) or { panic('missing hyperlink path') }
+			hyperpath := HyperlinkPath.from_path(&path) or { panic('missing hyperlink path') }
 			return hyperpath.bytes.bytestr()
 		}
 
@@ -138,11 +166,20 @@ fn test_hyperlink_convert_to_hyperlink_path() {
 	}
 }
 
+fn test_hyperlink_missing_path_is_not_canonicalized() {
+	$if unix {
+		path := os.join_path(os.temp_dir(), 'ripgrep-v-hyperlink-path-that-does-not-exist')
+		if _ := HyperlinkPath.from_path(&path) {
+			assert false
+		}
+	}
+}
+
 fn test_hyperlink_aliases_are_sorted() {
 	aliases := hyperlink_aliases()
-	mut prev := aliases[0].name()
+	mut prev := aliases[0].name().clone()
 	for alias in aliases[1..] {
-		name := alias.name()
+		name := alias.name().clone()
 		assert name > prev, "'${prev}' should come before '${name}' in HYPERLINK_PATTERN_ALIASES"
 		prev = name
 	}
@@ -155,7 +192,7 @@ fn test_hyperlink_alias_names_are_reasonable() {
 		// probably flag it as worthy of consideration. For example, we
 		// really do not want to define an alias that contains `{` or `}`,
 		// which might confuse it for a variable.
-		for ch in alias.name() {
+		for ch in *alias.name() {
 			assert ch.is_alnum() || ch == `+` || ch == `-` || ch == `.`
 		}
 	}
@@ -163,8 +200,8 @@ fn test_hyperlink_alias_names_are_reasonable() {
 
 fn test_hyperlink_aliases_are_valid_formats() {
 	for alias in hyperlink_aliases() {
-		name := alias.name()
-		format := alias.format()
+		name := alias.name().clone()
+		format := alias.format().clone()
 		parse_hyperlink_format(format) or {
 			assert false, "invalid hyperlink alias '${name}': ${format}"
 		}

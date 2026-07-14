@@ -26,7 +26,7 @@ pub fn (builder PathPrinterBuilder) build[W](wtr W) PathPrinter[W] {
 	return PathPrinter[W]{
 		config:       builder.config
 		wtr:          wtr
-		interpolator: Interpolator.new(builder.config.hyperlink)
+		interpolator: Interpolator.new(&builder.config.hyperlink)
 	}
 }
 
@@ -153,7 +153,7 @@ fn (mut printer PathPrinter[W]) start_hyperlink[^p](mut path PrinterPath[^p]) !I
 	$if W is WriteColor {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)
-		return printer.interpolator.begin(values, mut printer.wtr)
+		return printer.interpolator.begin(&values, mut printer.wtr)
 	} $else {
 		_ = path
 		return InterpolatorStatus.inactive()

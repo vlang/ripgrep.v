@@ -293,7 +293,7 @@ pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s
 	return SummarySink[^s, ^s, W]{
 		matcher:      matcher_
 		summary:      &summary
-		interpolator: Interpolator.new(summary.config.hyperlink)
+		interpolator: Interpolator.new(&summary.config.hyperlink)
 		path:         ?PrinterPath(none)
 		start_time:   time.now()
 		match_count:  0
@@ -312,7 +312,7 @@ pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, 
 		return SummarySink[^p, ^s, W]{
 			matcher:      matcher_
 			summary:      &summary
-			interpolator: Interpolator.new(summary.config.hyperlink)
+			interpolator: Interpolator.new(&summary.config.hyperlink)
 			path:         ?PrinterPath(none)
 			start_time:   time.now()
 			match_count:  0
@@ -324,7 +324,7 @@ pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, 
 	return SummarySink[^p, ^s, W]{
 		matcher:      matcher_
 		summary:      &summary
-		interpolator: Interpolator.new(summary.config.hyperlink)
+		interpolator: Interpolator.new(&summary.config.hyperlink)
 		path:         ppath
 		start_time:   time.now()
 		match_count:  0
@@ -475,7 +475,7 @@ fn (mut sink SummarySink[^p, ^s, W]) start_hyperlink[^p, ^s]() !InterpolatorStat
 	if mut path := sink.path {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)
-		return sink.interpolator.begin(values, mut sink.summary.wtr)
+		return sink.interpolator.begin(&values, mut sink.summary.wtr)
 	}
 	return InterpolatorStatus.inactive()
 }

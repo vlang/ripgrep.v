@@ -462,7 +462,7 @@ pub fn (mut standard Standard[W]) sink[^s](matcher_ PrinterMatcher) StandardSink
 		matcher:                 matcher_
 		standard:                &standard
 		replacer:                Replacer{}
-		interpolator:            Interpolator.new(standard.config.hyperlink)
+		interpolator:            Interpolator.new(&standard.config.hyperlink)
 		path:                    none
 		start_time:              time.now()
 		match_count:             0
@@ -486,7 +486,7 @@ pub fn (mut standard Standard[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher
 		matcher:                 matcher_
 		standard:                &standard
 		replacer:                Replacer{}
-		interpolator:            Interpolator.new(standard.config.hyperlink)
+		interpolator:            Interpolator.new(&standard.config.hyperlink)
 		path:                    ppath
 		start_time:              time.now()
 		match_count:             0
@@ -1319,7 +1319,7 @@ fn (mut imp StandardImpl[^p, ^s, W]) write_path_hyperlink[^p, ^s](mut path Print
 fn (mut imp StandardImpl[^p, ^s, W]) start_hyperlink[^p, ^s](mut path PrinterPath[^p], line_number ?u64, column ?u64) !InterpolatorStatus {
 	hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 	values := Values.new(hyperpath).line(line_number).column(column)
-	return imp.sink.interpolator.begin(values, mut imp.sink.standard.wtr)
+	return imp.sink.interpolator.begin(&values, mut imp.sink.standard.wtr)
 }
 
 fn (mut imp StandardImpl[^p, ^s, W]) end_hyperlink[^p, ^s](status InterpolatorStatus) ! {
