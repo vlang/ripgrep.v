@@ -1,5 +1,6 @@
 module pcre2
 
+import log
 import matcher
 import sync.stdatomic
 
@@ -68,6 +69,12 @@ fn pcre2_enabled() bool {
 	}
 }
 
+// V-specific: V's standard logger has no trace level, so source trace
+// diagnostics use its debug level.
+fn pcre2_trace(message string) {
+	log.debug(message)
+}
+
 /// A builder for configuring the compilation of a PCRE2 regex.
 pub struct RegexMatcherBuilder implements IClone {
 mut:
@@ -97,7 +104,7 @@ pub fn RegexMatcherBuilder.new() RegexMatcherBuilder {
 ///
 /// If there was a problem compiling the pattern, then an error is
 /// returned.
-pub fn (builder RegexMatcherBuilder) build(pattern string) !RegexMatcher {
+pub fn (builder &RegexMatcherBuilder) build(pattern string) !RegexMatcher {
 	return builder.build_many([pattern.to_owned()])
 }
 
@@ -105,7 +112,7 @@ pub fn (builder RegexMatcherBuilder) build(pattern string) !RegexMatcher {
 /// at least one of the patterns matches.
 ///
 /// If there was a problem building the regex, then an error is returned.
-pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher {
+pub fn (builder &RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher {
 	$if pcre2 ? {
 		mut pats := []string{cap: patterns.len}
 		for p in patterns {
@@ -121,6 +128,7 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 		} else {
 			pats.join('|')
 		}
+		caseless := builder.caseless || (builder.case_smart && !has_uppercase_literal(&singlepat))
 		if builder.whole_line {
 			singlepat = r'(?m:^)(?:' + singlepat + r')(?m:$)'
 		} else if builder.word {
@@ -129,8 +137,9 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 			// boundaries. So this extra goop is strictly redundant.
 			singlepat = r'(?<!\w)(?:' + singlepat + r')(?!\w)'
 		}
+		pcre2_trace('final regex: ${singlepat}')
 		mut options := u32(0)
-		if builder.caseless || (builder.case_smart && !has_uppercase_literal(&singlepat)) {
+		if caseless {
 			options |= C.rg_pcre2_opt_caseless()
 		}
 		if builder.multi_line || builder.crlf {
@@ -167,6 +176,7 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 					C.rg_pcre2_code_free(code)
 					return Error.regex_message('PCRE2 JIT is not available')
 				}
+				log.debug('PCRE2 JIT is not available')
 			} else {
 				jit_rc := C.rg_pcre2_jit_compile(code)
 				if jit_rc != 0 {
@@ -174,6 +184,7 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 						C.rg_pcre2_code_free(code)
 						return Error.regex_message(pcre2_error_message(jit_rc))
 					}
+					log.debug('PCRE2 JIT compilation failed: ${pcre2_error_message(jit_rc)}')
 				} else {
 					jit_enabled = true
 				}
@@ -425,8 +436,9 @@ pub fn (mut builder RegexMatcherBuilder) max_jit_stack_size(bytes ?usize) &Regex
 
 /// An implementation of the `Matcher` trait using PCRE2.
 pub struct RegexMatcher implements IClone, Drop {
-	// V-specific: PCRE2 resources are owned by the shim object and shared by
-	// by-value matcher clones through this reference count.
+	// V-specific: PCRE2 resources are owned by the shim object. The reference
+	// count protects by-value aliases, while `clone` duplicates Rust's owned
+	// regex state.
 	inner               voidptr
 	refs                &stdatomic.AtomicVal[int]
 	capture_count_value usize
@@ -522,14 +534,9 @@ fn (re &RegexMatcher) match_context() voidptr {
 }
 
 pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
-	found, _ := re.capture_groups_at(haystack, at)!
-	return found
-}
-
-pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
 	$if pcre2 ? {
 		if at > haystack.len {
-			return matcher.FallibleMatch.absent(), []string{}
+			return matcher.FallibleMatch.absent()
 		}
 		code := re.code()
 		if isnil(code) {
@@ -539,32 +546,47 @@ pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.F
 		if isnil(match_data) {
 			return Error.regex_message('failed to allocate PCRE2 match data')
 		}
+		defer {
+			C.rg_pcre2_match_data_free(match_data)
+		}
 		mut empty_subject := [u8(0)]
 		subject := if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
 		rc := C.rg_pcre2_match(code, subject, usize(haystack.len), at, u32(0), match_data,
 			re.match_context())
 		if rc == C.rg_pcre2_error_nomatch() {
-			C.rg_pcre2_match_data_free(match_data)
-			return matcher.FallibleMatch.absent(), []string{}
+			return matcher.FallibleMatch.absent()
 		}
 		if rc < 0 {
-			C.rg_pcre2_match_data_free(match_data)
 			return Error.regex_message(pcre2_error_message(rc))
 		}
 		ovector := C.rg_pcre2_ovector(match_data)
-		match_start := unsafe { ovector[0] }
-		match_end := unsafe { ovector[1] }
-		mat := matcher.Match.new(match_start, match_end)
-		groups := re.capture_groups_from_ovector(haystack, ovector)
-		C.rg_pcre2_match_data_free(match_data)
-		return matcher.FallibleMatch.some(mat), groups
+		return matcher.FallibleMatch.some(matcher.Match.new(unsafe { ovector[0] },
+			unsafe { ovector[1] }))
 	}
 	return Error.regex_message('PCRE2 is not available in this build of ripgrep')
 }
 
-pub fn (re &RegexMatcher) new_captures() !matcher.NoCaptures {
-	_ = re
-	return matcher.NoCaptures.new()
+// V-specific helper used by the printer wrapper because V interfaces cannot
+// express Rust associated capture types.
+pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+	mut caps := re.new_captures()!
+	if !re.captures_at(haystack, at, mut caps)! {
+		return matcher.FallibleMatch.absent(), []string{}
+	}
+	mat := caps.get(0) or { return matcher.FallibleMatch.absent(), []string{} }
+	mut groups := []string{cap: int(caps.len() - 1)}
+	for i := usize(1); i < caps.len(); i++ {
+		if group := caps.get(i) {
+			groups << haystack[group.start()..group.end()].bytestr()
+		} else {
+			groups << ''
+		}
+	}
+	return matcher.FallibleMatch.some(mat), groups
+}
+
+pub fn (re &RegexMatcher) new_captures() !RegexCaptures {
+	return RegexCaptures.new(re.capture_count())
 }
 
 pub fn (re &RegexMatcher) capture_count() usize {
@@ -581,26 +603,8 @@ pub fn (re &RegexMatcher) capture_index(name string) ?usize {
 	return none
 }
 
-fn (re &RegexMatcher) capture_groups_from_ovector(haystack []u8, ovector &usize) []string {
-	$if pcre2 ? {
-		mut groups := []string{cap: int(re.capture_count_value)}
-		unset := C.rg_pcre2_unset()
-		for i := usize(1); i < re.capture_count_value; i++ {
-			start := unsafe { ovector[i * 2] }
-			end := unsafe { ovector[i * 2 + 1] }
-			if start == unset || end == unset || start > haystack.len || end > haystack.len
-				|| start > end {
-				groups << ''
-				continue
-			}
-			groups << haystack[start..end].bytestr()
-		}
-		return groups
-	}
-	_ = re
-	_ = haystack
-	_ = ovector
-	return []string{}
+pub fn (re &RegexMatcher) try_find_iter(haystack []u8, matched fn (matcher.Match) !bool) ! {
+	matcher.try_find_iter(re, haystack, matched)!
 }
 
 fn pcre2_capture_names(code voidptr) map[string]usize {
@@ -642,9 +646,99 @@ fn pcre2_error_message(code int) string {
 	return 'PCRE2 error ${code}'
 }
 
-pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
-	_ = caps
-	return re.find_at(haystack, at)!.is_some()
+pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCaptures) !bool {
+	$if pcre2 ? {
+		caps.clear()
+		if at > haystack.len {
+			return false
+		}
+		code := re.code()
+		if isnil(code) {
+			return Error.regex_message('PCRE2 regex is not initialized')
+		}
+		match_data := C.rg_pcre2_match_data_create(code)
+		if isnil(match_data) {
+			return Error.regex_message('failed to allocate PCRE2 match data')
+		}
+		defer {
+			C.rg_pcre2_match_data_free(match_data)
+		}
+		mut empty_subject := [u8(0)]
+		subject := if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
+		rc := C.rg_pcre2_match(code, subject, usize(haystack.len), at, u32(0), match_data,
+			re.match_context())
+		if rc == C.rg_pcre2_error_nomatch() {
+			return false
+		}
+		if rc < 0 {
+			return Error.regex_message(pcre2_error_message(rc))
+		}
+		ovector := C.rg_pcre2_ovector(match_data)
+		unset := C.rg_pcre2_unset()
+		limit := if caps.len() < re.capture_count() { caps.len() } else { re.capture_count() }
+		for i := usize(0); i < limit; i++ {
+			start := unsafe { ovector[i * 2] }
+			end := unsafe { ovector[i * 2 + 1] }
+			if start != unset && end != unset && start <= haystack.len && end <= haystack.len
+				&& start <= end {
+				caps.set(i, matcher.Match.new(start, end))
+			}
+		}
+		return true
+	}
+	return Error.regex_message('PCRE2 is not available in this build of ripgrep')
+}
+
+/// Represents the match offsets of each capturing group in a match.
+///
+/// The first, or `0`th capture group, always corresponds to the entire match
+/// and is guaranteed to be present when a match occurs. The next capture
+/// group, at index `1`, corresponds to the first capturing group in the regex,
+/// ordered by the position at which the left opening parenthesis occurs.
+///
+/// Note that not all capturing groups are guaranteed to be present in a match.
+/// For example, in the regex, `(?P<foo>\w)|(?P<bar>\W)`, only one of `foo`
+/// or `bar` will ever be set in any given match.
+///
+/// In order to access a capture group by name, you'll need to first find the
+/// index of the group using the corresponding matcher's `capture_index`
+/// method, and then use that index with `RegexCaptures.get`.
+pub struct RegexCaptures implements IClone {
+	/// Where the locations are stored.
+	locs []?matcher.Match
+}
+
+/// Return the total number of capturing groups. This includes capturing
+/// groups that have not matched anything.
+pub fn (caps &RegexCaptures) len() usize {
+	return usize(caps.locs.len)
+}
+
+/// Return the capturing group match at the given index. If no match of
+/// that capturing group exists, then this returns `none`.
+pub fn (caps &RegexCaptures) get(i usize) ?matcher.Match {
+	if i >= usize(caps.locs.len) {
+		return none
+	}
+	return caps.locs[int(i)]
+}
+
+fn RegexCaptures.new(len usize) RegexCaptures {
+	return RegexCaptures{
+		locs: []?matcher.Match{len: int(len), init: none}
+	}
+}
+
+fn (mut caps RegexCaptures) clear() {
+	for i := 0; i < caps.locs.len; i++ {
+		caps.locs[i] = none
+	}
+}
+
+fn (mut caps RegexCaptures) set(i usize, mat matcher.Match) {
+	if i < usize(caps.locs.len) {
+		caps.locs[int(i)] = mat
+	}
 }
 
 pub fn (re &^a RegexMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
@@ -667,8 +761,10 @@ pub fn (re &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.Fa
 
 /// A borrowed matcher adapter for APIs that currently use V interface values.
 ///
-/// The interface contains this pointer-only adapter instead of copying the
-/// owning `RegexMatcher` value.
+/// V interfaces cannot express Rust associated capture types. This pointer-only
+/// adapter therefore exposes the capture-less interface needed by the searcher
+/// without copying the owning compiled regex value. The owning matcher retains
+/// its source-faithful `RegexCaptures` API.
 pub struct RegexMatcherRef[^a] {
 	re &^a RegexMatcher
 }
@@ -688,22 +784,22 @@ pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack []u8, at usize) !
 }
 
 pub fn (re RegexMatcherRef[^a]) new_captures[^a]() !matcher.NoCaptures {
-	return re.re.new_captures()
+	return matcher.NoCaptures.new()
 }
 
 pub fn (re RegexMatcherRef[^a]) capture_count[^a]() usize {
-	return re.re.capture_count()
+	return matcher.default_capture_count()
 }
 
 pub fn (re RegexMatcherRef[^a]) capture_index[^a](name string) ?usize {
-	return re.re.capture_index(name)
+	return matcher.default_capture_index(name)
 }
 
 pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
-	return re.re.captures_at(haystack, at, mut caps)
+	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
-pub fn (re RegexMatcherRef[^a]) non_matching_bytes[^b, ^a]() ?&^b matcher.ByteSet {
+pub fn (re RegexMatcherRef[^a]) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
 	_ = re
 	return none
 }
@@ -727,98 +823,20 @@ pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack []u8) !matcher.
 /// This at least lets us support the most common cases, like 'foo\w' and
 /// 'foo\S', in an intuitive manner.
 fn has_uppercase_literal(pattern &string) bool {
-	pat := *pattern
+	runes := pattern.runes()
 	mut i := 0
-	for i < pat.len {
-		if pat[i] == `\\` {
+	for i < runes.len {
+		c := runes[i]
+		if c == `\\` {
 			i += 2
 			continue
 		}
-		if pat[i] >= `A` && pat[i] <= `Z` {
+		if c.to_upper() == c && c.to_lower() != c {
 			return true
 		}
 		i++
 	}
 	return false
-}
-
-fn normalize_backend_pattern(pattern string, crlf bool) string {
-	if !crlf {
-		return pattern
-	}
-	bytes := pattern.bytes()
-	mut out := []u8{cap: bytes.len}
-	mut i := 0
-	mut in_class := false
-	mut escaped := false
-	for i < bytes.len {
-		ch := bytes[i]
-		if !escaped && !in_class && ch == `$` {
-			out << r'\x0D?$'.bytes()
-			i++
-			escaped = false
-			continue
-		}
-		if !escaped && ch == `[` {
-			in_class = true
-		} else if !escaped && ch == `]` {
-			in_class = false
-		}
-		out << ch
-		escaped = !escaped && ch == `\\`
-		i++
-	}
-	return out.bytestr()
-}
-
-fn apply_extended_mode(pattern string) string {
-	mut out := []u8{cap: pattern.len}
-	mut escaped := false
-	mut in_class := false
-	mut in_comment := false
-	for b in pattern.bytes() {
-		if in_comment {
-			if b == `\n` || b == `\r` {
-				in_comment = false
-			}
-			continue
-		}
-		if escaped {
-			out << b
-			escaped = false
-			continue
-		}
-		if b == `\\` {
-			out << b
-			escaped = true
-			continue
-		}
-		if in_class {
-			out << b
-			if b == `]` {
-				in_class = false
-			}
-			continue
-		}
-		if b == `[` {
-			out << b
-			in_class = true
-			continue
-		}
-		if b == `#` {
-			in_comment = true
-			continue
-		}
-		if is_extended_whitespace(b) {
-			continue
-		}
-		out << b
-	}
-	return out.bytestr()
-}
-
-fn is_extended_whitespace(b u8) bool {
-	return b == ` ` || b == `\t` || b == `\n` || b == `\r` || b == `\f`
 }
 
 fn pcre_escape(pattern string) string {

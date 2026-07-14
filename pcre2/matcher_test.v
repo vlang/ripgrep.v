@@ -1,5 +1,7 @@
 module pcre2
 
+import matcher
+
 fn pcre2_is_match(re &RegexMatcher, haystack []u8) !bool {
 	return re.find_at(haystack, 0)!.has_value
 }
@@ -125,6 +127,18 @@ fn test_case_smart() {
 	assert !pcre2_is_match(&upper_matcher, 'ABC'.bytes())!
 }
 
+fn test_case_smart_recognizes_unicode_uppercase() {
+	if !has_pcre2_feature() {
+		return
+	}
+	mut builder := RegexMatcherBuilder.new()
+	builder.case_smart(true)
+	builder.ucp(true)
+	matcher_ := builder.build('Δ') or { panic(err) }
+	assert pcre2_is_match(&matcher_, 'Δ'.bytes())!
+	assert !pcre2_is_match(&matcher_, 'δ'.bytes())!
+}
+
 fn test_extended() {
 	if !has_pcre2_feature() {
 		return
@@ -199,4 +213,26 @@ fn test_capture_metadata() {
 	matcher_ := RegexMatcherBuilder.new().build(r'(?P<name>ab)(c)') or { panic(err) }
 	assert matcher_.capture_count() == 3
 	assert matcher_.capture_index('name') or { usize(0) } == usize(1)
+}
+
+fn test_captures() {
+	if !has_pcre2_feature() {
+		return
+	}
+	matcher_ := RegexMatcherBuilder.new().build(r'(?P<foo>\w)|(?P<bar>\W)') or { panic(err) }
+	mut caps := matcher_.new_captures()!
+	assert caps.len() == 3
+	assert matcher_.captures_at('a'.bytes(), 0, mut caps)!
+	assert caps.get(0) or { panic('missing overall match') } == matcher.Match.new(0, 1)
+	assert caps.get(1) or { panic('missing foo match') } == matcher.Match.new(0, 1)
+	assert caps.get(2) == none
+	cloned := caps.clone()
+	assert cloned.get(0) or { panic('missing cloned overall match') } == matcher.Match.new(0, 1)
+	assert cloned.get(1) or { panic('missing cloned foo match') } == matcher.Match.new(0, 1)
+	assert cloned.get(2) == none
+
+	assert matcher_.captures_at('!'.bytes(), 0, mut caps)!
+	assert caps.get(0) or { panic('missing overall match') } == matcher.Match.new(0, 1)
+	assert caps.get(1) == none
+	assert caps.get(2) or { panic('missing bar match') } == matcher.Match.new(0, 1)
 }
