@@ -1,6 +1,27 @@
 module flags
 
-// This file is mechanically translated from ripgrep's crates/core/flags/defs.rs.
+/*
+Defines all of the flags available in ripgrep.
+
+Each flag corresponds to a unit struct with a corresponding implementation
+of `Flag`. Note that each implementation of `Flag` might actually have many
+possible manifestations of the same "flag." That is, each implementation of
+`Flag` can have the following flags available to an end user of ripgrep:
+
+* The long flag name.
+* An optional short flag name.
+* An optional negated long flag name.
+* An arbitrarily long list of aliases.
+
+The idea is that even though there are multiple flags that a user can type,
+one implementation of `Flag` corresponds to a single _logical_ flag inside of
+ripgrep. For example, `-E`, `--encoding` and `--no-encoding` all manipulate the
+same encoding state in ripgrep.
+*/
+
+// V-specific: Rust represents each logical flag with a unit struct that
+// implements `Flag`. This port uses `FlagId` and exhaustive methods so the
+// static flag registry remains ownership-free.
 
 import encoding.utf8
 
@@ -3291,7 +3312,9 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		}
 		.unrestricted {
 			assert v.unwrap_switch()
-			args.unrestricted++
+			if args.unrestricted < ~usize(0) {
+				args.unrestricted++
+			}
 			if args.unrestricted > 3 {
 						return error('flag can only be repeated up to 3 times')
 					}

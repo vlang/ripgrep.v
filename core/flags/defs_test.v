@@ -2567,6 +2567,16 @@ fn test_update_unrestricted() {
 	assert args.binary == .search_and_suppress
 }
 
+fn test_update_unrestricted_saturates_at_usize_max() {
+	mut args := default_low_args()
+	args.unrestricted = ~usize(0)
+	FlagId.unrestricted.update(flag_switch(true), mut args) or {
+		assert args.unrestricted == ~usize(0)
+		return
+	}
+	assert false
+}
+
 fn test_update_with_filename() {
 	assert must_apply([]UpdateStep{}).with_filename == none
 	assert_opt_bool(must_apply([UpdateStep{'with-filename', flag_switch(true)}]).with_filename,
