@@ -547,7 +547,7 @@ pub fn compile_with_limits(pattern string, size_limit usize, memo_size_limit usi
 	}
 
 	// Phase 1: AST Parsing
-	nodes, _, final_group_count := parse_nodes(pattern, 0, `\0`, 0, initial_flags, mut group_map)!
+	nodes, _, final_group_count := parse_nodes(pattern, 0, none, 0, initial_flags, mut group_map)!
 
 	root := Node{
 		typ:   .group
@@ -995,7 +995,7 @@ fn parse_word_boundary_suffix(pattern string, pos int, negated bool) (WordBounda
 }
 
 // parse_nodes implements a recursive descent parser to construct the AST from the pattern string.
-fn parse_nodes(pattern string, pos_start int, terminator rune, group_counter_start int, passed_flags Flags, mut group_map map[string]int) !([]Node, int, int) {
+fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_start int, passed_flags Flags, mut group_map map[string]int) !([]Node, int, int) {
 	mut pos := pos_start
 	mut group_counter := group_counter_start
 	mut current_flags := passed_flags
@@ -1004,19 +1004,21 @@ fn parse_nodes(pattern string, pos_start int, terminator rune, group_counter_sta
 
 	for pos < pattern.len {
 		chr, char_len := read_rune_at(pattern.str, pattern.len, pos)
-		if chr == terminator {
-			pos += char_len
-			if alternatives.len > 0 {
-				alternatives << current_sequence
-				return [
-					Node{
-						typ:          .alternation
-						alternatives: alternatives
-						quant:        Quantifier{1, 1, true}
-					},
-				], pos, group_counter
+		if end := terminator {
+			if chr == end {
+				pos += char_len
+				if alternatives.len > 0 {
+					alternatives << current_sequence
+					return [
+						Node{
+							typ:          .alternation
+							alternatives: alternatives
+							quant:        Quantifier{1, 1, true}
+						},
+					], pos, group_counter
+				}
+				return current_sequence, pos, group_counter
 			}
-			return current_sequence, pos, group_counter
 		}
 		if chr == `|` {
 			pos += char_len
