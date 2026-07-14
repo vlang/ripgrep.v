@@ -1,6 +1,7 @@
 module ignore
 
 import encoding.utf8
+import globset
 
 /*
 The types module provides a way of associating globs on file names to file
@@ -12,6 +13,76 @@ with name `rust`. Similarly, the C file type is defined to be `*.{c,h}` with
 name `c`.
 
 Note that the set of default types may change over time.
+
+# Example
+
+This shows how to create and use a simple file type matcher using the default
+file types defined in this crate.
+
+```v
+mut builder := TypesBuilder.new()
+builder.add_defaults()
+builder.select('rust')
+matcher_, has_err, _ := builder.build()
+assert !has_err
+
+assert matcher_.matched('foo.rs', false).is_whitelist()
+assert matcher_.matched('foo.c', false).is_ignore()
+```
+
+# Example: negation
+
+This is like the previous example, but shows how negating a file type works.
+That is, this will let us match file paths that *don't* correspond to a
+particular file type.
+
+```v
+mut builder := TypesBuilder.new()
+builder.add_defaults()
+builder.negate('c')
+matcher_, has_err, _ := builder.build()
+assert !has_err
+
+assert matcher_.matched('foo.rs', false).is_none()
+assert matcher_.matched('foo.c', false).is_ignore()
+```
+
+# Example: custom file type definitions
+
+This shows how to extend this library default file type definitions with
+your own.
+
+```v
+mut builder := TypesBuilder.new()
+builder.add_defaults()
+builder.add('foo', '*.foo')
+// Another way of adding a file type definition.
+// This is useful when accepting input from an end user.
+builder.add_def('bar:*.bar')
+// Note: we only select `foo`, not `bar`.
+builder.select('foo')
+matcher_, has_err, _ := builder.build()
+assert !has_err
+
+assert matcher_.matched('x.foo', false).is_whitelist()
+// This is ignored because we only selected the `foo` file type.
+assert matcher_.matched('x.bar', false).is_ignore()
+```
+
+We can also add file type definitions based on other definitions.
+
+```v
+mut builder := TypesBuilder.new()
+builder.add_defaults()
+builder.add('foo', '*.foo')
+builder.add_def('bar:include:foo,cpp')
+builder.select('bar')
+matcher_, has_err, _ := builder.build()
+assert !has_err
+
+assert matcher_.matched('x.foo', false).is_whitelist()
+assert matcher_.matched('y.cpp', false).is_whitelist()
+```
 */
 
 type FileTypeDefRef[^a] = &^a FileTypeDef
@@ -30,6 +101,9 @@ type FileTypeDefRef[^a] = &^a FileTypeDef
 ///
 /// The lifetime `^a` refers to the lifetime of the underlying file type
 /// definition, which corresponds to the lifetime of the file type matcher.
+///
+/// V-specific type name: Rust uses `Glob`, but that name is already used by
+/// the translated gitignore matcher in this module.
 pub struct TypesGlob[^a] implements IClone {
 	kind TypesGlobInner
 	def  ?FileTypeDefRef[^a]
@@ -56,7 +130,7 @@ fn TypesGlob.matched[^a](def FileTypeDefRef[^a]) TypesGlob[^a] {
 /// Return the file type definition that matched, if one exists. A file type
 /// definition always exists when a specific definition matches a file
 /// path.
-pub fn (g TypesGlob[^a]) file_type_def[^a]() ?FileTypeDefRef[^a] {
+pub fn (g &TypesGlob[^a]) file_type_def[^a]() ?FileTypeDefRef[^a] {
 	return g.def
 }
 
@@ -82,13 +156,25 @@ pub fn (def &^a FileTypeDef) globs[^a]() &^a []string {
 
 /// Types is a file type matcher.
 pub struct Types implements IClone {
-	// All of the file type definitions, sorted lexicographically by name.
+	/// All of the file type definitions, sorted lexicographically by name.
 	defs []FileTypeDef
-	// All of the selections made by the user.
+	/// All of the selections made by the user.
 	selections []SelectionDef
-	// Whether there is at least one Selection::Select in our selections.
-	// When this is true, a Match::None is converted to Match::Ignore.
+	/// Whether there is at least one Selection::Select in our selections.
+	/// When this is true, a Match::None is converted to Match::Ignore.
 	has_selected bool
+	/// A mapping from glob index in the set to two indices. The first is an
+	/// index into `selections` and the second is an index into the
+	/// corresponding file type definition's list of globs.
+	glob_to_selection []GlobSelectionIndex
+	/// The set of all glob selections, used for actual matching.
+	set globset.GlobSet
+}
+
+// V-specific representation of Rust's `(usize, usize)` mapping entry.
+struct GlobSelectionIndex implements IClone {
+	selection usize
+	glob      usize
 }
 
 enum SelectionKind {
@@ -101,7 +187,7 @@ struct SelectionSpec implements IClone {
 	name  string
 }
 
-fn (sel SelectionSpec) is_negated() bool {
+fn (sel &SelectionSpec) is_negated() bool {
 	return sel.kind == .negate
 }
 
@@ -111,7 +197,7 @@ struct SelectionDef implements IClone {
 	inner FileTypeDef
 }
 
-fn (sel SelectionDef) is_negated() bool {
+fn (sel &SelectionDef) is_negated() bool {
 	return sel.kind == .negate
 }
 
@@ -147,7 +233,7 @@ fn selection_negate(name string) SelectionSpec {
 fn selection_with_def(sel SelectionSpec, def FileTypeDef) SelectionDef {
 	return SelectionDef{
 		kind:  sel.kind
-		name:  sel.name.clone()
+		name:  sel.name
 		inner: def
 	}
 }
@@ -156,20 +242,22 @@ fn selection_with_def(sel SelectionSpec, def FileTypeDef) SelectionDef {
 /// contains no file type definitions.
 pub fn Types.empty() Types {
 	return Types{
-		defs:         []FileTypeDef{}
-		selections:   []SelectionDef{}
-		has_selected: false
+		defs:              []FileTypeDef{}
+		selections:        []SelectionDef{}
+		has_selected:      false
+		glob_to_selection: []GlobSelectionIndex{}
+		set:               globset.GlobSet.empty()
 	}
 }
 
 /// Returns true if and only if this matcher has zero selections.
-pub fn (types Types) is_empty() bool {
+pub fn (types &Types) is_empty() bool {
 	return types.selections.len == 0
 }
 
 /// Returns the number of selections used in this matcher.
-pub fn (types Types) len() int {
-	return types.selections.len
+pub fn (types &Types) len() usize {
+	return usize(types.selections.len)
 }
 
 /// Return the set of current file type definitions.
@@ -188,7 +276,7 @@ pub fn (types &^a Types) definitions[^a]() &^a []FileTypeDef {
 pub fn (types &^a Types) matched[^a](path string, is_dir bool) Match[TypesGlob[^a]] {
 	// File types don't apply to directories, and we can't do anything
 	// if our glob set is empty.
-	if is_dir || types.selections.len == 0 {
+	if is_dir || types.set.is_empty() {
 		return Match[TypesGlob[^a]]{}
 	}
 	// We only want to match against the file name, so extract it.
@@ -198,29 +286,21 @@ pub fn (types &^a Types) matched[^a](path string, is_dir bool) Match[TypesGlob[^
 		if types.has_selected {
 			return Match[TypesGlob[^a]]{
 				kind:      .ignore
-				value:     TypesGlob[^a]{
-					kind: .unmatched_ignore
-				}
+				value:     TypesGlob.unmatched()
 				has_value: true
 			}
 		}
 		return Match[TypesGlob[^a]]{}
 	}
-	mut matched_sel := -1
-	for isel, selection in types.selections {
-		for glob in selection.inner.globs {
-			if types_glob_matches(glob, name) {
-				matched_sel = isel
-			}
-		}
-	}
+	// Temporary storage for globs that match. Rust amortizes this allocation
+	// with `regex_automata::Pool`; V has no corresponding reusable pool.
+	matches := types.set.matches(name)
 	// The highest precedent match is the last one.
-	if matched_sel >= 0 {
-		sel := &types.selections[matched_sel]
-		glob := TypesGlob[^a]{
-			kind: .matched
-			def:  &sel.inner
-		}
+	if matches.len > 0 {
+		i := matches[matches.len - 1]
+		mapping := types.glob_to_selection[int(i)]
+		sel := &types.selections[int(mapping.selection)]
+		glob := TypesGlob.matched(sel.inner_ref())
 		return if sel.is_negated() {
 			Match[TypesGlob[^a]]{
 				kind:      .ignore
@@ -238,9 +318,7 @@ pub fn (types &^a Types) matched[^a](path string, is_dir bool) Match[TypesGlob[^
 	if types.has_selected {
 		return Match[TypesGlob[^a]]{
 			kind:      .ignore
-			value:     TypesGlob[^a]{
-				kind: .unmatched_ignore
-			}
+			value:     TypesGlob.unmatched()
 			has_value: true
 		}
 	}
@@ -269,28 +347,46 @@ pub fn TypesBuilder.new() TypesBuilder {
 
 /// Build the current set of file type definitions *and* selections into
 /// a file type matcher.
-pub fn (builder TypesBuilder) build() (Types, bool, IgnoreError) {
+pub fn (builder &TypesBuilder) build() (Types, bool, IgnoreError) {
 	defs := builder.definitions()
 	has_selected := builder.selections.any(!it.is_negated())
 	mut selections := []SelectionDef{cap: builder.selections.len}
-	for selection in builder.selections {
+	mut glob_to_selection := []GlobSelectionIndex{}
+	mut build_set := globset.GlobSetBuilder.new()
+	for isel, selection in builder.selections {
 		name := selection.name
 		def := builder.types[name] or {
 			return Types.empty(), true, unrecognized_file_type_error(name)
 		}
-		selections << selection_with_def(selection, def.clone())
+		for iglob, glob in def.globs {
+			mut glob_builder := globset.GlobBuilder.new(&glob)
+			glob_builder.literal_separator(true)
+			parsed := glob_builder.build() or {
+				glob_err := err as globset.GlobError
+				return Types.empty(), true, glob_error(glob, (*glob_err.kind()).str())
+			}
+			build_set.add(parsed)
+			glob_to_selection << GlobSelectionIndex{
+				selection: usize(isel)
+				glob:      usize(iglob)
+			}
+		}
+		selections << selection_with_def(selection.clone(), def.clone())
 	}
+	set := build_set.build() or { return Types.empty(), true, glob_error('', err.msg()) }
 	return Types{
-		defs:         defs
-		selections:   selections
-		has_selected: has_selected
+		defs:              defs
+		selections:        selections
+		has_selected:      has_selected
+		glob_to_selection: glob_to_selection
+		set:               set
 	}, false, IgnoreError{}
 }
 
 /// Return the set of current file type definitions.
 ///
 /// Definitions and globs are sorted.
-pub fn (builder TypesBuilder) definitions() []FileTypeDef {
+pub fn (builder &TypesBuilder) definitions() []FileTypeDef {
 	mut defs := []FileTypeDef{}
 	for _, def in builder.types {
 		mut cloned := def.clone()
@@ -345,9 +441,7 @@ pub fn (mut builder TypesBuilder) add(name string, glob string) (bool, IgnoreErr
 		return true, invalid_definition_error()
 	}
 	mut def := builder.types[name] or { FileTypeDef.new(name) }
-	for expanded in expand_file_type_glob(glob) {
-		def.globs << expanded.to_owned()
-	}
+	def.globs << glob.to_owned()
 	builder.types[name] = def
 	return false, IgnoreError{}
 }
@@ -424,124 +518,4 @@ fn is_valid_file_type_name(name string) bool {
 		}
 	}
 	return true
-}
-
-fn types_glob_matches(glob string, name string) bool {
-	return gitignore_glob_match_runes(glob.runes(), 0, name.runes(), 0)
-}
-
-// V-specific helper to expand glob alternations because the port does not use
-// `globset::GlobBuilder`.
-fn expand_glob_alternates(glob string) []string {
-	return expand_file_type_glob_rec(glob)
-}
-
-fn expand_file_type_glob(glob string) []string {
-	mut expanded := expand_glob_alternates(glob)
-	expanded.sort(a < b)
-	return expanded
-}
-
-fn expand_file_type_glob_rec(glob string) []string {
-	open := find_glob_brace_open(glob.clone())
-	if open < 0 {
-		return [glob.to_owned()]
-	}
-	close := find_glob_brace_close(glob.clone(), open)
-	if close < 0 {
-		return [glob.to_owned()]
-	}
-	prefix := glob[..open]
-	suffix := glob[close + 1..]
-	inner := glob[open + 1..close]
-	parts := split_glob_brace_parts(inner)
-	if parts.len == 0 {
-		return [glob.to_owned()]
-	}
-	mut expanded := []string{}
-	for i := 0; i < parts.len; i++ {
-		part := parts[i].clone()
-		for item in expand_file_type_glob_rec(prefix + part + suffix) {
-			expanded << item
-		}
-	}
-	return expanded
-}
-
-fn find_glob_brace_open(glob string) int {
-	mut escaped := false
-	for i := 0; i < glob.len; i++ {
-		ch := glob[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if ch == `\\` {
-			escaped = true
-			continue
-		}
-		if ch == `{` {
-			return i
-		}
-	}
-	return -1
-}
-
-fn find_glob_brace_close(glob string, open int) int {
-	mut escaped := false
-	mut depth := 0
-	for i := open; i < glob.len; i++ {
-		ch := glob[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if ch == `\\` {
-			escaped = true
-			continue
-		}
-		if ch == `{` {
-			depth++
-			continue
-		}
-		if ch == `}` {
-			depth--
-			if depth == 0 {
-				return i
-			}
-		}
-	}
-	return -1
-}
-
-fn split_glob_brace_parts(glob string) []string {
-	mut parts := []string{}
-	mut start := 0
-	mut escaped := false
-	mut depth := 0
-	for i := 0; i < glob.len; i++ {
-		ch := glob[i]
-		if escaped {
-			escaped = false
-			continue
-		}
-		if ch == `\\` {
-			escaped = true
-			continue
-		}
-		if ch == `{` {
-			depth++
-			continue
-		}
-		if ch == `}` {
-			depth--
-			continue
-		}
-		if ch == `,` && depth == 0 {
-			parts << glob[start..i].to_owned()
-			start = i + 1
-		}
-	}
-	parts << glob[start..].to_owned()
-	return parts
 }

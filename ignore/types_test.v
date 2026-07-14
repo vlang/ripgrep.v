@@ -129,3 +129,41 @@ fn test_types_invalid_defs() {
 		assert btypes.definitions() == original_defs
 	}
 }
+
+fn test_types_definitions_preserve_glob_syntax() {
+	mut builder := TypesBuilder.new()
+	has_err, err := builder.add('foo', '*.{rs,foo}')
+	assert !has_err, err.msg()
+	defs := builder.definitions()
+	assert defs.len == 1
+	assert defs[0].name == 'foo'
+	assert defs[0].globs == ['*.{rs,foo}']
+}
+
+fn test_types_build_rejects_invalid_glob() {
+	mut builder := TypesBuilder.new()
+	has_err, err := builder.add('bad', '[')
+	assert !has_err, err.msg()
+	builder.select('bad')
+	_, build_has_err, build_err := builder.build()
+	assert build_has_err
+	assert build_err.kind == .glob
+	assert build_err.path == '['
+}
+
+fn test_types_match_reports_definition_and_clones_matcher() {
+	mut builder := TypesBuilder.new()
+	has_err, err := builder.add('rust', '*.rs')
+	assert !has_err, err.msg()
+	builder.select('rust')
+	types_, build_has_err, build_err := builder.build()
+	assert !build_has_err, build_err.msg()
+	mat := types_.matched('lib.rs', false)
+	glob := mat.inner() or { panic('missing type glob') }
+	def := glob.file_type_def() or { panic('missing file type definition') }
+	assert def.name == 'rust'
+
+	cloned := types_.clone()
+	assert cloned.matched('lib.rs', false).is_whitelist()
+	assert cloned.matched('lib.c', false).is_ignore()
+}
