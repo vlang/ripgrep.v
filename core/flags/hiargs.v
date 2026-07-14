@@ -924,7 +924,7 @@ pub fn (args HiArgs) walk_builder() !ignore.WalkBuilder {
 	} else {
 		builder.max_filesize(none)
 	}
-	builder.threads(int(args.threads))
+	builder.threads(args.threads)
 	builder.same_file_system(args.one_file_system)
 	builder.skip_stdout(args.mode.kind == .search)
 	builder.overrides(args.globs.clone())
@@ -1441,11 +1441,11 @@ fn (choice ColorChoice) to_cli_color_choice() cli.ColorChoice {
 	}
 }
 
-fn name_cmp_asc(a string, b string) int {
-	if a < b {
+fn name_cmp_asc(a &string, b &string) int {
+	if *a < *b {
 		return -1
 	}
-	if a > b {
+	if *a > *b {
 		return 1
 	}
 	return 0

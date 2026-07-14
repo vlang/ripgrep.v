@@ -218,6 +218,133 @@ fn walk_collect_entries(builder WalkBuilder) []DirEntry {
 	return dents
 }
 
+fn panic_name_comparator(_left &string, _right &string) int {
+	panic('parallel traversal must not invoke sort callbacks')
+}
+
+fn filter_must_run_once(entry &DirEntry) bool {
+	if entry.err != none {
+		panic('parallel traversal invoked its filter more than once for an entry')
+	}
+	unsafe {
+		mut entry_mut := &DirEntry(entry)
+		entry_mut.err = other_error('filter marker')
+	}
+	return true
+}
+
+fn test_walk_entry_metadata_and_inode_match_filesystem() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	path := os.join_path(td.path(), 'file')
+	wfile(path, 'abc')
+	dents := walk_collect_entries(WalkBuilder.new(td.path()))
+	mut found := false
+	for dent in dents {
+		if *dent.path() != path {
+			continue
+		}
+		found = true
+		metadata := dent.metadata() or { panic(err.msg()) }
+		assert metadata.size == 3
+		$if linux || macos || freebsd || openbsd || netbsd || dragonfly || solaris {
+			stat := os.lstat(path) or { panic(err.msg()) }
+			ino := dent.ino() or { panic('missing inode') }
+			assert ino == stat.inode
+		}
+	}
+	assert found
+}
+
+fn test_walk_entry_into_path_moves_the_path() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	path := os.join_path(td.path(), 'file')
+	wfile(path, '')
+	raw := DirEntryRaw.from_path(0, path, false) or { panic(err.msg()) }
+	mut dent := DirEntry.new_raw(raw, none)
+	moved := dent.into_path()
+	assert moved == path
+}
+
+fn test_walk_entry_file_name_falls_back_to_full_path() {
+	$if windows {
+		return
+	}
+	raw := DirEntryRaw.from_path(0, '/', false) or { panic(err.msg()) }
+	dent := DirEntry.new_raw(raw, none)
+	assert *dent.file_name() == '/'
+}
+
+fn test_walk_stdin_is_yielded_regardless_of_min_depth() {
+	mut builder := WalkBuilder.new('-')
+	builder.min_depth(1)
+	mut walk := builder.build()
+	result := walk.next() or { panic('missing stdin entry') }
+	assert !result.is_error
+	assert result.entry.is_stdin()
+	assert walk.next() == none
+}
+
+fn test_walk_explicit_symlink_root_is_not_marked_as_symlink() {
+	$if windows {
+		return
+	}
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	target := os.join_path(td.path(), 'target')
+	root := os.join_path(td.path(), 'root')
+	mkdirp(target)
+	wfile(os.join_path(target, 'file'), '')
+	symlink(target, root)
+	dents := walk_collect_entries(WalkBuilder.new(root))
+	assert dents.len == 2
+	assert *dents[0].path() == root
+	assert !dents[0].path_is_symlink()
+	parallel_dents := walk_collect_entries_parallel(WalkBuilder.new(root))
+	mut found_root := false
+	for dent in parallel_dents {
+		if *dent.path() == root {
+			found_root = true
+			assert !dent.path_is_symlink()
+		}
+	}
+	assert found_root
+}
+
+fn test_walk_parallel_does_not_use_sorter() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	wfile(os.join_path(td.path(), 'a'), '')
+	wfile(os.join_path(td.path(), 'b'), '')
+	mut builder := WalkBuilder.new(td.path())
+	builder.sort_by_file_name(panic_name_comparator)
+	builder.threads(2)
+	paths := walk_collect_parallel(td.path(), builder)
+	assert paths == ['a', 'b']
+}
+
+fn test_walk_parallel_filters_each_file_once() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	wfile(os.join_path(td.path(), 'file'), '')
+	mut builder := WalkBuilder.new(td.path())
+	builder.filter_entry(filter_must_run_once)
+	builder.threads(2)
+	paths := walk_collect_parallel(td.path(), builder)
+	assert paths == ['file']
+}
+
 fn test_walk_build_is_lazy() {
 	td := tmpdir()
 	defer {
@@ -239,6 +366,20 @@ fn test_walk_build_is_lazy() {
 	if 'late.txt' !in got {
 		panic('late file missing from ${got}')
 	}
+}
+
+fn test_walk_builder_discovers_current_dir_once() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	mut builder := WalkBuilder.new(td.path())
+	assert !builder.cwd_initialized
+	_ := builder.build()
+	assert builder.cwd_initialized
+	cached := builder.cwd_value.clone()
+	_ := builder.build_parallel()
+	assert builder.cwd_value == cached
 }
 
 fn test_no_ignores() {
@@ -609,7 +750,7 @@ fn test_no_read_permissions() {
 	}
 }
 
-fn filter_not_a(entry DirEntry) bool {
+fn filter_not_a(entry &DirEntry) bool {
 	return *entry.file_name() != 'a'
 }
 
