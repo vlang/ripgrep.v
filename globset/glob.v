@@ -1,23 +1,6 @@
 module globset
 
-enum MatchStrategyKind {
-	literal
-	basename_literal
-	basename_prefix
-	basename_suffix
-	path_has_slash
-	extension
-	prefix
-	suffix
-	required_extension
-	regex
-}
-
-struct MatchStrategy {
-	kind      MatchStrategyKind
-	value     string
-	component bool
-}
+import regex.meta
 
 /// Describes a matching strategy for a particular pattern.
 ///
@@ -26,25 +9,47 @@ struct MatchStrategy {
 /// patterns. For example, if many patterns are of the form `*.ext`, then it's
 /// possible to test whether any of those patterns matches by looking up a
 /// file path's extension in a hash table.
-fn match_strategy_new(pat Glob) MatchStrategy {
-	if !pat.opts.case_insensitive && pat.opts.literal_separator && pat.glob_ == '*/**/*' {
-		return MatchStrategy{
-			kind: .path_has_slash
-		}
-	} else if lit := pat.basename_literal() {
+enum MatchStrategyKind {
+	/// A pattern matches if and only if the entire file path matches this
+	/// literal string.
+	literal
+	/// A pattern matches if and only if the file path's basename matches this
+	/// literal string.
+	basename_literal
+	/// A pattern matches if and only if the file path's extension matches this
+	/// literal string.
+	extension
+	/// A pattern matches if and only if this prefix literal is a prefix of the
+	/// candidate file path.
+	prefix
+	/// A pattern matches if and only if this prefix literal is a prefix of the
+	/// candidate file path.
+	///
+	/// An exception: if `component` is true, then `suffix` must appear at the
+	/// beginning of a file path or immediately following a `/`.
+	suffix
+	/// A pattern matches only if the given extension matches the file path's
+	/// extension. Note that this is a necessary but NOT sufficient criterion.
+	/// Namely, if the extension matches, then a full regex search is still
+	/// required.
+	required_extension
+	/// A regex needs to be used for matching.
+	regex
+}
+
+struct MatchStrategy {
+	kind      MatchStrategyKind
+	/// The literal value for strategies that carry one.
+	value     string
+	/// Whether a suffix must start at the beginning of a path component.
+	component bool
+}
+
+fn match_strategy_new(pat &Glob) MatchStrategy {
+	if lit := pat.basename_literal() {
 		return MatchStrategy{
 			kind:  .basename_literal
 			value: lit
-		}
-	} else if prefix := pat.basename_prefix() {
-		return MatchStrategy{
-			kind:  .basename_prefix
-			value: prefix
-		}
-	} else if suffix := pat.basename_suffix() {
-		return MatchStrategy{
-			kind:  .basename_suffix
-			value: suffix
 		}
 	} else if lit := pat.literal() {
 		return MatchStrategy{
@@ -155,16 +160,6 @@ fn token_alternates(patterns []Tokens) Token {
 	}
 }
 
-fn (tok Token) clone() Token {
-	return Token{
-		kind:     tok.kind
-		ch:       tok.ch
-		negated:  tok.negated
-		ranges:   tok.ranges.clone()
-		patterns: tok.patterns.clone()
-	}
-}
-
 fn (tok Token) str() string {
 	return match tok.kind {
 		.literal { 'Literal(${tok.ch.str()})' }
@@ -206,12 +201,7 @@ fn (mut t Tokens) push(tok Token) {
 }
 
 fn (mut t Tokens) pop() ?Token {
-	if t.tokens.len == 0 {
-		return none
-	}
-	last := t.tokens[t.tokens.len - 1]
-	t.tokens = t.tokens[..t.tokens.len - 1]
-	return last
+	return t.tokens.pop()
 }
 
 fn (t Tokens) len() int {
@@ -220,15 +210,6 @@ fn (t Tokens) len() int {
 
 fn (t Tokens) is_empty() bool {
 	return t.tokens.len == 0
-}
-
-fn (t Tokens) clone_slice(start int, end int) []Token {
-	mut cloned := []Token{}
-	for i := start; i < end; i++ {
-		tok := t.tokens[i]
-		cloned << tok.clone()
-	}
-	return cloned
 }
 
 fn (t Tokens) str() string {
@@ -240,10 +221,21 @@ fn (t Tokens) str() string {
 }
 
 struct GlobOptions implements IClone {
+	/// Whether to match case insensitively.
 	case_insensitive    bool
+	/// Whether to require a literal separator to match a separator in a file
+	/// path. e.g., when enabled, `*` won't match `/`.
 	literal_separator   bool
+	/// Whether or not to use `\` to escape special characters.
+	/// e.g., when enabled, `\*` will match a literal `*`.
 	backslash_escape    bool
+	/// Whether or not an empty case in an alternate will be removed.
+	/// e.g., when enabled, `{,a}` will match "" and "a".
 	empty_alternates    bool
+	/// Whether or not an unclosed character class is allowed. When an unclosed
+	/// character class is found, the opening `[` is treated as a literal `[`.
+	/// When this isn't enabled, an opening `[` without a corresponding `]` is
+	/// treated as an error.
 	allow_unclosed_class bool
 }
 
@@ -268,15 +260,22 @@ pub struct Glob implements IClone {
 	tokens Tokens
 }
 
+pub fn (g Glob) == (other Glob) bool {
+	return g.glob_ == other.glob_ && g.opts == other.opts
+}
+
+/// Builds a new pattern with default options.
 pub fn Glob.new(glob string) !Glob {
 	mut builder := GlobBuilder.new(&glob)
 	return builder.build()
 }
 
 /// Returns a matcher for this pattern.
-pub fn (g Glob) compile_matcher() GlobMatcher {
+pub fn (g &Glob) compile_matcher() GlobMatcher {
+	re := new_regex(&g.re_) or { panic('regex compilation shouldn\'t fail') }
 	return GlobMatcher{
 		pat: g.clone()
+		re:  re
 	}
 }
 
@@ -303,7 +302,11 @@ pub fn (g &^a Glob) regex[^a]() &^a string {
 	return &g.re_
 }
 
-fn (g Glob) literal() ?string {
+/// Returns the pattern as a literal if and only if the pattern must match
+/// an entire path exactly.
+///
+/// The basic format of these patterns is `{literal}`.
+fn (g &Glob) literal() ?string {
 	if g.opts.case_insensitive {
 		return none
 	}
@@ -320,7 +323,14 @@ fn (g Glob) literal() ?string {
 	return lit
 }
 
-fn (g Glob) ext() ?string {
+/// Returns an extension if this pattern matches a file path if and only
+/// if the file path has the extension returned.
+///
+/// Note that this extension returned differs from the extension that
+/// std::path::Path::extension returns. Namely, this extension includes
+/// the '.'. Also, paths like `.rs` are considered to have an extension
+/// of `.rs`.
+fn (g &Glob) ext() ?string {
 	if g.opts.case_insensitive {
 		return none
 	}
@@ -334,6 +344,9 @@ fn (g Glob) ext() ?string {
 	if start >= g.tokens.tokens.len || g.tokens.tokens[start].kind != .zero_or_more {
 		return none
 	}
+	// If there was no recursive prefix, then we only permit
+	// `*` if `*` can match a `/`. For example, if `*` can't
+	// match `/`, then `*.c` doesn't match `foo/bar.c`.
 	if start == 0 && g.opts.literal_separator {
 		return none
 	}
@@ -352,10 +365,15 @@ fn (g Glob) ext() ?string {
 	return lit
 }
 
-fn (g Glob) required_ext() ?string {
+/// This is like `ext`, but returns an extension even if it isn't sufficient
+/// to imply a match. Namely, if an extension is returned, then it is
+/// necessary but not sufficient for a match.
+fn (g &Glob) required_ext() ?string {
 	if g.opts.case_insensitive {
 		return none
 	}
+	// We don't care at all about the beginning of this pattern. All we
+	// need to check for is if it ends with a literal of the form `.ext`.
 	mut chars := []rune{}
 	for i := g.tokens.tokens.len - 1; i >= 0; i-- {
 		tok := g.tokens.tokens[i]
@@ -380,7 +398,9 @@ fn (g Glob) required_ext() ?string {
 	return lit
 }
 
-fn (g Glob) prefix() ?string {
+/// Returns a literal prefix of this pattern if the entire pattern matches
+/// if the literal prefix matches.
+fn (g &Glob) prefix() ?string {
 	if g.opts.case_insensitive || g.tokens.tokens.len == 0 {
 		return none
 	}
@@ -389,6 +409,12 @@ fn (g Glob) prefix() ?string {
 	last := g.tokens.tokens[g.tokens.tokens.len - 1]
 	if last.kind == .zero_or_more {
 		if g.opts.literal_separator {
+			// If a trailing `*` can't match a `/`, then we can't
+			// assume a match of the prefix corresponds to a match
+			// of the overall pattern. e.g., `foo/*` with
+			// `literal_separator` enabled matches `foo/bar` but not
+			// `foo/bar/baz`, even though `foo/bar/baz` has a `foo/`
+			// literal prefix.
 			return none
 		}
 		end--
@@ -413,7 +439,19 @@ fn (g Glob) prefix() ?string {
 	return lit
 }
 
-fn (g Glob) suffix() ?(string, bool) {
+/// Returns a literal suffix of this pattern if the entire pattern matches
+/// if the literal suffix matches.
+///
+/// If a literal suffix is returned and it must match either the entire
+/// file path or be preceded by a `/`, then also return true. This happens
+/// with a pattern like `**/foo/bar`. Namely, this pattern matches
+/// `foo/bar` and `baz/foo/bar`, but not `foofoo/bar`. In this case, the
+/// suffix returned is `/foo/bar` (but should match the entire path
+/// `foo/bar`).
+///
+/// When this returns true, the suffix literal is guaranteed to start with
+/// a `/`.
+fn (g &Glob) suffix() ?(string, bool) {
 	if g.opts.case_insensitive || g.tokens.tokens.len == 0 {
 		return none
 	}
@@ -421,6 +459,8 @@ fn (g Glob) suffix() ?(string, bool) {
 	mut start := 0
 	mut entire := false
 	if g.tokens.tokens[0].kind == .recursive_prefix {
+		// We only care if this follows a path component if the next
+		// token is a literal.
 		if g.tokens.tokens.len > 1 && g.tokens.tokens[1].kind == .literal {
 			lit += '/'
 			entire = true
@@ -431,6 +471,9 @@ fn (g Glob) suffix() ?(string, bool) {
 		return none
 	}
 	if g.tokens.tokens[start].kind == .zero_or_more {
+		// If literal_separator is enabled, then a `*` can't
+		// necessarily match everything, so reporting a suffix match
+		// as a match of the pattern would be a false positive.
 		if g.opts.literal_separator {
 			return none
 		}
@@ -449,11 +492,25 @@ fn (g Glob) suffix() ?(string, bool) {
 	return lit, entire
 }
 
-fn (g Glob) basename_tokens() ?[]Token {
+/// If this pattern only needs to inspect the basename of a file path,
+/// then the tokens corresponding to only the basename match are returned.
+///
+/// For example, given a pattern of `**/*.foo`, only the tokens
+/// corresponding to `*.foo` are returned.
+///
+/// Note that this will return None if any match of the basename tokens
+/// doesn't correspond to a match of the entire pattern. For example, the
+/// glob `foo` only matches when a file path has a basename of `foo`, but
+/// doesn't *always* match when a file path has a basename of `foo`. e.g.,
+/// `foo` doesn't match `abc/foo`.
+fn (g &^a Glob) basename_tokens[^a]() ?&^a []Token {
 	if g.opts.case_insensitive || g.tokens.tokens.len == 0 {
 		return none
 	}
 	if g.tokens.tokens[0].kind != .recursive_prefix {
+		// With nothing to gobble up the parent portion of a path,
+		// we can't assume that matching on only the basename is
+		// correct.
 		return none
 	}
 	if g.tokens.tokens.len == 1 {
@@ -466,29 +523,36 @@ fn (g Glob) basename_tokens() ?[]Token {
 				if tok.ch == `/` {
 					return none
 				}
+				// OK
 			}
 			.any, .zero_or_more {
 				if !g.opts.literal_separator {
+					// In this case, `*` and `?` can match a path
+					// separator, which means this could reach outside
+					// the basename.
 					return none
 				}
 			}
 			.recursive_prefix, .recursive_suffix, .recursive_zero_or_more, .class, .alternates {
+				// We *could* be a little smarter here, but either one
+				// of these is going to prevent our literal optimizations
+				// anyway, so give up.
 				return none
 			}
 		}
 	}
-	mut tokens := []Token{}
-	for i := 1; i < g.tokens.tokens.len; i++ {
-		tok := g.tokens.tokens[i]
-		tokens << tok.clone()
-	}
-	return tokens
+	return unsafe { &g.tokens.tokens[1..] }
 }
 
-fn (g Glob) basename_literal() ?string {
+/// Returns the pattern as a literal if and only if the pattern exclusively
+/// matches the basename of a file path *and* is a literal.
+///
+/// The basic format of these patterns is `**/{literal}`, where `{literal}`
+/// does not contain a path separator.
+fn (g &Glob) basename_literal() ?string {
 	tokens := g.basename_tokens() or { return none }
 	mut lit := ''
-	for tok in tokens {
+	for tok in *tokens {
 		if tok.kind != .literal {
 			return none
 		}
@@ -497,62 +561,27 @@ fn (g Glob) basename_literal() ?string {
 	return lit
 }
 
-fn (g Glob) basename_prefix() ?string {
-	tokens := g.basename_tokens() or { return none }
-	if tokens.len < 2 || tokens[tokens.len - 1].kind != .zero_or_more {
-		return none
-	}
-	mut lit := ''
-	for i := 0; i < tokens.len - 1; i++ {
-		tok := tokens[i]
-		if tok.kind != .literal {
-			return none
-		}
-		lit += tok.ch.str()
-	}
-	if lit == '' {
-		return none
-	}
-	return lit
-}
-
-fn (g Glob) basename_suffix() ?string {
-	tokens := g.basename_tokens() or { return none }
-	if tokens.len < 2 || tokens[0].kind != .zero_or_more {
-		return none
-	}
-	mut lit := ''
-	for i := 1; i < tokens.len; i++ {
-		tok := tokens[i]
-		if tok.kind != .literal {
-			return none
-		}
-		lit += tok.ch.str()
-	}
-	if lit == '' {
-		return none
-	}
-	return lit
-}
-
-pub fn (g Glob) str() string {
-	return g.glob_
+pub fn (g &Glob) str() string {
+	return g.glob_.clone()
 }
 
 /// A matcher for a single pattern.
 pub struct GlobMatcher implements IClone {
+	/// The underlying pattern.
 	pat Glob
+	/// The pattern, as a compiled regex.
+	re  meta.Regex
 }
 
 /// Tests whether the given path matches this pattern or not.
-pub fn (gm GlobMatcher) is_match(path string) bool {
+pub fn (gm &GlobMatcher) is_match(path string) bool {
 	candidate := Candidate.new(&path)
-	return gm.is_match_candidate(candidate)
+	return gm.is_match_candidate(&candidate)
 }
 
 /// Tests whether the given path matches this pattern or not.
-pub fn (gm GlobMatcher) is_match_candidate[^a](path Candidate[^a]) bool {
-	return glob_matches_candidate(gm.pat, path)
+pub fn (gm &GlobMatcher) is_match_candidate[^a](path &Candidate[^a]) bool {
+	return gm.re.find(path.path_) != none
 }
 
 /// Returns the `Glob` used to compile this matcher.
@@ -567,8 +596,10 @@ pub fn (gm &^a GlobMatcher) glob[^a]() &^a Glob {
 ///
 /// The lifetime `^a` refers to the lifetime of the pattern string.
 pub struct GlobBuilder[^a] implements IClone {
+	/// The glob pattern to compile.
 	glob &^a string
 mut:
+	/// Options for the pattern.
 	opts GlobOptions
 }
 
@@ -583,17 +614,12 @@ pub fn GlobBuilder.new[^a](glob &^a string) GlobBuilder[^a] {
 }
 
 /// Parses and builds the pattern.
-pub fn (builder GlobBuilder[^a]) build[^a]() !Glob {
-	parse_glob := if builder.opts.case_insensitive {
-		(*builder.glob).to_lower()
-	} else {
-		(*builder.glob).to_owned()
-	}
+pub fn (builder &GlobBuilder[^a]) build() !Glob {
 	mut parser := Parser{
-		glob:                   &parse_glob
+		glob:                   builder.glob
 		alternates_stack:       []int{}
 		branches:               [Tokens.default()]
-		chars:                  parse_glob.runes()
+		chars:                  (*builder.glob).runes()
 		index:                  0
 		prev:                   none
 		cur:                    none
@@ -602,20 +628,23 @@ pub fn (builder GlobBuilder[^a]) build[^a]() !Glob {
 	}
 	parser.parse()!
 	if parser.branches.len == 0 {
+		// OK because of how the the branches/alternate_stack are managed.
+		// If we end up here, then there *must* be a bug in the parser
+		// somewhere.
 		panic('glob parser invariant violated')
 	}
 	if parser.branches.len > 1 {
 		glob_err := GlobError{
-			glob_: *builder.glob
+			glob_: (*builder.glob).to_owned()
 			kind_: ErrorKind.unclosed_alternates()
 		}
-		return error(glob_err.msg())
+		return glob_err
 	}
-	tokens := parser.branches[0].clone()
+	tokens := parser.branches.pop() or { panic('glob parser invariant violated') }
 	return Glob{
 		glob_:  (*builder.glob).to_owned()
-		re_:    tokens.to_regex_with(builder.opts)
-		opts:   builder.opts
+		re_:    tokens.to_regex_with(&builder.opts)
+		opts:   builder.opts.clone()
 		tokens: tokens
 	}
 }
@@ -676,24 +705,29 @@ pub fn (mut builder GlobBuilder[^a]) allow_unclosed_class[^a](yes bool) &GlobBui
 	return builder
 }
 
-fn (tokens Tokens) to_regex_with(options GlobOptions) string {
+/// Convert this pattern to a string that is guaranteed to be a valid
+/// regular expression and will represent the matching semantics of this
+/// glob pattern and the options given.
+fn (tokens &Tokens) to_regex_with(options &GlobOptions) string {
 	mut re := '(?-u)'
 	if options.case_insensitive {
 		re += '(?i)'
 	}
 	re += '^'
+	// Special case. If the entire glob is just `**`, then it should match
+	// everything.
 	if tokens.tokens.len == 1 && tokens.tokens[0].kind == .recursive_prefix {
 		re += '.*'
 		re += r'$'
 		return re
 	}
-	tokens.tokens_to_regex(options, tokens.tokens, mut re)
+	tokens.tokens_to_regex(options, &tokens.tokens, mut re)
 	re += r'$'
 	return re
 }
 
-fn (tokens Tokens) tokens_to_regex(options GlobOptions, src []Token, mut re string) {
-	for tok in src {
+fn (tokens &Tokens) tokens_to_regex(options &GlobOptions, src &[]Token, mut re string) {
+	for tok in *src {
 		match tok.kind {
 			.literal {
 				re += char_to_escaped_literal(tok.ch)
@@ -720,6 +754,7 @@ fn (tokens Tokens) tokens_to_regex(options GlobOptions, src []Token, mut re stri
 				}
 				for rng in tok.ranges {
 					if rng.start == rng.end {
+						// Not strictly necessary, but nicer to look at.
 						re += char_to_escaped_literal(rng.start)
 					} else {
 						re += char_to_escaped_literal(rng.start)
@@ -733,11 +768,13 @@ fn (tokens Tokens) tokens_to_regex(options GlobOptions, src []Token, mut re stri
 				mut parts := []string{}
 				for pat in tok.patterns {
 					mut alt := ''
-					pat.tokens_to_regex(options, pat.tokens, mut alt)
+					pat.tokens_to_regex(options, &pat.tokens, mut alt)
 					if alt != '' || options.empty_alternates {
 						parts << alt
 					}
 				}
+				// It is possible to have an empty set in which case the
+				// resulting alternation '()' would be an error.
 				if parts.len > 0 {
 					re += '(?:' + parts.join('|') + ')'
 				}
@@ -746,13 +783,18 @@ fn (tokens Tokens) tokens_to_regex(options GlobOptions, src []Token, mut re stri
 	}
 }
 
+/// Convert a Unicode scalar value to an escaped string suitable for use as
+/// a literal in a non-Unicode regex.
 fn char_to_escaped_literal(ch rune) string {
-	return bytes_to_escaped_literal(ch.str().bytes())
+	bytes := ch.str().bytes()
+	return bytes_to_escaped_literal(&bytes)
 }
 
-fn bytes_to_escaped_literal(bytes []u8) string {
+/// Converts an arbitrary sequence of bytes to a UTF-8 string. All non-ASCII
+/// code units are converted to their escaped form.
+fn bytes_to_escaped_literal(bytes &[]u8) string {
 	mut s := ''
-	for b in bytes {
+	for b in *bytes {
 		if b <= 0x7F {
 			if ascii_needs_regex_escape(b) {
 				s += '\\'
@@ -766,30 +808,48 @@ fn bytes_to_escaped_literal(bytes []u8) string {
 }
 
 fn ascii_needs_regex_escape(b u8) bool {
-	return b in [`\\`, `.`, `+`, `*`, `?`, `(`, `)`, `|`, `[`, `]`, `{`, `}`, `^`, `$`]
+	return b in [`\\`, `.`, `+`, `*`, `?`, `(`, `)`, `|`, `[`, `]`, `{`, `}`, `^`, `$`,
+		`#`, `&`, `-`, `~`]
 }
 
-struct Parser {
-	glob &string
+struct Parser[^a] {
+	/// The glob to parse.
+	glob &^a string
 mut:
+	/// Marks the index in `stack` where the alternation started.
 	alternates_stack     []int
+	/// The set of active alternation branches being parsed.
+	/// Tokens are added to the end of the last one.
 	branches             []Tokens
+	/// The characters in the glob pattern to parse.
 	chars                []rune
+	/// The next character index.
 	index                int
+	/// The previous character seen.
 	prev                 ?rune
+	/// The current character.
 	cur                  ?rune
+	/// Whether we failed to find a closing `]` for a character
+	/// class. This can only be true when `GlobOptions::allow_unclosed_class`
+	/// is enabled. When enabled, it is impossible to ever parse another
+	/// character class with this glob. That's because classes cannot be
+	/// nested *and* the only way this happens is when there is never a `]`.
+	///
+	/// We track this state so that we don't end up spending quadratic time
+	/// trying to parse something like `[[[[[[[[[[[[[[[[[[[[[[[...`.
 	found_unclosed_class bool
-	opts                 &GlobOptions
+	/// Glob options, which may influence parsing.
+	opts                 &^a GlobOptions
 }
 
-fn (p Parser) mk_error(kind ErrorKind) GlobError {
+fn (p &Parser[^a]) mk_error(kind ErrorKind) GlobError {
 	return GlobError{
-		glob_: *p.glob
+		glob_: (*p.glob).to_owned()
 		kind_: kind
 	}
 }
 
-fn (mut p Parser) parse() ! {
+fn (mut p Parser[^a]) parse() ! {
 	for {
 		ch := p.bump() or { break }
 		match ch {
@@ -825,53 +885,51 @@ fn (mut p Parser) parse() ! {
 	}
 }
 
-fn (mut p Parser) push_alternate() ! {
+fn (mut p Parser[^a]) push_alternate() ! {
 	p.alternates_stack << p.branches.len
 	p.branches << Tokens.default()
 }
 
-fn (mut p Parser) pop_alternate() ! {
+fn (mut p Parser[^a]) pop_alternate() ! {
 	if p.alternates_stack.len == 0 {
-		return error(p.mk_error(ErrorKind.unopened_alternates()).msg())
+		return p.mk_error(ErrorKind.unopened_alternates())
 	}
 	start := p.alternates_stack[p.alternates_stack.len - 1]
 	p.alternates_stack = p.alternates_stack[..p.alternates_stack.len - 1]
+	assert start <= p.branches.len
 	mut patterns := []Tokens{}
-	for i := start; i < p.branches.len; i++ {
-		branch := p.branches[i]
-		patterns << branch.clone()
+	for p.branches.len > start {
+		patterns << (p.branches.pop() or { panic('missing alternate branch') })
 	}
-	p.branches = p.branches[..start]
+	patterns.reverse_in_place()
 	p.push_token(token_alternates(patterns))!
 }
 
-fn (mut p Parser) push_token(tok Token) ! {
+fn (mut p Parser[^a]) push_token(tok Token) ! {
 	if p.branches.len == 0 {
-		return error(p.mk_error(ErrorKind.unopened_alternates()).msg())
+		return p.mk_error(ErrorKind.unopened_alternates())
 	}
-	mut last := p.branches[p.branches.len - 1]
-	last.push(tok)
-	p.branches[p.branches.len - 1] = last
+	p.branches[p.branches.len - 1].push(tok)
 }
 
-fn (mut p Parser) pop_token() !Token {
+fn (mut p Parser[^a]) pop_token() !Token {
 	if p.branches.len == 0 {
-		return error(p.mk_error(ErrorKind.unopened_alternates()).msg())
+		return p.mk_error(ErrorKind.unopened_alternates())
 	}
-	mut last := p.branches[p.branches.len - 1]
-	tok := last.pop() or { panic('missing token in parser') }
-	p.branches[p.branches.len - 1] = last
-	return tok
+	return p.branches[p.branches.len - 1].pop() or { panic('missing token in parser') }
 }
 
-fn (p Parser) have_tokens() !bool {
+fn (p &Parser[^a]) have_tokens() !bool {
 	if p.branches.len == 0 {
-		return error(p.mk_error(ErrorKind.unopened_alternates()).msg())
+		return p.mk_error(ErrorKind.unopened_alternates())
 	}
 	return !p.branches[p.branches.len - 1].is_empty()
 }
 
-fn (mut p Parser) parse_comma() ! {
+fn (mut p Parser[^a]) parse_comma() ! {
+	// If we aren't inside a group alternation, then don't
+	// treat commas specially. Otherwise, we need to start
+	// a new alternate branch.
 	if p.alternates_stack.len == 0 {
 		p.push_token(token_literal(`,`))!
 		return
@@ -879,9 +937,9 @@ fn (mut p Parser) parse_comma() ! {
 	p.branches << Tokens.default()
 }
 
-fn (mut p Parser) parse_backslash() ! {
+fn (mut p Parser[^a]) parse_backslash() ! {
 	if p.opts.backslash_escape {
-		next := p.bump() or { return error(p.mk_error(ErrorKind.dangling_escape()).msg()) }
+		next := p.bump() or { return p.mk_error(ErrorKind.dangling_escape()) }
 		p.push_token(token_literal(next))!
 		return
 	}
@@ -892,28 +950,35 @@ fn (mut p Parser) parse_backslash() ! {
 	}
 }
 
-fn (mut p Parser) parse_star() ! {
+fn (mut p Parser[^a]) parse_star() ! {
 	prev := p.prev
-	if p.peek() != `*` {
+	next_star := p.peek() or {
+		p.push_token(token_zero_or_more())!
+		return
+	}
+	if next_star != `*` {
 		p.push_token(token_zero_or_more())!
 		return
 	}
 	assert p.bump() or { `\0` } == `*`
 	if !p.have_tokens()! {
-		next := p.peek()
-		if next != `\0` && !is_separator(next) {
-			p.push_token(token_zero_or_more())!
-			p.push_token(token_zero_or_more())!
+		if next := p.peek() {
+			if !is_separator(next) {
+				p.push_token(token_zero_or_more())!
+				p.push_token(token_zero_or_more())!
+				return
+			}
+			p.push_token(token_recursive_prefix())!
+			assert is_separator(p.bump() or { panic('missing separator') })
 		} else {
 			p.push_token(token_recursive_prefix())!
-			if next != `\0` && is_separator(next) {
-				_ := p.bump()
-			}
 		}
 		return
 	}
-	if prev == none || !is_separator(prev or { `\0` }) {
-		if p.branches.len <= 1 || ((prev or { `\0` }) != `,` && (prev or { `\0` }) != `{`) {
+	prev_is_separator := if previous := prev { is_separator(previous) } else { false }
+	if !prev_is_separator {
+		prev_is_alternate := if previous := prev { previous == `,` || previous == `{` } else { false }
+		if p.branches.len <= 1 || !prev_is_alternate {
 			p.push_token(token_zero_or_more())!
 			p.push_token(token_zero_or_more())!
 			return
@@ -921,13 +986,14 @@ fn (mut p Parser) parse_star() ! {
 	}
 	mut is_suffix := false
 	next := p.peek()
-	if next == `\0` {
-		_ := p.bump()
+	if next == none {
+		assert p.bump() == none
 		is_suffix = true
-	} else if (next == `,` || next == `}`) && p.branches.len >= 2 {
+	} else if ((next or { panic('missing character') }) == `,`
+		|| (next or { panic('missing character') }) == `}`) && p.branches.len >= 2 {
 		is_suffix = true
-	} else if is_separator(next) {
-		_ := p.bump()
+	} else if is_separator(next or { panic('missing character') }) {
+		assert is_separator(p.bump() or { panic('missing separator') })
 		is_suffix = false
 	} else {
 		p.push_token(token_zero_or_more())!
@@ -946,14 +1012,28 @@ fn (mut p Parser) parse_star() ! {
 	}
 }
 
-fn (mut p Parser) parse_class() ! {
+fn add_to_last_range(glob &string, mut range TokenRange, add rune) !TokenRange {
+	range.end = add
+	if range.end < range.start {
+		glob_err := GlobError{
+			glob_: (*glob).to_owned()
+			kind_: ErrorKind.invalid_range(range.start, range.end)
+		}
+		return glob_err
+	}
+	return range
+}
+
+fn (mut p Parser[^a]) parse_class() ! {
+	// Save parser state for potential rollback to literal '[' parsing.
 	saved_index := p.index
 	saved_prev := p.prev
 	saved_cur := p.cur
 	mut ranges := []TokenRange{}
 	mut negated := false
 	peek := p.peek()
-	if peek == `!` || peek == `^` {
+	if peek != none && ((peek or { panic('missing character') }) == `!`
+		|| (peek or { panic('missing character') }) == `^`) {
 		_ := p.bump()
 		negated = true
 	}
@@ -969,7 +1049,7 @@ fn (mut p Parser) parse_class() ! {
 				p.push_token(token_literal(`[`))!
 				return
 			}
-			return error(p.mk_error(ErrorKind.unclosed_class()).msg())
+			return p.mk_error(ErrorKind.unclosed_class())
 		}
 		match ch {
 			`]` {
@@ -989,25 +1069,20 @@ fn (mut p Parser) parse_class() ! {
 						end:   `-`
 					}
 				} else if in_range {
-					mut last := ranges[ranges.len - 1]
-					last.end = `-`
-					if last.end < last.start {
-						return error(p.mk_error(ErrorKind.invalid_range(last.start, last.end)).msg())
-					}
-					ranges[ranges.len - 1] = last
+					// invariant: in_range is only set when there is
+					// already at least one character seen.
+					ranges[ranges.len - 1] = add_to_last_range(p.glob, ranges[ranges.len - 1], `-`)!
 					in_range = false
 				} else {
+					assert ranges.len > 0
 					in_range = true
 				}
 			}
 			else {
 				if in_range {
-					mut last := ranges[ranges.len - 1]
-					last.end = ch
-					if last.end < last.start {
-						return error(p.mk_error(ErrorKind.invalid_range(last.start, last.end)).msg())
-					}
-					ranges[ranges.len - 1] = last
+					// invariant: in_range is only set when there is
+					// already at least one character seen.
+					ranges[ranges.len - 1] = add_to_last_range(p.glob, ranges[ranges.len - 1], ch)!
 				} else {
 					ranges << TokenRange{
 						start: ch
@@ -1020,6 +1095,8 @@ fn (mut p Parser) parse_class() ! {
 		first = false
 	}
 	if in_range {
+		// Means that the last character in the class was a '-', so add
+		// it as a literal.
 		ranges << TokenRange{
 			start: `-`
 			end:   `-`
@@ -1028,7 +1105,7 @@ fn (mut p Parser) parse_class() ! {
 	p.push_token(token_class(negated, ranges))!
 }
 
-fn (mut p Parser) bump() ?rune {
+fn (mut p Parser[^a]) bump() ?rune {
 	p.prev = p.cur
 	if p.index >= p.chars.len {
 		p.cur = none
@@ -1040,267 +1117,13 @@ fn (mut p Parser) bump() ?rune {
 	return ch
 }
 
-fn (p Parser) peek() rune {
+fn (p &Parser[^a]) peek() ?rune {
 	if p.index >= p.chars.len {
-		return `\0`
+		return none
 	}
 	return p.chars[p.index]
 }
 
 fn is_separator(ch rune) bool {
 	return ch == `/` || $if windows { ch == `\\` } $else { false }
-}
-
-fn glob_matches_candidate[^a](glob Glob, candidate Candidate[^a]) bool {
-	mut path := if glob.opts.case_insensitive {
-		candidate.path_.to_lower()
-	} else {
-		candidate.path_
-	}
-	mut text := path.runes()
-	result := glob_match_tokens(glob.tokens.tokens, glob.opts, text)
-	unsafe { text.free() }
-	if glob.opts.case_insensitive {
-		unsafe { path.free() }
-	}
-	return result
-}
-
-fn glob_matches_candidate_runes[^a](glob Glob, candidate Candidate[^a], text []rune) bool {
-	if glob.opts.case_insensitive {
-		mut path := candidate.path_.to_lower()
-		mut folded := path.runes()
-		result := glob_match_tokens(glob.tokens.tokens, glob.opts, folded)
-		unsafe {
-			folded.free()
-			path.free()
-		}
-		return result
-	}
-	return glob_match_tokens(glob.tokens.tokens, glob.opts, text)
-}
-
-fn (glob Glob) can_match_ascii_bytes() bool {
-	for tok in glob.tokens.tokens {
-		if tok.kind == .alternates || tok.ch > 0x7F {
-			return false
-		}
-		for rng in tok.ranges {
-			if rng.start > 0x7F || rng.end > 0x7F {
-				return false
-			}
-		}
-	}
-	return true
-}
-
-fn glob_matches_candidate_ascii[^a](glob Glob, candidate Candidate[^a]) bool {
-	return glob_match_tokens_ascii(glob.tokens.tokens, glob.opts, candidate.path_, 0, 0)
-}
-
-fn glob_match_tokens_ascii(tokens []Token, opts GlobOptions, text string, pi int, ti int) bool {
-	if pi >= tokens.len {
-		return ti >= text.len
-	}
-	tok := tokens[pi]
-	match tok.kind {
-		.literal {
-			return ti < text.len && tok.ch == rune(glob_ascii_byte(text[ti], opts.case_insensitive))
-				&& glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1)
-		}
-		.any {
-			if ti >= text.len || (opts.literal_separator && text[ti] == `/`) {
-				return false
-			}
-			return glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1)
-		}
-		.zero_or_more {
-			mut j := ti
-			for {
-				if glob_match_tokens_ascii(tokens, opts, text, pi + 1, j) {
-					return true
-				}
-				if j >= text.len || (opts.literal_separator && text[j] == `/`) {
-					break
-				}
-				j++
-			}
-			return false
-		}
-		.recursive_prefix {
-			if pi == tokens.len - 1 || glob_match_tokens_ascii(tokens, opts, text, pi + 1,
-				ti) {
-				return true
-			}
-			for j := ti; j < text.len; j++ {
-				if text[j] == `/` && glob_match_tokens_ascii(tokens, opts, text, pi + 1, j + 1) {
-					return true
-				}
-			}
-			return false
-		}
-		.recursive_suffix {
-			if ti >= text.len || text[ti] != `/` {
-				return false
-			}
-			if pi == tokens.len - 1 {
-				return true
-			}
-			for j := ti + 1; j <= text.len; j++ {
-				if glob_match_tokens_ascii(tokens, opts, text, pi + 1, j) {
-					return true
-				}
-			}
-			return false
-		}
-		.recursive_zero_or_more {
-			if ti >= text.len || text[ti] != `/` {
-				return false
-			}
-			if glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1) {
-				return true
-			}
-			for j := ti + 1; j < text.len; j++ {
-				if text[j] == `/` && glob_match_tokens_ascii(tokens, opts, text, pi + 1, j + 1) {
-					return true
-				}
-			}
-			return false
-		}
-		.class {
-			return ti < text.len
-				&& glob_class_matches(tok, rune(glob_ascii_byte(text[ti], opts.case_insensitive)))
-				&& glob_match_tokens_ascii(tokens, opts, text, pi + 1, ti + 1)
-		}
-		.alternates {
-			return false
-		}
-	}
-}
-
-fn glob_ascii_byte(byte u8, case_insensitive bool) u8 {
-	if case_insensitive && byte >= `A` && byte <= `Z` {
-		return byte + 32
-	}
-	return byte
-}
-
-fn glob_match_tokens(tokens []Token, opts GlobOptions, text []rune) bool {
-	return glob_match_tokens_from(tokens, opts, text, 0, 0)
-}
-
-fn glob_match_tokens_from(tokens []Token, opts GlobOptions, text []rune, pi int, ti int) bool {
-	if pi >= tokens.len {
-		return ti >= text.len
-	}
-	tok := tokens[pi]
-	match tok.kind {
-		.literal {
-			return ti < text.len && tok.ch == text[ti] && glob_match_tokens_from(tokens, opts, text,
-				pi + 1, ti + 1)
-		}
-		.any {
-			if ti >= text.len {
-				return false
-			}
-			if opts.literal_separator && text[ti] == `/` {
-				return false
-			}
-			return glob_match_tokens_from(tokens, opts, text, pi + 1, ti + 1)
-		}
-		.zero_or_more {
-			if opts.literal_separator {
-				mut j := ti
-				for {
-					if glob_match_tokens_from(tokens, opts, text, pi + 1, j) {
-						return true
-					}
-					if j >= text.len || text[j] == `/` {
-						break
-					}
-					j++
-				}
-				return false
-			}
-			for j := ti; j <= text.len; j++ {
-				if glob_match_tokens_from(tokens, opts, text, pi + 1, j) {
-					return true
-				}
-			}
-			return false
-		}
-		.recursive_prefix {
-			if pi == tokens.len - 1 {
-				return true
-			}
-			if glob_match_tokens_from(tokens, opts, text, pi + 1, ti) {
-				return true
-			}
-			for j := ti; j < text.len; j++ {
-				if text[j] == `/` && glob_match_tokens_from(tokens, opts, text, pi + 1, j + 1) {
-					return true
-				}
-			}
-			return false
-		}
-		.recursive_suffix {
-			if ti >= text.len || text[ti] != `/` {
-				return false
-			}
-			if pi == tokens.len - 1 {
-				return true
-			}
-			for j := ti + 1; j <= text.len; j++ {
-				if glob_match_tokens_from(tokens, opts, text, pi + 1, j) {
-					return true
-				}
-			}
-			return false
-		}
-		.recursive_zero_or_more {
-			if ti >= text.len || text[ti] != `/` {
-				return false
-			}
-			if glob_match_tokens_from(tokens, opts, text, pi + 1, ti + 1) {
-				return true
-			}
-			for j := ti + 1; j < text.len; j++ {
-				if text[j] == `/` && glob_match_tokens_from(tokens, opts, text, pi + 1, j + 1) {
-					return true
-				}
-			}
-			return false
-		}
-		.class {
-			return ti < text.len && glob_class_matches(tok, text[ti]) && glob_match_tokens_from(tokens,
-				opts, text, pi + 1, ti + 1)
-		}
-		.alternates {
-			for branch in tok.patterns {
-				mut combined := []Token{}
-				for item in branch.tokens {
-					combined << item.clone()
-				}
-				for i := pi + 1; i < tokens.len; i++ {
-					item := tokens[i]
-					combined << item.clone()
-				}
-				if glob_match_tokens_from(combined, opts, text, 0, ti) {
-					return true
-				}
-			}
-			return false
-		}
-	}
-}
-
-fn glob_class_matches(tok Token, ch rune) bool {
-	mut matched := false
-	for rng in tok.ranges {
-		if rng.start <= ch && ch <= rng.end {
-			matched = true
-			break
-		}
-	}
-	return if tok.negated { !matched } else { matched }
 }

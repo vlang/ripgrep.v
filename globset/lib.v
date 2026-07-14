@@ -1,5 +1,7 @@
 module globset
 
+import regex.meta
+
 /*
 The globset crate provides cross platform single glob and glob set matching.
 
@@ -97,10 +99,6 @@ or to enable case insensitive matching.
 /// `GlobError` because `Error` conflicts with V's builtin `Error` type during
 /// ownership-mode direct compilation.
 ///
-/// V-specific return-path note: the translated `Glob`/`GlobSet` builders keep
-/// this error representation for documentation and message construction, but
-/// currently raise standard V errors from `!` APIs because ownership-mode
-/// direct compilation miscompiles custom error returns in this module shape.
 pub struct GlobError implements IClone {
 	glob_ ?string
 	kind_ ErrorKind
@@ -223,6 +221,16 @@ pub fn (err GlobError) msg() string {
 pub fn (err GlobError) code() int {
 	_ = err
 	return 1
+}
+
+fn new_regex(pat &string) !meta.Regex {
+	return meta.compile_with_limits('(?s)' + *pat, usize(10 * (1 << 20)), usize(10 * (1 << 20))) or {
+		glob_err := GlobError{
+			glob_: (*pat).to_owned()
+			kind_: ErrorKind.regex(err.msg())
+		}
+		return glob_err
+	}
 }
 
 /// A candidate path for matching.
@@ -521,7 +529,7 @@ fn (s RequiredExtensionStrategy) is_match[^a](candidate Candidate[^a]) bool {
 	}
 	if entries := s.entries[candidate.ext_] {
 		for entry in entries {
-			if entry.matcher.is_match_candidate(candidate) {
+			if entry.matcher.is_match_candidate(&candidate) {
 				return true
 			}
 		}
@@ -535,7 +543,7 @@ fn (s RequiredExtensionStrategy) matches_into[^a](candidate Candidate[^a], mut m
 	}
 	if entries := s.entries[candidate.ext_] {
 		for entry in entries {
-			if entry.matcher.is_match_candidate(candidate) {
+			if entry.matcher.is_match_candidate(&candidate) {
 				matches << entry.global_index
 			}
 		}
@@ -548,25 +556,12 @@ struct RegexSetEntry implements IClone {
 }
 
 struct RegexSetStrategy implements IClone {
-	entries     []RegexSetEntry
-	ascii_bytes bool
+	entries []RegexSetEntry
 }
 
 fn (s RegexSetStrategy) is_match[^a](candidate Candidate[^a]) bool {
-	if s.ascii_bytes && candidate.path_.is_ascii() {
-		for entry in s.entries {
-			if glob_matches_candidate_ascii(entry.matcher.pat, candidate) {
-				return true
-			}
-		}
-		return false
-	}
-	mut text := candidate.path_.runes()
-	defer {
-		unsafe { text.free() }
-	}
 	for entry in s.entries {
-		if glob_matches_candidate_runes(entry.matcher.pat, candidate, text) {
+		if entry.matcher.is_match_candidate(&candidate) {
 			return true
 		}
 	}
@@ -574,20 +569,8 @@ fn (s RegexSetStrategy) is_match[^a](candidate Candidate[^a]) bool {
 }
 
 fn (s RegexSetStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
-	if s.ascii_bytes && candidate.path_.is_ascii() {
-		for entry in s.entries {
-			if glob_matches_candidate_ascii(entry.matcher.pat, candidate) {
-				matches << entry.global_index
-			}
-		}
-		return
-	}
-	mut text := candidate.path_.runes()
-	defer {
-		unsafe { text.free() }
-	}
 	for entry in s.entries {
-		if glob_matches_candidate_runes(entry.matcher.pat, candidate, text) {
+		if entry.matcher.is_match_candidate(&candidate) {
 			matches << entry.global_index
 		}
 	}
@@ -739,17 +722,14 @@ fn (b MultiStrategyBuilder) basename_suffix() BasenameSuffixStrategy {
 
 fn (b MultiStrategyBuilder) regex_set(globs []Glob) RegexSetStrategy {
 	mut entries := []RegexSetEntry{}
-	mut ascii_bytes := true
 	for i, glob in globs {
-		ascii_bytes = ascii_bytes && glob.can_match_ascii_bytes()
 		entries << RegexSetEntry{
 			global_index: b.map_[i]
 			matcher:      glob.compile_matcher()
 		}
 	}
 	return RegexSetStrategy{
-		entries:     entries
-		ascii_bytes: ascii_bytes
+		entries: entries
 	}
 }
 
@@ -970,32 +950,20 @@ pub fn GlobSet.new(globs []Glob) !GlobSet {
 	}
 	mut lits := LiteralStrategy.new()
 	mut base_lits := BasenameLiteralStrategy.new()
-	mut base_prefixes := MultiStrategyBuilder.new()
-	mut base_suffixes := MultiStrategyBuilder.new()
 	mut exts := ExtensionStrategy.new()
 	mut prefixes := MultiStrategyBuilder.new()
 	mut suffixes := MultiStrategyBuilder.new()
-	mut path_has_slash_indexes := []usize{}
 	mut required_exts := RequiredExtensionStrategyBuilder.new()
 	mut regexes := MultiStrategyBuilder.new()
 	mut regex_globs := []Glob{}
 	for i, glob in globs {
-		strategy := match_strategy_new(glob)
+		strategy := match_strategy_new(&glob)
 		match strategy.kind {
 			.literal {
 				lits.add(usize(i), strategy.value)
 			}
 			.basename_literal {
 				base_lits.add(usize(i), strategy.value)
-			}
-			.basename_prefix {
-				base_prefixes.add(usize(i), strategy.value)
-			}
-			.basename_suffix {
-				base_suffixes.add(usize(i), strategy.value)
-			}
-			.path_has_slash {
-				path_has_slash_indexes << usize(i)
 			}
 			.extension {
 				exts.add(usize(i), strategy.value)
@@ -1025,19 +993,8 @@ pub fn GlobSet.new(globs []Glob) !GlobSet {
 	if base_lits.entries.len > 0 {
 		strats << base_lits
 	}
-	if !base_prefixes.is_empty() {
-		strats << base_prefixes.basename_prefix()
-	}
-	if !base_suffixes.is_empty() {
-		strats << base_suffixes.basename_suffix()
-	}
 	if lits.entries.len > 0 {
 		strats << lits
-	}
-	if path_has_slash_indexes.len > 0 {
-		strats << PathHasSlashStrategy{
-			indexes: path_has_slash_indexes.clone()
-		}
 	}
 	if !suffixes.is_empty() {
 		strats << suffixes.suffix()
@@ -1054,8 +1011,7 @@ pub fn GlobSet.new(globs []Glob) !GlobSet {
 	return GlobSet{
 		len:            globs.len
 		strats:         strats
-		needs_basename: base_lits.entries.len > 0 || !base_prefixes.is_empty()
-			|| !base_suffixes.is_empty()
+		needs_basename: base_lits.entries.len > 0
 		needs_ext:      exts.entries.len > 0 || required_exts.entries.len > 0
 	}
 }
