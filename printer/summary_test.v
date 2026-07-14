@@ -86,6 +86,18 @@ fn test_summary_count_no_path() {
 	summary_assert_eq_printed('2\n', got)
 }
 
+fn test_summary_builder_build_is_reusable() {
+	builder := SummaryBuilder.new()
+	first := builder.build(summary_no_color_buffer())
+	second := builder.build(summary_no_color_buffer())
+	assert !first.has_written()
+	assert !second.has_written()
+	first_writer := first.into_inner()
+	second_writer := second.into_inner()
+	assert first_writer.as_slice().len == 0
+	assert second_writer.as_slice().len == 0
+}
+
 fn test_summary_count_no_path_even_with_path() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
@@ -319,6 +331,9 @@ fn test_summary_quiet_with_stats() {
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	built.search_reader(matcher_, mut rdr, &sink)!
 	match_count := sink.match_count
+	stats := sink.stats() or { panic('missing summary stats') }
+	assert stats.matches() == u64(4)
+	assert stats.matched_lines() == u64(3)
 
 	got := summary_printer_contents(mut printer)
 	summary_assert_eq_printed('', got)

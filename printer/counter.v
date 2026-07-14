@@ -2,7 +2,7 @@ module printer
 
 /// A writer that counts the number of bytes that have been successfully
 /// written.
-pub struct CounterWriter[W] {
+pub struct CounterWriter[W] implements IClone {
 mut:
 	wtr          W
 	count_       u64
@@ -106,6 +106,6 @@ pub fn (w CounterWriter[W]) is_synchronous() bool {
 	}
 }
 
-pub fn (mut w CounterWriter[W]) into_inner() W {
+pub fn (w CounterWriter[W]) into_inner() W {
 	return w.wtr
 }

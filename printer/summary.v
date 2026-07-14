@@ -10,7 +10,7 @@ import time
 /// This is manipulated by the SummaryBuilder and then referenced by the actual
 /// implementation. Once a printer is build, the configuration is frozen and
 /// cannot changed.
-struct SummaryConfig {
+struct SummaryConfig implements IClone {
 mut:
 	kind            SummaryKind
 	colors          ColorSpecs
@@ -112,7 +112,7 @@ fn (kind SummaryKind) quit_early() bool {
 /// one line) instead of output for each match.
 ///
 /// Once a `Summary` printer is built, its configuration cannot be changed.
-pub struct SummaryBuilder {
+pub struct SummaryBuilder implements IClone {
 mut:
 	config SummaryConfig
 }
@@ -129,9 +129,20 @@ pub fn SummaryBuilder.new() SummaryBuilder {
 /// The implementation of `WriteColor` used here controls whether colors
 /// are used or not when colors have been configured using the
 /// `color_specs` method.
-pub fn (builder SummaryBuilder) build[W](wtr W) Summary[W] {
+///
+/// For maximum portability, callers should generally use either
+/// `StandardStream` or `BufferedStandardStream` where appropriate, which
+/// will automatically enable colors on Windows when possible.
+///
+/// However, callers may also provide an arbitrary writer using the `Ansi`
+/// or `NoColor` wrappers, which always enable colors via ANSI escapes or
+/// always disable colors, respectively.
+///
+/// As a convenience, callers may use `build_no_color` to automatically
+/// select the `NoColor` wrapper.
+pub fn (builder &SummaryBuilder) build[W](wtr W) Summary[W] {
 	return Summary[W]{
-		config: builder.config
+		config: builder.config.clone()
 		wtr:    CounterWriter[W]{
 			wtr: wtr
 		}
@@ -143,7 +154,7 @@ pub fn (builder SummaryBuilder) build[W](wtr W) Summary[W] {
 ///
 /// This is a convenience routine for
 /// `SummaryBuilder::build(termcolor::NoColor::new(wtr))`.
-pub fn (builder SummaryBuilder) build_no_color[W](wtr W) Summary[NoColor[W]] {
+pub fn (builder &SummaryBuilder) build_no_color[W](wtr W) Summary[NoColor[W]] {
 	return builder.build(NoColor.new(wtr))
 }
 
@@ -159,6 +170,17 @@ pub fn (mut builder SummaryBuilder) kind(kind SummaryKind) &SummaryBuilder {
 
 /// Set the user color specifications to use for coloring in this printer.
 ///
+/// A `UserColorSpec` can be constructed from a string in accordance with
+/// the color specification format. See the `UserColorSpec` type
+/// documentation for more details on the format. A `ColorSpecs` can then
+/// be generated from zero or more `UserColorSpec`s.
+///
+/// Regardless of the color specifications provided here, whether color
+/// is actually used or not is determined by the implementation of
+/// `WriteColor` provided to `build`. For example, if `NoColor` is provided
+/// to `build`, then no color will ever be printed regardless of the color
+/// specifications provided here.
+///
 /// This completely overrides any previous color specifications. This does
 /// not add to any previously provided color specifications on this
 /// builder.
@@ -170,6 +192,12 @@ pub fn (mut builder SummaryBuilder) color_specs(specs ColorSpecs) &SummaryBuilde
 }
 
 /// Set the configuration to use for hyperlinks output by this printer.
+///
+/// Regardless of the hyperlink format provided here, whether hyperlinks
+/// are actually used or not is determined by the implementation of
+/// `WriteColor` provided to `build`. For example, if `NoColor` is provided
+/// to `build`, then no hyperlinks will ever be printed regardless of the
+/// format provided here.
 ///
 /// This completely overrides any previous hyperlink format.
 ///
@@ -185,6 +213,20 @@ pub fn (mut builder SummaryBuilder) hyperlink(config HyperlinkConfig) &SummaryBu
 /// gathered for all uses of `Summary` printer returned by `build`,
 /// including but not limited to, the total number of matches, the total
 /// number of bytes searched and the total number of bytes printed.
+///
+/// Aggregate statistics can be accessed via the sink's `SummarySink.stats`
+/// method.
+///
+/// When this is enabled, this printer may need to do extra work in order
+/// to compute certain statistics, which could cause the search to take
+/// longer. For example, in `QuietWithMatch` mode, a search can quit after
+/// finding the first match, but if `stats` is enabled, then the search
+/// will continue after the first match in order to compute statistics.
+///
+/// For a complete description of available statistics, see `Stats`.
+///
+/// Note that some output modes, such as `CountMatches`, automatically
+/// enable this option even if it has been explicitly disabled.
 pub fn (mut builder SummaryBuilder) stats(yes bool) &SummaryBuilder {
 	builder.config.stats = yes
 	return builder
@@ -221,7 +263,7 @@ pub fn (mut builder SummaryBuilder) exclude_zero(yes bool) &SummaryBuilder {
 ///
 /// By default, this is set to `:`.
 pub fn (mut builder SummaryBuilder) separator_field(sep []u8) &SummaryBuilder {
-	builder.config.separator_field = sep.clone()
+	builder.config.separator_field = sep
 	return builder
 }
 
@@ -230,6 +272,12 @@ pub fn (mut builder SummaryBuilder) separator_field(sep []u8) &SummaryBuilder {
 /// Typically, printing is done by emitting the file path as is. However,
 /// this setting provides the ability to use a different path separator
 /// from what the current environment has configured.
+///
+/// A typical use for this option is to permit cygwin users on Windows to
+/// set the path separator to `/` instead of using the system default of
+/// `\`.
+///
+/// This is disabled by default.
 pub fn (mut builder SummaryBuilder) separator_path(sep ?u8) &SummaryBuilder {
 	builder.config.separator_path = sep
 	return builder
@@ -256,7 +304,10 @@ pub fn (mut builder SummaryBuilder) path_terminator(terminator ?u8) &SummaryBuil
 /// `Summary::new_no_color` constructors. However, there are a number of
 /// options that configure this printer's output. Those options can be
 /// configured using [`SummaryBuilder`].
-pub struct Summary[W] {
+///
+/// This type is generic over `W`, which represents any implementation of
+/// the `WriteColor` interface.
+pub struct Summary[W] implements IClone {
 	config SummaryConfig
 mut:
 	wtr CounterWriter[W]
@@ -264,6 +315,10 @@ mut:
 
 /// Return a summary printer with a default configuration that writes
 /// matches to the given writer.
+///
+/// The writer should be an implementation of `WriteColor` and not just a
+/// bare writer. To use a normal writer (simultaneously sacrificing colors),
+/// use the `new_no_color` constructor.
 ///
 /// The default configuration uses the `Count` summary mode.
 pub fn Summary.new[W](wtr W) Summary[W] {
@@ -289,7 +344,11 @@ pub fn Summary.new_no_color[W](wtr W) Summary[NoColor[W]] {
 /// `PathWithMatch` or `PathWithoutMatch`), then any searches executed
 /// using this sink will immediately quit with an error.
 pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s, ^s, W] {
-	has_stats := summary.config.stats || summary.config.kind.requires_stats()
+	stats := if summary.config.stats || summary.config.kind.requires_stats() {
+		?Stats(Stats.new())
+	} else {
+		?Stats(none)
+	}
 	return SummarySink[^s, ^s, W]{
 		matcher:      matcher_
 		summary:      &summary
@@ -297,8 +356,7 @@ pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s
 		path:         ?PrinterPath(none)
 		start_time:   time.now()
 		match_count:  0
-		stats:        Stats.new()
-		has_stats:    has_stats
+		stats:        stats
 	}
 }
 
@@ -307,7 +365,11 @@ pub fn (mut summary Summary[W]) sink[^s](matcher_ PrinterMatcher) SummarySink[^s
 /// When the printer is associated with a path, then it may, depending on
 /// its configuration, print the path.
 pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, path &^p string) SummarySink[^p, ^s, W] {
-	has_stats := summary.config.stats || summary.config.kind.requires_stats()
+	stats := if summary.config.stats || summary.config.kind.requires_stats() {
+		?Stats(Stats.new())
+	} else {
+		?Stats(none)
+	}
 	if !summary.config.path && !summary.config.kind.requires_path() {
 		return SummarySink[^p, ^s, W]{
 			matcher:      matcher_
@@ -316,8 +378,7 @@ pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, 
 			path:         ?PrinterPath(none)
 			start_time:   time.now()
 			match_count:  0
-			stats:        Stats.new()
-			has_stats:    has_stats
+			stats:        stats
 		}
 	}
 	ppath := PrinterPath.new(path).with_separator(summary.config.separator_path)
@@ -328,15 +389,14 @@ pub fn (mut summary Summary[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, 
 		path:         ppath
 		start_time:   time.now()
 		match_count:  0
-		stats:        Stats.new()
-		has_stats:    has_stats
+		stats:        stats
 	}
 }
 
 /// Returns true if and only if this printer has written at least one byte
 /// to the underlying writer during any of the previous searches.
-pub fn (summary Summary[W]) has_written() bool {
-	return summary.wtr.total_count_ + summary.wtr.count_ > 0
+pub fn (summary &Summary[W]) has_written() bool {
+	return summary.wtr.total_count() > 0
 }
 
 /// Return a mutable reference to the underlying writer.
@@ -345,19 +405,29 @@ pub fn (mut summary Summary[W]) get_mut() &W {
 }
 
 /// Flush the underlying writer.
+// V-specific: the translated printer sum type uses this to flush every
+// concrete printer uniformly.
 pub fn (mut summary Summary[W]) flush() ! {
 	summary.wtr.flush()!
 }
 
 /// Consume this printer and return back ownership of the underlying
 /// writer.
-pub fn (mut summary Summary[W]) into_inner() W {
-	return summary.wtr.wtr
+pub fn (summary Summary[W]) into_inner() W {
+	return summary.wtr.into_inner()
 }
 
 /// An implementation of `Sink` associated with a matcher and an optional file
 /// path for the summary printer.
 ///
+/// This type is generic over a few type parameters:
+///
+/// * `^p` refers to the lifetime of the file path, if one is provided. When
+/// no file path is given, then this is the sink lifetime.
+/// * `^s` refers to the lifetime of the `Summary` printer that this type
+/// borrows.
+/// * `W` refers to the underlying writer that this printer is writing its
+/// output to.
 pub struct SummarySink[^p, ^s, W] implements Drop {
 	matcher PrinterMatcher
 mut:
@@ -367,8 +437,7 @@ mut:
 	start_time         time.Time
 	match_count        u64
 	binary_byte_offset ?u64
-	stats              Stats
-	has_stats          bool
+	stats              ?Stats
 }
 
 fn (mut sink SummarySink[^p, ^s, W]) drop[^p, ^s]() {
@@ -381,6 +450,8 @@ fn (mut sink SummarySink[^p, ^s, W]) drop[^p, ^s]() {
 }
 
 /// Release resources owned by this sink once its search is complete.
+// V-specific: callers may release the owned matcher and interpolation buffer
+// deterministically instead of waiting for the generated drop path.
 pub fn (mut sink SummarySink[^p, ^s, W]) free[^p, ^s]() {
 	sink.drop()
 }
@@ -402,7 +473,12 @@ pub fn (sink &SummarySink[^p, ^s, W]) has_match[^p, ^s]() bool {
 ///
 /// The offset returned is an absolute offset relative to the entire
 /// set of bytes searched.
-pub fn (sink SummarySink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
+///
+/// This is unaffected by the result of searches before the previous
+/// search. e.g., If the search prior to the previous search found binary
+/// data but the previous search found no binary data, then this will
+/// return `none`.
+pub fn (sink &SummarySink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
 	return sink.binary_byte_offset
 }
 
@@ -412,8 +488,8 @@ pub fn (sink SummarySink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
 /// This only returns stats if they were requested via the
 /// [`SummaryBuilder`] configuration.
 pub fn (sink &^a SummarySink[^p, ^s, W]) stats[^a, ^p, ^s]() ?&^a Stats {
-	if sink.has_stats {
-		return &sink.stats
+	if sink.stats != none {
+		return unsafe { &sink.stats? }
 	}
 	return none
 }
@@ -510,7 +586,7 @@ fn (mut sink SummarySink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
 
 pub fn (mut sink SummarySink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Searcher, mat searcher.SinkMatch) !bool {
 	is_multi_line := sink.multi_line(searcher_)
-	sink_match_count := if !sink.has_stats && !is_multi_line {
+	sink_match_count := if sink.stats == none && !is_multi_line {
 		u64(1)
 	} else {
 		// This gives us as many bytes as the searcher can offer. This
@@ -539,15 +615,17 @@ pub fn (mut sink SummarySink[^p, ^s, W]) matched[^p, ^s](searcher_ searcher.Sear
 	} else {
 		sink.match_count += 1
 	}
-	if sink.has_stats {
-		sink.stats.add_matches(sink_match_count)
-		sink.stats.add_matched_lines(mat.lines().count())
+	if sink.stats != none {
+		mut stats := unsafe { &sink.stats? }
+		stats.add_matches(sink_match_count)
+		stats.add_matched_lines(mat.lines().count())
 	} else if sink.summary.config.kind.quit_early() {
 		return false
 	}
 	return true
 }
 
+// V-specific: these no-op callbacks complete the translated `Sink` interface.
 pub fn (mut sink SummarySink[^p, ^s, W]) context[^p, ^s](searcher_ searcher.Searcher, ctx searcher.SinkContext) !bool {
 	_ = sink
 	_ = searcher_
@@ -564,7 +642,8 @@ pub fn (mut sink SummarySink[^p, ^s, W]) context_break[^p, ^s](searcher_ searche
 pub fn (mut sink SummarySink[^p, ^s, W]) binary_data[^p, ^s](searcher_ searcher.Searcher, binary_byte_offset u64) !bool {
 	if searcher_.binary_detection().quit_byte() != none {
 		if sink.path != none {
-			log.debug('ignoring file: found binary data at offset ${binary_byte_offset}')
+			path := unsafe { &sink.path? }
+			log.debug('ignoring ${*path.as_path()}: found binary data at offset ${binary_byte_offset}')
 		}
 	}
 	return true
@@ -583,14 +662,15 @@ pub fn (mut sink SummarySink[^p, ^s, W]) begin[^p, ^s](_searcher searcher.Search
 
 pub fn (mut sink SummarySink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Searcher, finish searcher.SinkFinish) ! {
 	sink.binary_byte_offset = finish.binary_byte_offset()
-	if sink.has_stats {
-		sink.stats.add_elapsed(time.since(sink.start_time))
-		sink.stats.add_searches(1)
+	if sink.stats != none {
+		mut stats := unsafe { &sink.stats? }
+		stats.add_elapsed(time.since(sink.start_time))
+		stats.add_searches(1)
 		if sink.match_count > 0 {
-			sink.stats.add_searches_with_match(1)
+			stats.add_searches_with_match(1)
 		}
-		sink.stats.add_bytes_searched(finish.byte_count())
-		sink.stats.add_bytes_printed(sink.summary.wtr.count())
+		stats.add_bytes_searched(finish.byte_count())
+		stats.add_bytes_printed(sink.summary.wtr.count())
 	}
 	// If our binary detection method says to quit after seeing binary
 	// data, then we shouldn't print any results at all, even if we've
@@ -631,10 +711,8 @@ pub fn (mut sink SummarySink[^p, ^s, W]) finish[^p, ^s](searcher_ searcher.Searc
 		.count_matches {
 			if show_count {
 				sink.write_path_field()!
-				if !sink.has_stats {
-					panic('CountMatches should enable stats tracking')
-				}
-				sink.write_all(DecimalFormatter.new(sink.stats.matches()).as_bytes())!
+			stats := sink.stats or { panic('CountMatches should enable stats tracking') }
+			sink.write_all(DecimalFormatter.new(stats.matches()).as_bytes())!
 				sink.write_line_term(searcher_)!
 			}
 		}
