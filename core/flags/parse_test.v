@@ -2,6 +2,15 @@ module flags
 
 import os
 
+fn ngram_strings[^a](ngrams_ BagOfWords[^a]) []string {
+	mut out := []string{cap: ngrams_.len}
+	for ngram in ngrams_ {
+		out << [ngram_byte(&ngram, 0), ngram_byte(&ngram, 1), ngram_byte(&ngram,
+			2)].bytestr()
+	}
+	return out
+}
+
 fn restore_config_env(previous ?string) {
 	if value := previous {
 		os.setenv('RIPGREP_CONFIG_PATH', value, true)
@@ -11,10 +20,16 @@ fn restore_config_env(previous ?string) {
 }
 
 fn test_ngrams_pads_short_names() {
-	assert ngrams('') == ['!!!']
-	assert ngrams('a') == ['a!!']
-	assert ngrams('ab') == ['ab!']
-	assert ngrams('abcd') == ['abc', 'bcd']
+	empty := ''.to_owned()
+	one := 'a'.to_owned()
+	two := 'ab'.to_owned()
+	four := 'abcd'.to_owned()
+	five := 'zabca'.to_owned()
+	assert ngram_strings(ngrams(&empty)) == ['!!!']
+	assert ngram_strings(ngrams(&one)) == ['a!!']
+	assert ngram_strings(ngrams(&two)) == ['ab!']
+	assert ngram_strings(ngrams(&four)) == ['abc', 'bcd']
+	assert ngram_strings(ngrams(&five)) == ['abc', 'bca', 'zab']
 }
 
 fn test_find_similar_names_includes_close_flags() {
@@ -39,6 +54,34 @@ fn test_parse_low_raw_wraps_flag_parse_errors() {
 		return
 	}
 	assert false
+}
+
+fn assert_parse_error(rawargs []string, expected string) {
+	parse_low_raw(rawargs) or {
+		assert err.msg() == expected
+		return
+	}
+	assert false
+}
+
+fn test_parse_low_raw_matches_lexopt_errors() {
+	assert_parse_error(['--not-a-flag=value'], 'unrecognized flag --not-a-flag')
+	assert_parse_error(['-uZ'], 'unrecognized flag -Z')
+	assert_parse_error(['--hidden=yes'],
+		'invalid CLI arguments: unexpected argument for option \'--hidden\': "yes"')
+	assert_parse_error(['--max-count'],
+		"missing value for flag --max-count: missing argument for option '--max-count'")
+	assert_parse_error(['-m'], "missing value for flag -m: missing argument for option '-m'")
+	assert_parse_error(['--no-context-separator=value'],
+		'invalid CLI arguments: unexpected argument for option \'--no-context-separator\': "value"')
+	assert_parse_error(['--max-count=abc'],
+		'error parsing flag --max-count: value is not a valid number: invalid digit found in string')
+	assert_parse_error(['--max-count='],
+		'error parsing flag --max-count: value is not a valid number: cannot parse integer from empty string')
+	assert_parse_error(['--max-count=18446744073709551616'],
+		'error parsing flag --max-count: value is not a valid number: number too large to fit in target type')
+	plus := parse_low_raw(['--max-count=+1']) or { panic(err.msg()) }
+	assert (plus.max_count or { u64(0) }) == u64(1)
 }
 
 fn test_parse_low_from_raw_special_skips_config() {

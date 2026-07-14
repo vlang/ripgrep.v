@@ -88,6 +88,14 @@ fn require_short_name(field_name string, value string) !string {
 	return value.to_owned()
 }
 
+// V-specific equivalent of the debug formatting `lexopt` uses for an
+// unexpected attached option value.
+fn debug_cli_value(value string) string {
+	escaped := value.replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n').replace('\r',
+		'\\r').replace('\t', '\\t').replace('\0', '\\0')
+	return '"${escaped}"'
+}
+
 fn (mut fm FlagMapper) reset_state() {
 	fm.long_defs = map[string]FlagDef{}
 	fm.short_defs = map[string]FlagDef{}
@@ -195,7 +203,7 @@ fn (mut fm FlagMapper) parse_long_arg(arg string, pos int) !bool {
 		mut extra_positions := []int{}
 		if !has_value {
 			if pos + 1 >= fm.input.len {
-				return error('missing value for --${name}')
+				return error("missing value for flag --${name}: missing argument for option '--${name}'")
 			}
 			parsed_arg = fm.input[pos + 1].to_owned()
 			extra_positions << pos + 1
@@ -212,7 +220,7 @@ fn (mut fm FlagMapper) parse_long_arg(arg string, pos int) !bool {
 		return true
 	}
 	if has_value {
-		return error('flag --${name} does not take a value')
+		return error("invalid CLI arguments: unexpected argument for option '--${name}': ${debug_cli_value(value)}")
 	}
 	fm.record(ParsedFlag{
 		raw:        arg.to_owned()
@@ -251,7 +259,7 @@ fn (mut fm FlagMapper) parse_short_arg(arg string, pos int) !bool {
 				parsed_arg = body[i + 1..].to_owned()
 			} else {
 				if pos + 1 >= fm.input.len {
-					return error('missing value for -${name}')
+					return error("missing value for flag -${name}: missing argument for option '-${name}'")
 				}
 				parsed_arg = fm.input[pos + 1].to_owned()
 				extra_positions << pos + 1

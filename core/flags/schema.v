@@ -1217,6 +1217,7 @@ fn occurrence_from_parsed(parsed vflag.ParsedFlag) !ParsedOccurrence {
 	}
 }
 
+/// Return the flag ID for the flag of the given name.
 pub fn lookup(name string) ?FlagId {
 	for id in flags {
 		if id.name_long() == name {
@@ -1236,6 +1237,42 @@ pub fn lookup(name string) ?FlagId {
 	return none
 }
 
+/// Look for a flag by its short name.
+fn lookup_short(name u8) ?FlagId {
+	for id in flags {
+		if short := id.name_short() {
+			if short == name {
+				return id
+			}
+		}
+	}
+	return none
+}
+
+// V-specific: the ownership-safe flag mapper reports an unmatched short
+// cluster as one argument, while `lexopt` reports its first unknown flag.
+fn unrecognized_short_name(arg string) string {
+	body := arg[1..]
+	for ch in body.runes() {
+		if ch > 0x7f {
+			return ch.str()
+		}
+		id := lookup_short(u8(ch)) or { return ch.str() }
+		if !id.is_switch() {
+			break
+		}
+	}
+	return body.to_owned()
+}
+
+/// Parse the sequence of CLI arguments given a low level typed set of
+/// arguments.
+///
+/// This is exposed for testing that the correct low-level arguments are parsed
+/// from a CLI. It just runs the parser once over the CLI arguments. It doesn't
+/// setup logging or read from a config file.
+///
+/// This assumes the iterator given does *not* begin with the binary name.
 pub fn parse_low_raw(rawargs []string) !LowArgs {
 	mut fm := vflag.FlagMapper{
 		config: vflag.ParseConfig{
@@ -1294,15 +1331,16 @@ pub fn parse_low_raw(rawargs []string) !LowArgs {
 		}
 		if arg != '-' && arg.starts_with('-') {
 			if arg.starts_with('--') && arg.len > 2 {
-				mut name := arg[2..]
+				mut name := arg[2..].to_owned()
 				if eq := name.index('=') {
-					name = name[..eq]
+					name = name[..eq].to_owned()
 				}
-				if suggest_msg := suggest(name) {
-					return error('unrecognized flag ${arg}\n\n${suggest_msg}')
+				if suggest_msg := suggest(&name) {
+					return error('unrecognized flag --${name}\n\n${suggest_msg}')
 				}
+				return error('unrecognized flag --${name}')
 			}
-			return error('unrecognized flag ${arg}')
+			return error('unrecognized flag -${unrecognized_short_name(arg)}')
 		}
 		args.positional << arg.to_owned()
 	}

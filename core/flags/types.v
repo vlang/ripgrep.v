@@ -5,7 +5,6 @@ import encoding.utf8
 import os
 import printer
 import searcher
-import strconv
 
 /*!
 Provides the definition of low level arguments from CLI flags.
@@ -1014,34 +1013,42 @@ pub fn default_low_args() LowArgs {
 }
 
 pub fn parse_usize(value string) !usize {
-	if !is_decimal_number(value) {
-		return error('value is not a valid number')
+	parsed := parse_unsigned(value, u64(~usize(0))) or {
+		return error('value is not a valid number: ${err.msg()}')
 	}
-	parsed := strconv.atou64(value) or { return error('value is not a valid number') }
-	cast := usize(parsed)
-	if u64(cast) != parsed {
-		return error('value is too big')
-	}
-	return cast
+	return usize(parsed)
 }
 
 pub fn parse_u64(value string) !u64 {
-	if !is_decimal_number(value) {
-		return error('value is not a valid number')
+	return parse_unsigned(value, ~u64(0)) or {
+		return error('value is not a valid number: ${err.msg()}')
 	}
-	return strconv.atou64(value) or { return error('value is not a valid number') }
 }
 
-fn is_decimal_number(value string) bool {
+// V-specific equivalent of Rust's unsigned integer `FromStr` error behavior.
+fn parse_unsigned(value string, max u64) !u64 {
 	if value.len == 0 {
-		return false
+		return error('cannot parse integer from empty string')
 	}
-	for byte in value.bytes() {
+	mut start := 0
+	if value[0] == `+` {
+		start = 1
+	}
+	if start == value.len {
+		return error('invalid digit found in string')
+	}
+	mut parsed := u64(0)
+	for byte in value[start..].bytes() {
 		if byte < `0` || byte > `9` {
-			return false
+			return error('invalid digit found in string')
 		}
+		digit := u64(byte - `0`)
+		if parsed > (max - digit) / 10 {
+			return error('number too large to fit in target type')
+		}
+		parsed = parsed * 10 + digit
 	}
-	return true
+	return parsed
 }
 
 pub fn parse_human_readable_u64(value string) !u64 {
