@@ -3,6 +3,7 @@ module printer
 import log
 import matcher
 import searcher
+import sync.arc
 import time
 
 const standard_utf8_replacement_rune = rune(0xfffd)
@@ -22,16 +23,16 @@ mut:
 	only_matching           bool
 	per_match               bool
 	per_match_one_line      bool
-	replacement             ?[]u8
+	replacement             arc.Arc[?[]u8]
 	max_columns             ?u64
 	max_columns_preview     bool
 	column                  bool
 	byte_offset             bool
 	trim_ascii              bool
-	separator_search        ?[]u8
-	separator_context       ?[]u8
-	separator_field_match   []u8
-	separator_field_context []u8
+	separator_search        arc.Arc[?[]u8]
+	separator_context       arc.Arc[?[]u8]
+	separator_field_match   arc.Arc[[]u8]
+	separator_field_context arc.Arc[[]u8]
 	separator_path          ?u8
 	path_terminator         ?u8
 }
@@ -65,16 +66,16 @@ pub fn StandardBuilder.new() StandardBuilder {
 			only_matching:           false
 			per_match:               false
 			per_match_one_line:      false
-			replacement:             none
+			replacement:             arc.new(?[]u8(none))
 			max_columns:             none
 			max_columns_preview:     false
 			column:                  false
 			byte_offset:             false
 			trim_ascii:              false
-			separator_search:        none
-			separator_context:       [u8(`-`), `-`]
-			separator_field_match:   [u8(`:`)]
-			separator_field_context: [u8(`-`)]
+			separator_search:        arc.new(?[]u8(none))
+			separator_context:       arc.new(?[]u8([u8(`-`), `-`]))
+			separator_field_match:   arc.new([u8(`:`)])
+			separator_field_context: arc.new([u8(`-`)])
 			separator_path:          none
 			path_terminator:         none
 		}
@@ -257,7 +258,7 @@ pub fn (mut builder StandardBuilder) per_match_one_line(yes bool) &StandardBuild
 /// `interpolate` method in the
 /// [grep-printer](https://docs.rs/grep-printer) crate.
 pub fn (mut builder StandardBuilder) replacement(replacement ?[]u8) &StandardBuilder {
-	builder.config.replacement = replacement
+	builder.config.replacement = arc.new(replacement)
 	return builder
 }
 
@@ -338,7 +339,7 @@ pub fn (mut builder StandardBuilder) trim_ascii(yes bool) &StandardBuilder {
 ///
 /// By default, this is disabled.
 pub fn (mut builder StandardBuilder) separator_search(sep ?[]u8) &StandardBuilder {
-	builder.config.separator_search = sep
+	builder.config.separator_search = arc.new(sep)
 	return builder
 }
 
@@ -352,7 +353,7 @@ pub fn (mut builder StandardBuilder) separator_search(sep ?[]u8) &StandardBuilde
 ///
 /// By default, this is set to `--`.
 pub fn (mut builder StandardBuilder) separator_context(sep ?[]u8) &StandardBuilder {
-	builder.config.separator_context = sep
+	builder.config.separator_context = arc.new(sep)
 	return builder
 }
 
@@ -365,7 +366,7 @@ pub fn (mut builder StandardBuilder) separator_context(sep ?[]u8) &StandardBuild
 ///
 /// By default, this is set to `:`.
 pub fn (mut builder StandardBuilder) separator_field_match(sep []u8) &StandardBuilder {
-	builder.config.separator_field_match = sep
+	builder.config.separator_field_match = arc.new(sep)
 	return builder
 }
 
@@ -378,7 +379,7 @@ pub fn (mut builder StandardBuilder) separator_field_match(sep []u8) &StandardBu
 ///
 /// By default, this is set to `-`.
 pub fn (mut builder StandardBuilder) separator_field_context(sep []u8) &StandardBuilder {
-	builder.config.separator_field_context = sep
+	builder.config.separator_field_context = arc.new(sep)
 	return builder
 }
 
@@ -513,7 +514,7 @@ fn (standard Standard[W]) needs_match_granularity() bool {
 		// The column feature requires finding the position of the first match.
 		|| standard.config.column
 		// Requires finding each match for performing replacement.
-		|| standard.config.replacement != none
+		|| (*standard.config.replacement.get()) != none
 		// Emitting a line for each match requires finding each match.
 		|| standard.config.per_match
 		// Emitting only the match requires finding each match.
@@ -678,7 +679,7 @@ fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher
 /// To access the result of a replacement, use `replacer.replacement()`.
 fn (mut sink StandardSink[^p, ^s, W]) replace[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
 	sink.replacer.clear()
-	if replacement := sink.standard.config.replacement {
+	if replacement := (*sink.standard.config.replacement.get()) {
 		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, replacement)!
 	}
 }
@@ -1231,7 +1232,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_search_prelude[^a, ^p, ^s]() ! {
 	if this_search_written {
 		return
 	}
-	if sep := imp.config().separator_search {
+	if sep := (*imp.config().separator_search.get()) {
 		ever_written := imp.sink.standard.wtr.total_count() > 0
 		if ever_written {
 			imp.write(sep)!
@@ -1287,7 +1288,7 @@ fn binary_byte_debug_escape(byte u8) string {
 }
 
 fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_context_separator[^a, ^p, ^s]() ! {
-	if sep := imp.config().separator_context {
+	if sep := (*imp.config().separator_context.get()) {
 		imp.write(sep)!
 		imp.write_line_term()!
 	}
@@ -1398,9 +1399,9 @@ fn (imp StandardImpl[^a, ^p, ^s, W]) path[^a, ^p, ^s]() ?&^a PrinterPath[^p] {
 /// matching or contextual lines.
 fn (imp StandardImpl[^a, ^p, ^s, W]) separator_field[^a, ^p, ^s]() &^a []u8 {
 	if imp.is_context() {
-		return &imp.config().separator_field_context
+		return imp.config().separator_field_context.get()
 	}
-	return &imp.config().separator_field_match
+	return imp.config().separator_field_match.get()
 }
 
 /// Returns true if and only if the given line exceeds the maximum number
