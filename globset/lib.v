@@ -107,20 +107,44 @@ pub struct GlobError implements IClone {
 /// The kind of error that can occur when parsing a glob pattern.
 pub struct ErrorKind implements IClone {
 pub:
-	tag    ErrorKindTag
-	start  rune
-	end    rune
+	/// V-specific discriminant for the translated Rust enum.
+	tag ErrorKindTag
+	/// V-specific starting character payload used by `invalid_range`.
+	start rune
+	/// V-specific ending character payload used by `invalid_range`.
+	end rune
+	/// V-specific payload field used by `regex`.
 	details string
 }
 
 pub enum ErrorKindTag {
+	/// **DEPRECATED**.
+	///
+	/// This error used to occur for consistency with git's glob specification,
+	/// but the specification now accepts all uses of `**`. When `**` does not
+	/// appear adjacent to a path separator or at the beginning/end of a glob,
+	/// it is now treated as two consecutive `*` patterns. As such, this error
+	/// is no longer used.
 	invalid_recursive
+	/// Occurs when a character class (e.g., `[abc]`) is not closed.
 	unclosed_class
+	/// Occurs when a range in a character (e.g., `[a-z]`) is invalid. For
+	/// example, if the range starts with a lexicographically larger character
+	/// than it ends with.
 	invalid_range
+	/// Occurs when a `}` is found without a matching `{`.
 	unopened_alternates
+	/// Occurs when a `{` is found without a matching `}`.
 	unclosed_alternates
+	/// **DEPRECATED**.
+	///
+	/// This error used to occur when an alternating group was nested inside
+	/// another alternating group, e.g., `{{a,b},{c,d}}`. However, this is now
+	/// supported and as such this error cannot occur.
 	nested_alternates
+	/// Occurs when an unescaped '\' is found at the end of a glob.
 	dangling_escape
+	/// An error associated with parsing or compiling a regex.
 	regex
 }
 
@@ -197,18 +221,16 @@ pub fn (kind ErrorKind) str() string {
 }
 
 /// Return the glob that caused this error, if one exists.
-pub fn (err GlobError) glob() ?string {
-	return err.glob_
+pub fn (err &^a GlobError) glob[^a]() ?&^a string {
+	if err.glob_ != none {
+		return unsafe { &err.glob_? }
+	}
+	return none
 }
 
 /// Return the kind of this error.
-///
-/// V-specific representation note: this returns a cloned `ErrorKind` value
-/// instead of a borrowed reference because ownership-mode direct compilation
-/// currently miscompiles `IError` implementations that also expose
-/// reference-receiver methods.
-pub fn (err GlobError) kind() ErrorKind {
-	return err.kind_.clone()
+pub fn (err &^a GlobError) kind[^a]() &^a ErrorKind {
+	return &err.kind_
 }
 
 pub fn (err GlobError) msg() string {
@@ -250,7 +272,7 @@ pub struct Candidate[^a] implements IClone {
 
 /// Create a new candidate for matching from the given path.
 pub fn Candidate.new[^a](path &^a string) Candidate[^a] {
-	return candidate_from_string_with(path, true, true)
+	return candidate_from_string(path)
 }
 
 /// Create a new candidate for matching from the given path as a sequence
@@ -267,13 +289,9 @@ pub fn Candidate.from_bytes[^a](path &^a []u8) Candidate[^a] {
 }
 
 fn candidate_from_string[^a](path &^a string) Candidate[^a] {
-	return candidate_from_string_with(path, true, true)
-}
-
-fn candidate_from_string_with[^a](path &^a string, needs_basename bool, needs_ext bool) Candidate[^a] {
 	npath := normalize_path(*path)
-	basename := if needs_basename || needs_ext { file_name(npath) or { '' } } else { '' }
-	ext := if needs_ext { file_name_ext(basename) or { '' } } else { '' }
+	basename := file_name(npath) or { '' }
+	ext := file_name_ext(basename) or { '' }
 	return Candidate[^a]{
 		path_:     npath
 		basename_: basename
@@ -281,14 +299,14 @@ fn candidate_from_string_with[^a](path &^a string, needs_basename bool, needs_ex
 	}
 }
 
-fn (candidate Candidate[^a]) path_prefix[^a](max usize) string {
+fn (candidate &Candidate[^a]) path_prefix[^a](max usize) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
 	return unsafe { candidate.path_.substr_unsafe(0, int(max)) }
 }
 
-fn (candidate Candidate[^a]) path_suffix[^a](max usize) string {
+fn (candidate &Candidate[^a]) path_suffix[^a](max usize) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
@@ -296,7 +314,7 @@ fn (candidate Candidate[^a]) path_suffix[^a](max usize) string {
 	return unsafe { candidate.path_.substr_unsafe(start, candidate.path_.len) }
 }
 
-type GlobSetMatchStrategy = BasenameLiteralStrategy | BasenamePrefixStrategy | BasenameSuffixStrategy | ExtensionStrategy | LiteralStrategy | PathHasSlashStrategy | PrefixStrategy | RegexSetStrategy | RequiredExtensionStrategy | SuffixStrategy
+type GlobSetMatchStrategy = BasenameLiteralStrategy | ExtensionStrategy | LiteralStrategy | PrefixStrategy | RegexSetStrategy | RequiredExtensionStrategy | SuffixStrategy
 
 struct LiteralStrategy implements IClone {
 mut:
@@ -315,11 +333,11 @@ fn (mut s LiteralStrategy) add(global_index usize, lit string) {
 	s.entries[lit] = hits
 }
 
-fn (s LiteralStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &LiteralStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return candidate.path_ in s.entries
 }
 
-fn (s LiteralStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &LiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	if hits := s.entries[candidate.path_] {
 		matches << hits
 	}
@@ -342,75 +360,19 @@ fn (mut s BasenameLiteralStrategy) add(global_index usize, lit string) {
 	s.entries[lit] = hits
 }
 
-fn (s BasenameLiteralStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &BasenameLiteralStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	if candidate.basename_ == '' {
 		return false
 	}
 	return candidate.basename_ in s.entries
 }
 
-fn (s BasenameLiteralStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &BasenameLiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	if candidate.basename_ == '' {
 		return
 	}
 	if hits := s.entries[candidate.basename_] {
 		matches << hits
-	}
-}
-
-struct BasenamePrefixStrategy implements IClone {
-	patterns []string
-	map_     []usize
-}
-
-fn (s BasenamePrefixStrategy) is_match[^a](candidate Candidate[^a]) bool {
-	if candidate.basename_ == '' {
-		return false
-	}
-	for pattern in s.patterns {
-		if candidate.basename_.starts_with(pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-fn (s BasenamePrefixStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
-	if candidate.basename_ == '' {
-		return
-	}
-	for i, pattern in s.patterns {
-		if candidate.basename_.starts_with(pattern) {
-			matches << s.map_[i]
-		}
-	}
-}
-
-struct BasenameSuffixStrategy implements IClone {
-	patterns []string
-	map_     []usize
-}
-
-fn (s BasenameSuffixStrategy) is_match[^a](candidate Candidate[^a]) bool {
-	if candidate.basename_ == '' {
-		return false
-	}
-	for pattern in s.patterns {
-		if candidate.basename_.ends_with(pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-fn (s BasenameSuffixStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
-	if candidate.basename_ == '' {
-		return
-	}
-	for i, pattern in s.patterns {
-		if candidate.basename_.ends_with(pattern) {
-			matches << s.map_[i]
-		}
 	}
 }
 
@@ -431,14 +393,14 @@ fn (mut s ExtensionStrategy) add(global_index usize, ext string) {
 	s.entries[ext] = hits
 }
 
-fn (s ExtensionStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &ExtensionStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	if candidate.ext_ == '' {
 		return false
 	}
 	return candidate.ext_ in s.entries
 }
 
-fn (s ExtensionStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &ExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	if candidate.ext_ == '' {
 		return
 	}
@@ -447,29 +409,15 @@ fn (s ExtensionStrategy) matches_into[^a](candidate Candidate[^a], mut matches [
 	}
 }
 
-struct PathHasSlashStrategy implements IClone {
-	indexes []usize
-}
-
-fn (s PathHasSlashStrategy) is_match[^a](candidate Candidate[^a]) bool {
-	_ = s
-	return candidate.path_.index_u8(`/`) >= 0
-}
-
-fn (s PathHasSlashStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
-	if candidate.path_.index_u8(`/`) < 0 {
-		return
-	}
-	matches << s.indexes
-}
-
 struct PrefixStrategy implements IClone {
+	// V-specific: the untranslated Aho-Corasick dependency is represented by
+	// its literal patterns while preserving overlapping-prefix match behavior.
 	patterns []string
 	map_     []usize
 	longest  usize
 }
 
-fn (s PrefixStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &PrefixStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	path := candidate.path_prefix(s.longest)
 	for i, pattern in s.patterns {
 		if path.starts_with(pattern) {
@@ -480,7 +428,7 @@ fn (s PrefixStrategy) is_match[^a](candidate Candidate[^a]) bool {
 	return false
 }
 
-fn (s PrefixStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &PrefixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	path := candidate.path_prefix(s.longest)
 	for i, pattern in s.patterns {
 		if path.starts_with(pattern) {
@@ -490,12 +438,14 @@ fn (s PrefixStrategy) matches_into[^a](candidate Candidate[^a], mut matches []us
 }
 
 struct SuffixStrategy implements IClone {
+	// V-specific: the untranslated Aho-Corasick dependency is represented by
+	// its literal patterns while preserving overlapping-suffix match behavior.
 	patterns []string
 	map_     []usize
 	longest  usize
 }
 
-fn (s SuffixStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &SuffixStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	path := candidate.path_suffix(s.longest)
 	for pattern in s.patterns {
 		if path.ends_with(pattern) {
@@ -505,7 +455,7 @@ fn (s SuffixStrategy) is_match[^a](candidate Candidate[^a]) bool {
 	return false
 }
 
-fn (s SuffixStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &SuffixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	path := candidate.path_suffix(s.longest)
 	for i, pattern in s.patterns {
 		if path.ends_with(pattern) {
@@ -516,20 +466,20 @@ fn (s SuffixStrategy) matches_into[^a](candidate Candidate[^a], mut matches []us
 
 struct RequiredExtensionEntry implements IClone {
 	global_index usize
-	matcher      GlobMatcher
+	matcher      meta.Regex
 }
 
 struct RequiredExtensionStrategy implements IClone {
 	entries map[string][]RequiredExtensionEntry
 }
 
-fn (s RequiredExtensionStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &RequiredExtensionStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	if candidate.ext_ == '' {
 		return false
 	}
 	if entries := s.entries[candidate.ext_] {
 		for entry in entries {
-			if entry.matcher.is_match_candidate(&candidate) {
+			if entry.matcher.find(candidate.path_) != none {
 				return true
 			}
 		}
@@ -537,13 +487,13 @@ fn (s RequiredExtensionStrategy) is_match[^a](candidate Candidate[^a]) bool {
 	return false
 }
 
-fn (s RequiredExtensionStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &RequiredExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	if candidate.ext_ == '' {
 		return
 	}
 	if entries := s.entries[candidate.ext_] {
 		for entry in entries {
-			if entry.matcher.is_match_candidate(&candidate) {
+			if entry.matcher.find(candidate.path_) != none {
 				matches << entry.global_index
 			}
 		}
@@ -552,31 +502,33 @@ fn (s RequiredExtensionStrategy) matches_into[^a](candidate Candidate[^a], mut m
 
 struct RegexSetEntry implements IClone {
 	global_index usize
-	matcher      GlobMatcher
+	matcher      meta.Regex
 }
 
 struct RegexSetStrategy implements IClone {
+	// V-specific: the local regex VM has no multi-pattern `PatternSet`, so
+	// each compiled pattern retains its original global index here.
 	entries []RegexSetEntry
 }
 
-fn (s RegexSetStrategy) is_match[^a](candidate Candidate[^a]) bool {
+fn (s &RegexSetStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	for entry in s.entries {
-		if entry.matcher.is_match_candidate(&candidate) {
+		if entry.matcher.find(candidate.path_) != none {
 			return true
 		}
 	}
 	return false
 }
 
-fn (s RegexSetStrategy) matches_into[^a](candidate Candidate[^a], mut matches []usize) {
+fn (s &RegexSetStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
 	for entry in s.entries {
-		if entry.matcher.is_match_candidate(&candidate) {
+		if entry.matcher.find(candidate.path_) != none {
 			matches << entry.global_index
 		}
 	}
 }
 
-fn glob_set_strategy_is_match[^a](strat GlobSetMatchStrategy, candidate Candidate[^a]) bool {
+fn glob_set_strategy_is_match[^a](strat GlobSetMatchStrategy, candidate &Candidate[^a]) bool {
 	if strat is LiteralStrategy {
 		s := strat as LiteralStrategy
 		return s.is_match(candidate)
@@ -585,20 +537,8 @@ fn glob_set_strategy_is_match[^a](strat GlobSetMatchStrategy, candidate Candidat
 		s := strat as BasenameLiteralStrategy
 		return s.is_match(candidate)
 	}
-	if strat is BasenamePrefixStrategy {
-		s := strat as BasenamePrefixStrategy
-		return s.is_match(candidate)
-	}
-	if strat is BasenameSuffixStrategy {
-		s := strat as BasenameSuffixStrategy
-		return s.is_match(candidate)
-	}
 	if strat is ExtensionStrategy {
 		s := strat as ExtensionStrategy
-		return s.is_match(candidate)
-	}
-	if strat is PathHasSlashStrategy {
-		s := strat as PathHasSlashStrategy
 		return s.is_match(candidate)
 	}
 	if strat is PrefixStrategy {
@@ -617,7 +557,7 @@ fn glob_set_strategy_is_match[^a](strat GlobSetMatchStrategy, candidate Candidat
 	return s.is_match(candidate)
 }
 
-fn glob_set_strategy_matches_into[^a](strat GlobSetMatchStrategy, candidate Candidate[^a], mut matches []usize) {
+fn glob_set_strategy_matches_into[^a](strat GlobSetMatchStrategy, candidate &Candidate[^a], mut matches []usize) {
 	if strat is LiteralStrategy {
 		s := strat as LiteralStrategy
 		s.matches_into(candidate, mut matches)
@@ -628,23 +568,8 @@ fn glob_set_strategy_matches_into[^a](strat GlobSetMatchStrategy, candidate Cand
 		s.matches_into(candidate, mut matches)
 		return
 	}
-	if strat is BasenamePrefixStrategy {
-		s := strat as BasenamePrefixStrategy
-		s.matches_into(candidate, mut matches)
-		return
-	}
-	if strat is BasenameSuffixStrategy {
-		s := strat as BasenameSuffixStrategy
-		s.matches_into(candidate, mut matches)
-		return
-	}
 	if strat is ExtensionStrategy {
 		s := strat as ExtensionStrategy
-		s.matches_into(candidate, mut matches)
-		return
-	}
-	if strat is PathHasSlashStrategy {
-		s := strat as PathHasSlashStrategy
 		s.matches_into(candidate, mut matches)
 		return
 	}
@@ -692,40 +617,26 @@ fn (mut b MultiStrategyBuilder) add(global_index usize, literal string) {
 
 fn (b MultiStrategyBuilder) prefix() PrefixStrategy {
 	return PrefixStrategy{
-		patterns: b.literals.clone()
-		map_:     b.map_.clone()
+		patterns: b.literals
+		map_:     b.map_
 		longest:  b.longest
 	}
 }
 
 fn (b MultiStrategyBuilder) suffix() SuffixStrategy {
 	return SuffixStrategy{
-		patterns: b.literals.clone()
-		map_:     b.map_.clone()
+		patterns: b.literals
+		map_:     b.map_
 		longest:  b.longest
 	}
 }
 
-fn (b MultiStrategyBuilder) basename_prefix() BasenamePrefixStrategy {
-	return BasenamePrefixStrategy{
-		patterns: b.literals.clone()
-		map_:     b.map_.clone()
-	}
-}
-
-fn (b MultiStrategyBuilder) basename_suffix() BasenameSuffixStrategy {
-	return BasenameSuffixStrategy{
-		patterns: b.literals.clone()
-		map_:     b.map_.clone()
-	}
-}
-
-fn (b MultiStrategyBuilder) regex_set(globs []Glob) RegexSetStrategy {
+fn (b MultiStrategyBuilder) regex_set() !RegexSetStrategy {
 	mut entries := []RegexSetEntry{}
-	for i, glob in globs {
+	for i, literal in b.literals {
 		entries << RegexSetEntry{
 			global_index: b.map_[i]
-			matcher:      glob.compile_matcher()
+			matcher:      new_regex(&literal)!
 		}
 	}
 	return RegexSetStrategy{
@@ -733,13 +644,13 @@ fn (b MultiStrategyBuilder) regex_set(globs []Glob) RegexSetStrategy {
 	}
 }
 
-fn (b MultiStrategyBuilder) is_empty() bool {
+fn (b &MultiStrategyBuilder) is_empty() bool {
 	return b.literals.len == 0
 }
 
 struct RequiredExtensionBuilderEntry implements IClone {
 	global_index usize
-	glob         Glob
+	regex        string
 }
 
 struct RequiredExtensionStrategyBuilder implements IClone {
@@ -753,23 +664,23 @@ fn RequiredExtensionStrategyBuilder.new() RequiredExtensionStrategyBuilder {
 	}
 }
 
-fn (mut b RequiredExtensionStrategyBuilder) add(global_index usize, ext string, glob Glob) {
+fn (mut b RequiredExtensionStrategyBuilder) add(global_index usize, ext string, regex string) {
 	mut items := b.entries[ext] or { []RequiredExtensionBuilderEntry{} }
 	items << RequiredExtensionBuilderEntry{
 		global_index: global_index
-		glob:         glob.clone()
+		regex:        regex
 	}
 	b.entries[ext] = items
 }
 
-fn (b RequiredExtensionStrategyBuilder) build() RequiredExtensionStrategy {
+fn (b RequiredExtensionStrategyBuilder) build() !RequiredExtensionStrategy {
 	mut entries := map[string][]RequiredExtensionEntry{}
 	for ext, items in b.entries {
 		mut compiled := []RequiredExtensionEntry{}
 		for item in items {
 			compiled << RequiredExtensionEntry{
 				global_index: item.global_index
-				matcher:      item.glob.compile_matcher()
+				matcher:      new_regex(&item.regex)!
 			}
 		}
 		entries[ext] = compiled
@@ -782,10 +693,8 @@ fn (b RequiredExtensionStrategyBuilder) build() RequiredExtensionStrategy {
 /// GlobSet represents a group of globs that can be matched together in a
 /// single pass.
 pub struct GlobSet implements IClone {
-	len            int
-	strats         []GlobSetMatchStrategy
-	needs_basename bool
-	needs_ext      bool
+	len    usize
+	strats []GlobSetMatchStrategy
 }
 
 /// Create a new `GlobSetBuilder`. A `GlobSetBuilder` can be used to add
@@ -798,20 +707,18 @@ pub fn GlobSet.builder() GlobSetBuilder {
 /// Create an empty `GlobSet`. An empty set matches nothing.
 pub fn GlobSet.empty() GlobSet {
 	return GlobSet{
-		len:            0
-		strats:         []GlobSetMatchStrategy{}
-		needs_basename: true
-		needs_ext:      true
+		len:    0
+		strats: []GlobSetMatchStrategy{}
 	}
 }
 
 /// Returns true if this set is empty, and therefore matches nothing.
-pub fn (gs GlobSet) is_empty() bool {
+pub fn (gs &GlobSet) is_empty() bool {
 	return gs.len == 0
 }
 
 /// Returns the number of globs in this set.
-pub fn (gs GlobSet) len() int {
+pub fn (gs &GlobSet) len() usize {
 	return gs.len
 }
 
@@ -827,16 +734,16 @@ pub fn (mut gs GlobSet) free_empty() {
 }
 
 /// Returns true if any glob in this set matches the path given.
-pub fn (gs GlobSet) is_match(path string) bool {
-	candidate := candidate_from_string_with(&path, gs.needs_basename, gs.needs_ext)
-	return gs.is_match_candidate(candidate)
+pub fn (gs &GlobSet) is_match(path string) bool {
+	candidate := Candidate.new(&path)
+	return gs.is_match_candidate(&candidate)
 }
 
 /// Returns true if any glob in this set matches the path given.
 ///
 /// This takes a Candidate as input, which can be used to amortize the
 /// cost of preparing a path for matching.
-pub fn (gs GlobSet) is_match_candidate[^a](path Candidate[^a]) bool {
+pub fn (gs &GlobSet) is_match_candidate[^a](path &Candidate[^a]) bool {
 	if gs.is_empty() {
 		return false
 	}
@@ -852,9 +759,20 @@ pub fn (gs GlobSet) is_match_candidate[^a](path Candidate[^a]) bool {
 ///
 /// This will return true if the set of globs is empty, as in that case all
 /// `0` of the globs will match.
-pub fn (gs GlobSet) matches_all(path string) bool {
-	candidate := candidate_from_string_with(&path, gs.needs_basename, gs.needs_ext)
-	return gs.matches_all_candidate(candidate)
+///
+/// ```
+/// mut builder := GlobSetBuilder.new()
+/// builder.add(Glob.new('src/*')!)
+/// builder.add(Glob.new('**/*.rs')!)
+/// set := builder.build()!
+///
+/// assert set.matches_all('src/foo.rs')
+/// assert !set.matches_all('src/bar.c')
+/// assert !set.matches_all('test.rs')
+/// ```
+pub fn (gs &GlobSet) matches_all(path string) bool {
+	candidate := Candidate.new(&path)
+	return gs.matches_all_candidate(&candidate)
 }
 
 /// Returns ture if all globs in this set match the path given.
@@ -864,7 +782,7 @@ pub fn (gs GlobSet) matches_all(path string) bool {
 ///
 /// This will return true if the set of globs is empty, as in that case all
 /// `0` of the globs will match.
-pub fn (gs GlobSet) matches_all_candidate[^a](path Candidate[^a]) bool {
+pub fn (gs &GlobSet) matches_all_candidate[^a](path &Candidate[^a]) bool {
 	for strat in gs.strats {
 		if !glob_set_strategy_is_match(strat, path) {
 			return false
@@ -875,9 +793,9 @@ pub fn (gs GlobSet) matches_all_candidate[^a](path Candidate[^a]) bool {
 
 /// Returns the sequence number of every glob pattern that matches the
 /// given path.
-pub fn (gs GlobSet) matches(path string) []usize {
-	candidate := candidate_from_string_with(&path, gs.needs_basename, gs.needs_ext)
-	return gs.matches_candidate(candidate)
+pub fn (gs &GlobSet) matches(path string) []usize {
+	candidate := Candidate.new(&path)
+	return gs.matches_candidate(&candidate)
 }
 
 /// Returns the sequence number of every glob pattern that matches the
@@ -885,7 +803,7 @@ pub fn (gs GlobSet) matches(path string) []usize {
 ///
 /// This takes a Candidate as input, which can be used to amortize the
 /// cost of preparing a path for matching.
-pub fn (gs GlobSet) matches_candidate[^a](path Candidate[^a]) []usize {
+pub fn (gs &GlobSet) matches_candidate[^a](path &Candidate[^a]) []usize {
 	mut into := []usize{}
 	if gs.is_empty() {
 		return into
@@ -900,16 +818,9 @@ pub fn (gs GlobSet) matches_candidate[^a](path Candidate[^a]) []usize {
 /// `into` is cleared before matching begins, and contains the set of
 /// sequence numbers (in ascending order) after matching ends. If no globs
 /// were matched, then `into` will be empty.
-pub fn (gs GlobSet) matches_into(path string, mut into []usize) {
-	candidate := candidate_from_string_with(&path, gs.needs_basename, gs.needs_ext)
-	gs.matches_candidate_into(candidate, mut into)
-}
-
-/// Adds the sequence number of every glob pattern that matches the given
-/// path to the vec given without sorting or deduplicating the result.
-pub fn (gs GlobSet) matches_into_unsorted(path string, mut into []usize) {
-	candidate := candidate_from_string_with(&path, gs.needs_basename, gs.needs_ext)
-	gs.matches_candidate_into_unsorted(candidate, mut into)
+pub fn (gs &GlobSet) matches_into(path string, mut into []usize) {
+	candidate := Candidate.new(&path)
+	gs.matches_candidate_into(&candidate, mut into)
 }
 
 /// Adds the sequence number of every glob pattern that matches the given
@@ -921,17 +832,7 @@ pub fn (gs GlobSet) matches_into_unsorted(path string, mut into []usize) {
 ///
 /// This takes a Candidate as input, which can be used to amortize the
 /// cost of preparing a path for matching.
-pub fn (gs GlobSet) matches_candidate_into[^a](path Candidate[^a], mut into []usize) {
-	gs.matches_candidate_into_unsorted(path, mut into)
-	if into.len > 1 {
-		into.sort()
-		dedup_usize(mut into)
-	}
-}
-
-/// Adds the sequence number of every glob pattern that matches the given
-/// path to the vec given without sorting or deduplicating the result.
-pub fn (gs GlobSet) matches_candidate_into_unsorted[^a](path Candidate[^a], mut into []usize) {
+pub fn (gs &GlobSet) matches_candidate_into[^a](path &Candidate[^a], mut into []usize) {
 	into.clear()
 	if gs.is_empty() {
 		return
@@ -939,12 +840,14 @@ pub fn (gs GlobSet) matches_candidate_into_unsorted[^a](path Candidate[^a], mut 
 	for strat in gs.strats {
 		glob_set_strategy_matches_into(strat, path, mut into)
 	}
+	into.sort()
+	dedup_usize(mut into)
 }
 
 /// Builds a new matcher from a collection of Glob patterns.
 ///
 /// Once a matcher is built, no new patterns can be added to it.
-pub fn GlobSet.new(globs []Glob) !GlobSet {
+pub fn GlobSet.new(globs &[]Glob) !GlobSet {
 	if globs.len == 0 {
 		return GlobSet.empty()
 	}
@@ -955,7 +858,6 @@ pub fn GlobSet.new(globs []Glob) !GlobSet {
 	mut suffixes := MultiStrategyBuilder.new()
 	mut required_exts := RequiredExtensionStrategyBuilder.new()
 	mut regexes := MultiStrategyBuilder.new()
-	mut regex_globs := []Glob{}
 	for i, glob in globs {
 		strategy := match_strategy_new(&glob)
 		match strategy.kind {
@@ -973,16 +875,15 @@ pub fn GlobSet.new(globs []Glob) !GlobSet {
 			}
 			.suffix {
 				if strategy.component {
-					lits.add(usize(i), strategy.value[1..])
+					lits.add(usize(i), strategy.value[1..].to_owned())
 				}
 				suffixes.add(usize(i), strategy.value)
 			}
 			.required_extension {
-				required_exts.add(usize(i), strategy.value, glob)
+				required_exts.add(usize(i), strategy.value, glob.regex().to_owned())
 			}
 			.regex {
-				regexes.add(usize(i), glob.regex().clone())
-				regex_globs << glob.clone()
+				regexes.add(usize(i), glob.regex().to_owned())
 			}
 		}
 	}
@@ -1003,16 +904,14 @@ pub fn GlobSet.new(globs []Glob) !GlobSet {
 		strats << prefixes.prefix()
 	}
 	if required_exts.entries.len > 0 {
-		strats << required_exts.build()
+		strats << required_exts.build()!
 	}
 	if !regexes.is_empty() {
-		strats << regexes.regex_set(regex_globs)
+		strats << regexes.regex_set()!
 	}
 	return GlobSet{
-		len:            globs.len
-		strats:         strats
-		needs_basename: base_lits.entries.len > 0
-		needs_ext:      exts.entries.len > 0 || required_exts.entries.len > 0
+		len:    usize(globs.len)
+		strats: strats
 	}
 }
 
@@ -1032,7 +931,7 @@ pub fn GlobSetBuilder.new() GlobSetBuilder {
 	}
 }
 
-pub fn (builder GlobSetBuilder) str() string {
+pub fn (builder &GlobSetBuilder) str() string {
 	mut pats := []string{cap: builder.pats.len}
 	for pat in builder.pats {
 		pats << 'Glob("${pat.str()}")'
@@ -1043,8 +942,8 @@ pub fn (builder GlobSetBuilder) str() string {
 /// Builds a new matcher from all of the glob patterns added so far.
 ///
 /// Once a matcher is built, no new patterns can be added to it.
-pub fn (builder GlobSetBuilder) build() !GlobSet {
-	return GlobSet.new(builder.pats)
+pub fn (builder &GlobSetBuilder) build() !GlobSet {
+	return GlobSet.new(&builder.pats)
 }
 
 /// Add a new pattern to this set.
@@ -1057,9 +956,22 @@ pub fn (mut builder GlobSetBuilder) add(pat Glob) &GlobSetBuilder {
 ///
 /// The escaping works by surrounding meta-characters with brackets. For
 /// example, `*` becomes `[*]`.
+///
+/// # Example
+///
+/// ```
+/// assert escape('foo*bar') == 'foo[*]bar'
+/// assert escape('foo?bar') == 'foo[?]bar'
+/// assert escape('foo[bar') == 'foo[[]bar'
+/// assert escape('foo]bar') == 'foo[]]bar'
+/// assert escape('foo{bar') == 'foo[{]bar'
+/// assert escape('foo}bar') == 'foo[}]bar'
+/// ```
 pub fn escape(s string) string {
 	mut escaped := ''
 	for ch in s.runes() {
+		// note that ! does not need escaping because it is only special
+		// inside brackets
 		if ch in [`?`, `*`, `[`, `]`, `{`, `}`] {
 			escaped += '['
 			escaped += ch.str()
@@ -1075,16 +987,12 @@ fn dedup_usize(mut xs []usize) {
 	if xs.len <= 1 {
 		return
 	}
-	mut out := []usize{}
-	mut prev := xs[0]
-	out << prev
-	for i := 1; i < xs.len; i++ {
-		value := xs[i]
-		if value != prev {
-			out << value
-			prev = value
+	mut write := 1
+	for read := 1; read < xs.len; read++ {
+		if xs[read] != xs[write - 1] {
+			xs[write] = xs[read]
+			write++
 		}
 	}
-	xs.clear()
-	xs << out
+	xs.trim(write)
 }

@@ -36,6 +36,24 @@ fn test_empty_glob_set_constructor_works() {
 	assert set.matches_all('a')
 }
 
+fn test_default_glob_set_is_empty() {
+	set := GlobSet{}
+	assert !set.is_match('')
+	assert !set.is_match('a')
+}
+
+fn test_glob_set_builder_build_is_reusable() {
+	mut builder := GlobSetBuilder.new()
+	builder.add(Glob.new('*.rs') or { panic(err) })
+	first := builder.build() or { panic(err) }
+	second := builder.build() or { panic(err) }
+	assert first.is_match('lib.rs')
+	assert second.is_match('lib.rs')
+}
+
+// This tests that regex matching doesn't "remember" the results of
+// previous searches. That is, if any memory is reused from a previous
+// search, then it should be cleared first.
 fn test_set_does_not_remember_previous_searches() {
 	mut builder := GlobSetBuilder.new()
 	builder.add(Glob.new('*foo*') or { panic(err) })

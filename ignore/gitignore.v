@@ -260,7 +260,7 @@ fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool
 		return Match[GitignoreGlobRef[^a]]{}
 	}
 	candidate := gitignore_path_for_matching_if_needed(path)
-	gi.set.matches_into_unsorted(candidate, mut matches)
+	gi.set.matches_into(candidate, mut matches)
 	mut best := -1
 	for matched in matches {
 		i := int(matched)
