@@ -415,7 +415,7 @@ fn (args &HiArgs) matcher_rust() !core.PatternMatcher {
 	if !args.binary.is_none() {
 		builder.ban_byte(`\0`)
 	}
-	m := builder.build_many(args.patterns.patterns) or {
+	m := builder.build_many(&args.patterns.patterns) or {
 		return error(suggest_text(suggest_multiline(err.msg())))
 	}
 	return core.PatternMatcher.rust_regex(m)

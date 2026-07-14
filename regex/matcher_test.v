@@ -113,19 +113,22 @@ fn test_case_insensitive_unicode_literal_disabled_without_unicode() {
 }
 
 fn test_build_many_and_literals() {
-	matcher_ := RegexMatcherBuilder.new().build_many(['abc', 'xyz']) or { panic(err) }
+	patterns := ['abc', 'xyz']
+	matcher_ := RegexMatcherBuilder.new().build_many(&patterns) or { panic(err) }
 	assert matcher.is_match(matcher_, '---xyz---'.bytes())!
 	assert !matcher.is_match(matcher_, '---def---'.bytes())!
 
 	mut builder := RegexMatcherBuilder.new()
 	builder.fixed_strings(true)
-	literal_matcher := builder.build_literals(['a.c']) or { panic(err) }
+	literals := ['a.c']
+	literal_matcher := builder.build_literals(&literals) or { panic(err) }
 	assert matcher.is_match(literal_matcher, 'a.c'.bytes())!
 	assert !matcher.is_match(literal_matcher, 'abc'.bytes())!
 }
 
 fn test_build_many_zero_patterns_never_matches() {
-	matcher_ := RegexMatcherBuilder.new().build_many([]string{}) or { panic(err) }
+	patterns := []string{}
+	matcher_ := RegexMatcherBuilder.new().build_many(&patterns) or { panic(err) }
 	assert !matcher.is_match(matcher_, ''.bytes())!
 	assert !matcher.is_match(matcher_, 'abc'.bytes())!
 	candidate := matcher_.find_candidate_line('abc'.bytes()) or { panic(err) }
@@ -222,6 +225,26 @@ fn test_capture_groups() {
 	assert matcher_.capture_count() == 3
 	assert matcher_.capture_index('first') == ?usize(1)
 	assert matcher_.capture_index('last') == ?usize(2)
+	mut caps := matcher_.new_captures()!
+	assert matcher.captures(matcher_, 'Doctor Watson'.bytes(), mut caps)!
+	assert caps.len() == 3
+	assert caps.get(0) == ?matcher.Match(matcher.Match.new(0, 13))
+	assert caps.get(1) == ?matcher.Match(matcher.Match.new(0, 6))
+	assert caps.get(2) == ?matcher.Match(matcher.Match.new(7, 13))
+}
+
+fn test_capture_groups_distinguish_unmatched_and_empty() {
+	matcher_ := RegexMatcherBuilder.new().build(r'(?P<unmatched>a)?(?P<empty>b*)')!
+	mut caps := matcher_.new_captures()!
+	assert matcher_.captures_at([]u8{}, 0, mut caps)!
+	assert caps.len() == 3
+	assert caps.get(0) == ?matcher.Match(matcher.Match.zero(0))
+	assert caps.get(1) == none
+	assert caps.get(2) == ?matcher.Match(matcher.Match.zero(0))
+	cloned := caps.clone()
+	assert cloned.get(0) == caps.get(0)
+	assert cloned.get(1) == caps.get(1)
+	assert cloned.get(2) == caps.get(2)
 }
 
 fn test_non_unicode_hex_byte_literal() {

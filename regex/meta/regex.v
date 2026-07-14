@@ -377,6 +377,10 @@ pub:
 	start  int      // Starting byte index in the source string
 	end    int      // Ending byte index in the source string
 	groups []string // Sub-strings captured by groups
+	// V-specific: exact capture offsets are retained for the translated
+	// grep-matcher capture API. A value of -1 denotes an unmatched group.
+	group_starts []int
+	group_ends   []int
 }
 
 // Internal structures for Compilation
@@ -1591,15 +1595,21 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 				.match {
 					// Only allocate result strings on successful match
 					mut s_groups := []string{cap: r.total_groups}
+					mut group_starts := []int{cap: r.total_groups}
+					mut group_ends := []int{cap: r.total_groups}
 					for i := 0; i < r.total_groups; i++ {
 						s, e := cap_ptr[i * 2], cap_ptr[i * 2 + 1]
 						s_groups << if s != -1 && e >= s { text[s..e] } else { '' }
+						group_starts << s
+						group_ends << e
 					}
 					return Match{
-						text:   text[start_pos..sp]
-						start:  start_pos
-						end:    sp
-						groups: s_groups
+						text:         text[start_pos..sp]
+						start:        start_pos
+						end:          sp
+						groups:       s_groups
+						group_starts: group_starts
+						group_ends:   group_ends
 					}
 				}
 				.char {

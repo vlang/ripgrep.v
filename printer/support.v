@@ -67,10 +67,10 @@ fn (pm &PrinterMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch 
 }
 
 fn (pm &PrinterMatcher) new_captures() !matcher.NoCaptures {
-	return match pm.kind {
-		.rust_regex { pm.regex.new_captures()! }
-		.pcre2 { pm.pcre2.new_captures()! }
-	}
+	// V-specific: the Matcher interface cannot express the capture type of
+	// either printer backend. Replacement uses `capture_groups_at` below.
+	_ = pm
+	return matcher.NoCaptures.new()
 }
 
 fn (pm &PrinterMatcher) capture_count() usize {
@@ -88,10 +88,8 @@ fn (pm &PrinterMatcher) capture_index(name string) ?usize {
 }
 
 fn (pm &PrinterMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
-	return match pm.kind {
-		.rust_regex { pm.regex.captures_at(haystack, at, mut caps)! }
-		.pcre2 { pm.pcre2.captures_at(haystack, at, mut caps)! }
-	}
+	_ = pm
+	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
 fn (pm &PrinterMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {

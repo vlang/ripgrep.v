@@ -45,15 +45,16 @@ pub fn RegexMatcherBuilder.new() RegexMatcherBuilder {
 ///
 /// The syntax supported is documented as part of the regex crate:
 /// <https://docs.rs/regex/#syntax>.
-pub fn (builder RegexMatcherBuilder) build(pattern string) !RegexMatcher {
-	return builder.build_many([pattern.to_owned()])
+pub fn (builder &RegexMatcherBuilder) build(pattern string) !RegexMatcher {
+	patterns := [pattern.to_owned()]
+	return builder.build_many(&patterns)
 }
 
 /// Build a new matcher using the current configuration for the provided
 /// patterns. The resulting matcher behaves as if all of the patterns
 /// given are joined together into a single alternation. That is, it
 /// reports matches where at least one of the given patterns matches.
-pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher {
+pub fn (builder &RegexMatcherBuilder) build_many(patterns &[]string) !RegexMatcher {
 	if patterns.len == 0 {
 		mut config := builder.config.clone()
 		never := meta.compile(r'\b\B') or { return Error.regex(err.msg()) }
@@ -69,26 +70,10 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 			reject_invalid_empty: false
 		}
 	}
-	needs_backend_normalization := patterns_need_backend_normalization(patterns.clone())
-	allow_fast_line_regex := patterns_allow_fast_line_regex(patterns.clone())
-	allow_exact_shortcuts := !builder.config.word && !builder.config.whole_line
-	reject_invalid_empty := false
-	byte_literal := if needs_backend_normalization || !allow_exact_shortcuts {
-		?[]u8(none)
-	} else {
-		byte_literal_from_patterns(patterns.clone(), builder.config)
-	}
-	unicode_case_literal := if needs_backend_normalization || !allow_exact_shortcuts {
-		?string(none)
-	} else {
-		unicode_case_literal_from_patterns(patterns.clone(), builder.config)
-	}
-	simple_ascii := if needs_backend_normalization || !allow_exact_shortcuts {
-		?SimpleAsciiPattern(none)
-	} else {
-		simple_ascii_from_patterns(patterns.clone(), builder.config)
-	}
-	mut chir := builder.config.build_many(patterns)!
+	needs_backend_normalization := patterns_need_backend_normalization(patterns)
+	allow_fast_line_regex := patterns_allow_fast_line_regex(patterns)
+	reject_invalid_empty := patterns_can_report_backend_invalid_empty(patterns)
+	mut chir := builder.config.build_many(patterns.clone())!
 	// 'whole_line' is a strict subset of 'word', so when it is enabled,
 	// we don't need to both with any specific to word matching.
 	if chir.config().whole_line {
@@ -97,6 +82,23 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 		chir = chir.into_word()
 	}
 	regex := chir.to_regex()!
+	allow_exact_shortcuts := !builder.config.word && !builder.config.whole_line
+		&& regex.total_groups == 0
+	byte_literal := if needs_backend_normalization || !allow_exact_shortcuts {
+		?[]u8(none)
+	} else {
+		byte_literal_from_patterns(patterns, builder.config)
+	}
+	unicode_case_literal := if needs_backend_normalization || !allow_exact_shortcuts {
+		?string(none)
+	} else {
+		unicode_case_literal_from_patterns(patterns, builder.config)
+	}
+	simple_ascii := if needs_backend_normalization || !allow_exact_shortcuts {
+		?SimpleAsciiPattern(none)
+	} else {
+		simple_ascii_from_patterns(patterns, builder.config)
+	}
 	non_matching_bytes := chir.non_matching_bytes()
 	// If we can pick out some literals from the regex, then we might be
 	// able to build a faster regex that quickly identifies candidate
@@ -131,7 +133,7 @@ pub fn (builder RegexMatcherBuilder) build_many(patterns []string) !RegexMatcher
 	}
 }
 
-fn patterns_need_backend_normalization(patterns []string) bool {
+fn patterns_need_backend_normalization(patterns &[]string) bool {
 	for pattern in patterns {
 		if pattern.contains('(?x)') || pattern.contains('(?-i)') || pattern.contains('(?R)')
 			|| pattern.contains('(?-R)') || pattern.contains('(?U)') || pattern.contains('(?U:')
@@ -150,7 +152,7 @@ fn patterns_need_backend_normalization(patterns []string) bool {
 	return false
 }
 
-fn patterns_allow_fast_line_regex(patterns []string) bool {
+fn patterns_allow_fast_line_regex(patterns &[]string) bool {
 	for pattern in patterns {
 		if pattern.contains(r'\x') || pattern.contains(r'\u') || pattern.contains(r'\U') {
 			return false
@@ -159,7 +161,7 @@ fn patterns_allow_fast_line_regex(patterns []string) bool {
 	return true
 }
 
-fn patterns_can_report_backend_invalid_empty(patterns []string) bool {
+fn patterns_can_report_backend_invalid_empty(patterns &[]string) bool {
 	for pattern in patterns {
 		if pattern.contains(r'\W') || pattern.contains(r'\D') || pattern.contains(r'\P')
 			|| pattern.contains('[^[:alpha:]]') {
@@ -174,7 +176,7 @@ fn patterns_can_report_backend_invalid_empty(patterns []string) bool {
 /// Depending on the configuration set by the builder, this may be able to
 /// build a matcher substantially faster than by joining the patterns with
 /// a `|` and calling `build`.
-pub fn (builder RegexMatcherBuilder) build_literals(literals []string) !RegexMatcher {
+pub fn (builder &RegexMatcherBuilder) build_literals(literals &[]string) !RegexMatcher {
 	return builder.build_many(literals)
 }
 
@@ -460,33 +462,6 @@ pub struct RegexMatcher implements IClone, Drop {
 	reject_invalid_empty bool
 }
 
-// The compiled automata are immutable and shared by worker clones, matching
-// regex-automata's cheap clone semantics in Rust.
-pub fn (re &RegexMatcher) clone() RegexMatcher {
-	return RegexMatcher{
-		config:               re.config.clone()
-		regex:                re.regex.clone()
-		byte_literal:         if bytes := re.byte_literal { bytes.clone() } else { ?[]u8(none) }
-		unicode_case_literal: if literal := re.unicode_case_literal {
-			literal.clone()
-		} else {
-			?string(none)
-		}
-		simple_ascii:         if simple := re.simple_ascii {
-			SimpleAsciiPattern{
-				prefix:    simple.prefix.clone()
-				class:     simple.class.clone()
-				match_len: simple.match_len
-			}
-		} else {
-			?SimpleAsciiPattern(none)
-		}
-		fast_line_regex:      if fast := re.fast_line_regex { fast.clone() } else { ?meta.Regex(none) }
-		non_matching_bytes:   re.non_matching_bytes
-		reject_invalid_empty: re.reject_invalid_empty
-	}
-}
-
 fn (mut re RegexMatcher) drop() {
 	re.regex.drop()
 	if bytes := re.byte_literal {
@@ -607,9 +582,8 @@ pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.F
 	return matcher.FallibleMatch.absent(), []string{}
 }
 
-pub fn (re &RegexMatcher) new_captures() !matcher.NoCaptures {
-	_ = re
-	return matcher.NoCaptures.new()
+pub fn (re &RegexMatcher) new_captures() !RegexCaptures {
+	return RegexCaptures.new(re.capture_count())
 }
 
 pub fn (re &RegexMatcher) capture_count() usize {
@@ -623,9 +597,52 @@ pub fn (re &RegexMatcher) capture_index(name string) ?usize {
 	return none
 }
 
-pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
-	_ = caps
-	return re.find_at(haystack, at)!.is_some()
+pub fn (re &RegexMatcher) try_find_iter(haystack []u8, matched fn (matcher.Match) !bool) ! {
+	matcher.try_find_iter(re, haystack, matched)!
+}
+
+pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCaptures) !bool {
+	caps.clear()
+	if at > haystack.len {
+		return false
+	}
+	if re.regex.total_groups == 0 {
+		mat := re.find_at(haystack, at)!.get() or { return false }
+		caps.set(0, mat)
+		return true
+	}
+	text := haystack.bytestr()
+	mut start := int(at)
+	for start <= text.len {
+		found := re.regex.find_from(text, start) or { return false }
+		mat := matcher.Match.new(usize(found.start), usize(found.end))
+		if re.accept_match(haystack, mat) {
+			caps.set(0, mat)
+			for i := 0; i < found.group_starts.len; i++ {
+				group_start := found.group_starts[i]
+				group_end := found.group_ends[i]
+				if group_start >= 0 && group_end >= group_start {
+					caps.set(usize(i + 1), matcher.Match.new(usize(group_start), usize(group_end)))
+				}
+			}
+			return true
+		}
+		next := if found.end > found.start { found.start + 1 } else { found.end + 1 }
+		if next <= start {
+			start++
+		} else {
+			start = next
+		}
+	}
+	return false
+}
+
+pub fn (re &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+	maybe_mat := re.find_at(haystack, at)!
+	if !maybe_mat.has_value {
+		return matcher.FallibleUsize.absent()
+	}
+	return matcher.FallibleUsize.some(maybe_mat.value.end())
 }
 
 pub fn (re &^a RegexMatcher) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
@@ -673,10 +690,63 @@ pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLi
 	return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.confirmed(end))
 }
 
+/// Represents the match offsets of each capturing group in a match.
+///
+/// The first, or `0`th capture group, always corresponds to the entire match
+/// and is guaranteed to be present when a match occurs. The next capture
+/// group, at index `1`, corresponds to the first capturing group in the regex,
+/// ordered by the position at which the left opening parenthesis occurs.
+///
+/// Note that not all capturing groups are guaranteed to be present in a match.
+/// For example, in the regex, `(?P<foo>\w)|(?P<bar>\W)`, only one of `foo`
+/// or `bar` will ever be set in any given match.
+///
+/// In order to access a capture group by name, you'll need to first find the
+/// index of the group using the corresponding matcher's `capture_index`
+/// method, and then use that index with `RegexCaptures.get`.
+pub struct RegexCaptures implements IClone {
+	groups []?matcher.Match
+}
+
+/// Return the total number of capturing groups. This includes capturing
+/// groups that have not matched anything.
+pub fn (caps &RegexCaptures) len() usize {
+	return usize(caps.groups.len)
+}
+
+/// Return the capturing group match at the given index. If no match of
+/// that capturing group exists, then this returns `none`.
+pub fn (caps &RegexCaptures) get(i usize) ?matcher.Match {
+	if i >= usize(caps.groups.len) {
+		return none
+	}
+	return caps.groups[int(i)]
+}
+
+fn RegexCaptures.new(len usize) RegexCaptures {
+	return RegexCaptures{
+		groups: []?matcher.Match{len: int(len), init: none}
+	}
+}
+
+fn (mut caps RegexCaptures) clear() {
+	for i := 0; i < caps.groups.len; i++ {
+		caps.groups[i] = none
+	}
+}
+
+fn (mut caps RegexCaptures) set(i usize, mat matcher.Match) {
+	if i < usize(caps.groups.len) {
+		caps.groups[int(i)] = mat
+	}
+}
+
 /// A borrowed matcher adapter for APIs that currently use V interface values.
 ///
-/// The interface contains this pointer-only adapter instead of copying the
-/// owning compiled regex value.
+/// V interfaces cannot express Rust associated capture types. This pointer-only
+/// adapter therefore exposes the capture-less interface needed by the searcher
+/// without copying the owning compiled regex value. The owning matcher retains
+/// its source-faithful `RegexCaptures` API.
 pub struct RegexMatcherRef[^a] {
 	re &^a RegexMatcher
 }
@@ -692,19 +762,19 @@ pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.Fa
 }
 
 pub fn (re RegexMatcherRef[^a]) new_captures[^a]() !matcher.NoCaptures {
-	return re.re.new_captures()
+	return matcher.NoCaptures.new()
 }
 
 pub fn (re RegexMatcherRef[^a]) capture_count[^a]() usize {
-	return re.re.capture_count()
+	return matcher.default_capture_count()
 }
 
 pub fn (re RegexMatcherRef[^a]) capture_index[^a](name string) ?usize {
-	return re.re.capture_index(name)
+	return matcher.default_capture_index(name)
 }
 
 pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
-	return re.re.captures_at(haystack, at, mut caps)
+	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
 pub fn (re RegexMatcherRef[^a]) non_matching_bytes[^a]() ?&^a matcher.ByteSet {
@@ -910,14 +980,14 @@ struct SimpleAsciiPattern implements IClone {
 	match_len usize
 }
 
-fn byte_literal_from_patterns(patterns []string, config Config) ?[]u8 {
+fn byte_literal_from_patterns(patterns &[]string, config Config) ?[]u8 {
 	if patterns.len != 1 {
 		return none
 	}
 	return byte_literal_from_pattern(patterns[0].clone(), config)
 }
 
-fn unicode_case_literal_from_patterns(patterns []string, config Config) ?string {
+fn unicode_case_literal_from_patterns(patterns &[]string, config Config) ?string {
 	if !config.unicode || !config.case_insensitive || patterns.len != 1 {
 		return none
 	}
@@ -1124,7 +1194,7 @@ fn find_byte_literal_bmh(haystack []u8, literal []u8, at usize) ?usize {
 	return none
 }
 
-fn simple_ascii_from_patterns(patterns []string, config Config) ?SimpleAsciiPattern {
+fn simple_ascii_from_patterns(patterns &[]string, config Config) ?SimpleAsciiPattern {
 	if patterns.len != 1 || config.fixed_strings || config.case_insensitive || config.case_smart
 		|| config.ignore_whitespace {
 		return none
