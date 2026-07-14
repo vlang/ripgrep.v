@@ -51,6 +51,33 @@ fn test_buffer_empty_color_spec_resets_when_enabled() {
 	assert buffer.as_slice().bytestr() == '\x1b[0mx'
 }
 
+fn test_buffer_disabled_styles_only_reset_when_enabled() {
+	wtr := BufferWriter.stdout(.always)
+	mut buffer := wtr.buffer()
+	mut spec := printer.ColorSpec{}
+	spec.set_bold(false)
+	spec.set_underline(false)
+	spec.set_italic(false)
+
+	buffer.set_color(spec) or { panic(err.msg()) }
+	buffer.write('x'.bytes()) or { panic(err.msg()) }
+
+	assert buffer.as_slice().bytestr() == '\x1b[0mx'
+}
+
+fn test_buffer_intense_named_color_uses_ansi256_when_enabled() {
+	wtr := BufferWriter.stdout(.always)
+	mut buffer := wtr.buffer()
+	mut spec := printer.ColorSpec{}
+	spec.set_fg(printer.color_blue())
+	spec.set_intense(true)
+
+	buffer.set_color(spec) or { panic(err.msg()) }
+	buffer.write('x'.bytes()) or { panic(err.msg()) }
+
+	assert buffer.as_slice().bytestr() == '\x1b[0m\x1b[38;5;12mx'
+}
+
 fn test_buffer_writer_prints_separator_between_non_empty_buffers() {
 	mut pipe := os.pipe() or { panic(err.msg()) }
 	defer {

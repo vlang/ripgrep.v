@@ -22,14 +22,20 @@ pub fn default_color_specs() []UserColorSpec {
 
 /// An error that can occur when parsing color specifications.
 pub enum ColorErrorKind {
+	/// This occurs when an unrecognized output type is used.
 	unrecognized_out_type
+	/// This occurs when an unrecognized spec type is used.
 	unrecognized_spec_type
+	/// This occurs when an unrecognized color name is used.
 	unrecognized_color
+	/// This occurs when an unrecognized style attribute is used.
 	unrecognized_style
+	/// This occurs when the format of a color specification is invalid.
 	invalid_format
 }
 
-pub struct ColorError {
+// V represents Rust enum variants with payloads as a tag plus payload fields.
+pub struct ColorError implements IClone {
 pub:
 	kind     ColorErrorKind
 	name     string
@@ -65,7 +71,7 @@ pub fn (err ColorError) code() int {
 fn color_error_from_parse_error(err ParseColorError) ColorError {
 	return ColorError{
 		kind:    .unrecognized_color
-		name:    err.invalid()
+		name:    err.invalid().to_owned()
 		details: err.msg()
 	}
 }
@@ -78,6 +84,7 @@ fn color_error_from_parse_error(err ParseColorError) ColorError {
 /// `UserColorSpec`s.
 pub struct ColorSpecs implements IClone {
 mut:
+	// The `_spec` suffixes avoid V's field and method name collision.
 	path_spec      ColorSpec
 	line_spec      ColorSpec
 	column_spec    ColorSpec
@@ -115,6 +122,26 @@ mut:
 ///
 /// Valid style instructions are `nobold`, `bold`, `intense`, `nointense`,
 /// `underline`, `nounderline`, `italic`, `noitalic`.
+///
+/// ## Example
+///
+/// The standard way to build a `UserColorSpec` is to parse it from a string.
+/// Once multiple `UserColorSpec`s have been constructed, they can be provided
+/// to the standard printer where they will automatically be applied to the
+/// output.
+///
+/// A `UserColorSpec` can also be converted to a `ColorSpec`:
+///
+/// ```v
+/// user_spec1 := parse_user_color_spec('path:fg:blue')!
+/// user_spec2 := parse_user_color_spec('match:bg:0xff,0x7f,0x00')!
+///
+/// spec1 := user_spec1.to_color_spec()
+/// spec2 := user_spec2.to_color_spec()
+///
+/// assert *(spec1.fg() or { panic('missing foreground color') }) == color_blue()
+/// assert *(spec2.bg() or { panic('missing background color') }) == color_rgb(0xff, 0x7f, 0x00)
+/// ```
 pub struct UserColorSpec implements IClone {
 	ty    OutType
 	value SpecValue
@@ -127,12 +154,15 @@ enum SpecValueKind {
 	style
 }
 
+/// The actual value given by the specification.
+// V represents Rust enum variants with payloads as a tag plus payload fields.
 struct SpecValue implements IClone {
 	kind  SpecValueKind
 	color Color
 	style Style
 }
 
+/// The set of configurable portions of ripgrep's output.
 enum OutType {
 	path
 	line
@@ -141,6 +171,7 @@ enum OutType {
 	highlight
 }
 
+/// The specification type.
 enum SpecType {
 	fg
 	bg
@@ -148,6 +179,7 @@ enum SpecType {
 	none_
 }
 
+/// The set of available styles for use in the terminal.
 enum Style {
 	bold
 	no_bold
@@ -163,7 +195,7 @@ enum Style {
 /// can be used with `termcolor`. This drops the type of this specification
 /// (where the type indicates where the color is applied in the standard
 /// printer, e.g., to the file path or the line numbers, etc.).
-pub fn (spec UserColorSpec) to_color_spec() ColorSpec {
+pub fn (spec &UserColorSpec) to_color_spec() ColorSpec {
 	mut color_spec := ColorSpec{}
 	spec.value.merge_into(mut color_spec)
 	return color_spec
@@ -171,7 +203,7 @@ pub fn (spec UserColorSpec) to_color_spec() ColorSpec {
 
 /// Create color specifications from a list of user supplied
 /// specifications.
-pub fn ColorSpecs.new(specs []UserColorSpec) ColorSpecs {
+pub fn ColorSpecs.new(specs &[]UserColorSpec) ColorSpecs {
 	mut merged := ColorSpecs{}
 	for spec in specs {
 		match spec.ty {
@@ -191,51 +223,52 @@ pub fn ColorSpecs.new(specs []UserColorSpec) ColorSpecs {
 /// this provides a set of default color choices, where as the `Default`
 /// implementation provides no color choices.
 pub fn ColorSpecs.default_with_color() ColorSpecs {
-	return ColorSpecs.new(default_color_specs())
+	specs := default_color_specs()
+	return ColorSpecs.new(&specs)
 }
 
 /// Return the color specification for coloring file paths.
-pub fn (specs ColorSpecs) path() ColorSpec {
-	return specs.path_spec
+pub fn (specs &^a ColorSpecs) path[^a]() &^a ColorSpec {
+	return &specs.path_spec
 }
 
 /// Return the color specification for coloring line numbers.
-pub fn (specs ColorSpecs) line() ColorSpec {
-	return specs.line_spec
+pub fn (specs &^a ColorSpecs) line[^a]() &^a ColorSpec {
+	return &specs.line_spec
 }
 
 /// Return the color specification for coloring column numbers.
-pub fn (specs ColorSpecs) column() ColorSpec {
-	return specs.column_spec
+pub fn (specs &^a ColorSpecs) column[^a]() &^a ColorSpec {
+	return &specs.column_spec
 }
 
 /// Return the color specification for coloring matched text.
-pub fn (specs ColorSpecs) matched() ColorSpec {
-	return specs.matched_spec
+pub fn (specs &^a ColorSpecs) matched[^a]() &^a ColorSpec {
+	return &specs.matched_spec
 }
 
 /// Return the color specification for coloring entire line if there is a
 /// matched text.
-pub fn (specs ColorSpecs) highlight() ColorSpec {
-	return specs.highlight_spec
+pub fn (specs &^a ColorSpecs) highlight[^a]() &^a ColorSpec {
+	return &specs.highlight_spec
 }
 
 /// Merge this spec into the given color specification.
-fn (spec UserColorSpec) merge_into(mut cspec ColorSpec) {
+fn (spec &UserColorSpec) merge_into(mut cspec ColorSpec) {
 	spec.value.merge_into(mut cspec)
 }
 
 /// Merge this spec value into the given color specification.
-fn (value SpecValue) merge_into(mut cspec ColorSpec) {
+fn (value &SpecValue) merge_into(mut cspec ColorSpec) {
 	match value.kind {
 		.none_ {
 			cspec.clear()
 		}
 		.fg {
-			cspec.set_fg(value.color)
+			cspec.set_fg(value.color.clone())
 		}
 		.bg {
-			cspec.set_bg(value.color)
+			cspec.set_bg(value.color.clone())
 		}
 		.style {
 			match value.style {
@@ -257,7 +290,7 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 	if pieces.len <= 1 || pieces.len > 3 {
 		return ColorError{
 			kind:     .invalid_format
-			original: s.clone()
+			original: s.to_owned()
 		}
 	}
 	otype := parse_out_type(pieces[0])!
@@ -274,7 +307,7 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 			if pieces.len < 3 {
 				return ColorError{
 					kind:     .invalid_format
-					original: s.clone()
+					original: s.to_owned()
 				}
 			}
 			style := parse_style(pieces[2])!
@@ -290,15 +323,11 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 			if pieces.len < 3 {
 				return ColorError{
 					kind:     .invalid_format
-					original: s.clone()
+					original: s.to_owned()
 				}
 			}
 			color := parse_color(pieces[2]) or {
-				return ColorError{
-					kind:    .unrecognized_color
-					name:    pieces[2].clone()
-					details: err.msg()
-				}
+				return color_error_from_parse_error(err as ParseColorError)
 			}
 			return UserColorSpec{
 				ty:    otype
@@ -312,15 +341,11 @@ pub fn parse_user_color_spec(s string) !UserColorSpec {
 			if pieces.len < 3 {
 				return ColorError{
 					kind:     .invalid_format
-					original: s.clone()
+					original: s.to_owned()
 				}
 			}
 			color := parse_color(pieces[2]) or {
-				return ColorError{
-					kind:    .unrecognized_color
-					name:    pieces[2].clone()
-					details: err.msg()
-				}
+				return color_error_from_parse_error(err as ParseColorError)
 			}
 			return UserColorSpec{
 				ty:    otype
@@ -353,7 +378,7 @@ fn parse_out_type(s string) !OutType {
 		else {
 			return ColorError{
 				kind: .unrecognized_out_type
-				name: s.clone()
+				name: s.to_owned()
 			}
 		}
 	}
@@ -376,7 +401,7 @@ fn parse_spec_type(s string) !SpecType {
 		else {
 			return ColorError{
 				kind: .unrecognized_spec_type
-				name: s.clone()
+				name: s.to_owned()
 			}
 		}
 	}
@@ -411,7 +436,7 @@ fn parse_style(s string) !Style {
 		else {
 			return ColorError{
 				kind: .unrecognized_style
-				name: s.clone()
+				name: s.to_owned()
 			}
 		}
 	}

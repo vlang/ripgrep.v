@@ -424,16 +424,16 @@ pub fn (stream StandardStream) is_synchronous() bool {
 
 fn ansi_for_color_spec(spec printer.ColorSpec) string {
 	mut codes := []string{}
-	if bold := spec.bold() {
-		codes << if bold { '1' } else { '22' }
+	if spec.bold() {
+		codes << '1'
 	}
-	if underline := spec.underline() {
-		codes << if underline { '4' } else { '24' }
+	if spec.underline() {
+		codes << '4'
 	}
-	if italic := spec.italic() {
-		codes << if italic { '3' } else { '23' }
+	if spec.italic() {
+		codes << '3'
 	}
-	intense := spec.intense() or { false }
+	intense := spec.intense()
 	if fg := spec.fg() {
 		codes << ansi_for_color(fg, false, intense)
 	}
@@ -448,7 +448,6 @@ fn ansi_for_color_spec(spec printer.ColorSpec) string {
 
 fn ansi_for_color(color printer.Color, is_bg bool, intense bool) string {
 	base := if is_bg { 40 } else { 30 }
-	bright_base := if is_bg { 100 } else { 90 }
 	match color.kind {
 		.black, .red, .green, .yellow, .blue, .magenta, .cyan, .white {
 			offset := match color.kind {
@@ -464,7 +463,8 @@ fn ansi_for_color(color printer.Color, is_bg bool, intense bool) string {
 			}
 
 			if intense {
-				return (bright_base + offset).str()
+				prefix := if is_bg { '48' } else { '38' }
+				return '${prefix};5;${8 + offset}'
 			}
 			return (base + offset).str()
 		}

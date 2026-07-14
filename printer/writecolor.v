@@ -89,30 +89,98 @@ pub fn color_rgb(red u8, green u8, blue u8) Color {
 	}
 }
 
-pub struct ParseColorError {
-	invalid_value string
-	message       string
+enum ParseColorErrorKind {
+	invalid_name
+	invalid_ansi256
+	invalid_rgb
 }
 
-pub fn (err ParseColorError) invalid() string {
-	return err.invalid_value
+/// An error from parsing an invalid color specification.
+pub struct ParseColorError implements IClone {
+	kind  ParseColorErrorKind
+	given string
+}
+
+/// Return the string that couldn't be parsed as a valid color.
+pub fn (err &^a ParseColorError) invalid[^a]() &^a string {
+	return &err.given
 }
 
 pub fn (err ParseColorError) msg() string {
-	return err.message
+	return match err.kind {
+		.invalid_name {
+			'unrecognized color name \'${err.given}\'. Choose from: black, blue, green, red, cyan, magenta, yellow, white'
+		}
+		.invalid_ansi256 {
+			'unrecognized ansi256 color number, should be \'[0-255]\' (or a hex number), but is \'${err.given}\''
+		}
+		.invalid_rgb {
+			'unrecognized RGB color triple, should be \'[0-255],[0-255],[0-255]\' (or a hex triple), but is \'${err.given}\''
+		}
+	}
 }
 
 pub fn (err ParseColorError) code() int {
 	return 1
 }
 
-fn parse_u8_component(value string) !u8 {
-	if value.starts_with('0x') || value.starts_with('0X') {
-		parsed := strconv.parse_uint(value[2..], 16, 8)!
+fn parse_color_number(value string) ?u8 {
+	if value.starts_with('0x') {
+		parsed := strconv.parse_uint(value[2..], 16, 8) or { return none }
 		return u8(parsed)
 	}
-	parsed := strconv.parse_uint(value, 10, 8)!
+	digits := if value.starts_with('+') { value[1..] } else { value }
+	if digits.len == 0 {
+		return none
+	}
+	parsed := strconv.parse_uint(digits, 10, 8) or { return none }
 	return u8(parsed)
+}
+
+fn is_ascii_hex_digit(c rune) bool {
+	return (c >= `0` && c <= `9`) || (c >= `a` && c <= `f`) || (c >= `A` && c <= `F`)
+}
+
+/// Parses a numeric color string, either ANSI or RGB.
+fn parse_color_numeric(s string) !Color {
+	// The "ansi256" format is a single number (decimal or hex)
+	// corresponding to one of 256 colors.
+	//
+	// The "rgb" format is a triple of numbers (decimal or hex) delimited
+	// by a comma corresponding to one of 256^3 colors.
+	codes := s.split(',')
+	if codes.len == 1 {
+		if n := parse_color_number(codes[0]) {
+			return color_ansi256(n)
+		}
+		mut all_hex_digits := true
+		for c in s {
+			if !is_ascii_hex_digit(c) {
+				all_hex_digits = false
+				break
+			}
+		}
+		return ParseColorError{
+			kind:  if all_hex_digits { .invalid_ansi256 } else { .invalid_name }
+			given: s.to_owned()
+		}
+	} else if codes.len == 3 {
+		mut values := []u8{cap: 3}
+		for code in codes {
+			value := parse_color_number(code) or {
+				return ParseColorError{
+					kind:  .invalid_rgb
+					given: s.to_owned()
+				}
+			}
+			values << value
+		}
+		return color_rgb(values[0], values[1], values[2])
+	}
+	return ParseColorError{
+		kind:  if s.contains(',') { .invalid_rgb } else { .invalid_name }
+		given: s.to_owned()
+	}
 }
 
 pub fn parse_color(name string) !Color {
@@ -143,18 +211,7 @@ pub fn parse_color(name string) !Color {
 			color_white()
 		}
 		else {
-			if lower.contains(',') {
-				pieces := lower.split(',')
-				if pieces.len != 3 {
-					return ParseColorError{
-						invalid_value: name.clone()
-						message:       'invalid color ${name}'.clone()
-					}
-				}
-				return color_rgb(parse_u8_component(pieces[0])!, parse_u8_component(pieces[1])!,
-					parse_u8_component(pieces[2])!)
-			}
-			return color_ansi256(parse_u8_component(lower)!)
+			parse_color_numeric(name)!
 		}
 	}
 }
@@ -163,19 +220,19 @@ pub struct ColorSpec implements IClone {
 mut:
 	fg        ?Color
 	bg        ?Color
-	bold      ?bool
-	intense   ?bool
-	underline ?bool
-	italic    ?bool
+	bold      bool
+	intense   bool
+	underline bool
+	italic    bool
 }
 
 pub fn (mut spec ColorSpec) clear() {
 	spec.fg = none
 	spec.bg = none
-	spec.bold = none
-	spec.intense = none
-	spec.underline = none
-	spec.italic = none
+	spec.bold = false
+	spec.intense = false
+	spec.underline = false
+	spec.italic = false
 }
 
 pub fn (mut spec ColorSpec) set_fg(color ?Color) {
@@ -202,39 +259,39 @@ pub fn (mut spec ColorSpec) set_italic(value bool) {
 	spec.italic = value
 }
 
-pub fn (spec ColorSpec) fg() ?Color {
-	if value := spec.fg {
-		return value
+pub fn (spec &^a ColorSpec) fg[^a]() ?&^a Color {
+	if spec.fg != none {
+		return unsafe { &spec.fg? }
 	}
 	return none
 }
 
-pub fn (spec ColorSpec) bg() ?Color {
-	if value := spec.bg {
-		return value
+pub fn (spec &^a ColorSpec) bg[^a]() ?&^a Color {
+	if spec.bg != none {
+		return unsafe { &spec.bg? }
 	}
 	return none
 }
 
-pub fn (spec ColorSpec) bold() ?bool {
+pub fn (spec &ColorSpec) bold() bool {
 	return spec.bold
 }
 
-pub fn (spec ColorSpec) intense() ?bool {
+pub fn (spec &ColorSpec) intense() bool {
 	return spec.intense
 }
 
-pub fn (spec ColorSpec) underline() ?bool {
+pub fn (spec &ColorSpec) underline() bool {
 	return spec.underline
 }
 
-pub fn (spec ColorSpec) italic() ?bool {
+pub fn (spec &ColorSpec) italic() bool {
 	return spec.italic
 }
 
-pub fn (spec ColorSpec) is_none() bool {
-	return spec.fg == none && spec.bg == none && spec.bold == none && spec.intense == none
-		&& spec.underline == none && spec.italic == none
+pub fn (spec &ColorSpec) is_none() bool {
+	return spec.fg == none && spec.bg == none && !spec.bold && !spec.intense && !spec.underline
+		&& !spec.italic
 }
 
 pub struct HyperlinkSpec implements IClone {
