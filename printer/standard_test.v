@@ -691,6 +691,46 @@ and exhibited clearly, with a label attached.
 	assert_eq_printed(expected, got)
 }
 
+fn test_standard_max_columns_preview_uses_grapheme_clusters() {
+	matcher_ := regex.RegexMatcher.new('x') or { panic(err) }
+	mut builder := StandardBuilder.new()
+	builder.stats(true)
+	builder.max_columns(u64(1))
+	builder.max_columns_preview(true)
+	mut printer := builder.build(no_color_buffer())
+	mut searcher_ := searcher.SearcherBuilder.new()
+	searcher_.line_number(false)
+	mut built := searcher_.build()
+	mut rdr := StandardByteSliceReader.new('e\u0301x\n')
+	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	built.search_reader(matcher_, mut rdr, &sink)!
+
+	got := printer_contents(mut printer)
+	expected := 'e\u0301 [... 1 more match]\n'
+	assert_eq_printed(expected, got)
+}
+
+fn test_standard_max_columns_preview_preserves_invalid_utf8_widths() {
+	bytes := [u8(0xe2), 0x98, `x`, `\n`]
+	matcher_ := regex.RegexMatcher.new('x') or { panic(err) }
+	mut builder := StandardBuilder.new()
+	builder.stats(true)
+	builder.max_columns(u64(1))
+	builder.max_columns_preview(true)
+	mut printer := builder.build(no_color_buffer())
+	mut searcher_ := searcher.SearcherBuilder.new()
+	searcher_.line_number(false)
+	mut built := searcher_.build()
+	mut rdr := StandardByteSliceReader.new_bytes(bytes)
+	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	built.search_reader(matcher_, mut rdr, &sink)!
+
+	got := printer_contents(mut printer).bytes()
+	mut expected := [u8(0xe2), 0x98]
+	expected << ' [... 1 more match]\n'.bytes()
+	assert got == expected
+}
+
 fn test_standard_max_columns_with_count() {
 	matcher_ := regex.RegexMatcher.new('cigar|ash|dusted') or { panic(err) }
 	mut builder := StandardBuilder.new()
