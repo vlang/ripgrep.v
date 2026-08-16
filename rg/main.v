@@ -494,7 +494,6 @@ struct FilesParallelResult {
 }
 
 fn (mut result FilesParallelResult) free() {
-	unsafe { result.path.free() }
 	result.path = ''
 }
 
@@ -702,6 +701,8 @@ fn print_stats[W](mode flags.SearchMode, stats printer.Stats, started time.Time,
 		write_color(mut wtr, '\n'.bytes())!
 		return
 	}
+	search_secs := stats.elapsed().seconds()
+	total_secs := elapsed.seconds()
 	text := '
 ${stats.matches()} matches
 ${stats.matched_lines()} matched lines
@@ -709,8 +710,8 @@ ${stats.searches_with_match()} files contained matches
 ${stats.searches()} files searched
 ${stats.bytes_printed()} bytes printed
 ${stats.bytes_searched()} bytes searched
-${stats.elapsed().seconds():0.6f} seconds spent searching
-${elapsed.seconds():0.6f} seconds total
+${search_secs:0.6f} seconds spent searching
+${total_secs:0.6f} seconds total
 '
 	write_color(mut wtr, text.bytes())!
 }
@@ -760,5 +761,9 @@ fn write_color[W](mut wtr W, bytes []u8) ! {
 
 fn stats_json(stats printer.Stats, elapsed time.Duration) string {
 	stats_elapsed := stats.elapsed()
-	return '{"type":"summary","data":{"stats":{"elapsed":{"secs":${u64(stats_elapsed.seconds())},"nanos":${stats_elapsed.nanoseconds() % 1_000_000_000},"human":"${stats_elapsed.seconds():0.6f}s"},"searches":${stats.searches()},"searches_with_match":${stats.searches_with_match()},"bytes_searched":${stats.bytes_searched()},"bytes_printed":${stats.bytes_printed()},"matched_lines":${stats.matched_lines()},"matches":${stats.matches()}},"elapsed_total":{"secs":${u64(elapsed.seconds())},"nanos":${elapsed.nanoseconds() % 1_000_000_000},"human":"${elapsed.seconds():0.6f}s"}}}'
+	stats_secs := stats_elapsed.seconds()
+	stats_nanos := stats_elapsed.nanoseconds() % 1_000_000_000
+	total_secs := elapsed.seconds()
+	total_nanos := elapsed.nanoseconds() % 1_000_000_000
+	return '{"type":"summary","data":{"stats":{"elapsed":{"secs":${u64(stats_secs)},"nanos":${stats_nanos},"human":"${stats_secs:0.6f}s"},"searches":${stats.searches()},"searches_with_match":${stats.searches_with_match()},"bytes_searched":${stats.bytes_searched()},"bytes_printed":${stats.bytes_printed()},"matched_lines":${stats.matched_lines()},"matches":${stats.matches()}},"elapsed_total":{"secs":${u64(total_secs)},"nanos":${total_nanos},"human":"${total_secs:0.6f}s"}}}'
 }

@@ -21,7 +21,7 @@ fn (mut w BufferWriter) flush() ! {
 	_ = w
 }
 
-fn (mut w BufferWriter) set_color(spec printer.ColorSpec) ! {
+fn (mut w BufferWriter) set_color(spec &printer.ColorSpec) ! {
 	_ = w
 	_ = spec
 }
@@ -63,7 +63,7 @@ fn test_search_worker_search_path_standard() {
 	printer_ := Printer.standard(standard)
 	builder := SearchWorkerBuilder.new()
 	mut worker := builder.build(PatternMatcher.rust_regex(matcher_), searcher.Searcher.new(), printer_)
-	result := worker.search_path(&path) or { panic(err) }
+	result := worker.search_path(path) or { panic(err) }
 	assert result.has_match()
 	wtr := worker.printer().get_mut()
 	assert wtr.bytes.bytestr().index('needle') != none
@@ -76,7 +76,7 @@ fn test_search_worker_search_path_standard() {
 	plain_printer := Printer.standard(plain_standard)
 	mut plain_worker := builder.build(PatternMatcher.rust_regex(plain_matcher), searcher.Searcher.new(),
 		plain_printer)
-	plain_result := plain_worker.search_path(&path) or { panic(err) }
+	plain_result := plain_worker.search_path(path) or { panic(err) }
 	assert plain_result.has_match()
 	plain_wtr := plain_worker.printer().get_mut()
 	assert plain_wtr.bytes.bytestr().index('needle') != none
@@ -85,14 +85,14 @@ fn test_search_worker_search_path_standard() {
 	summary_printer := Printer.summary(printer.Summary.new(BufferWriter{}))
 	mut summary_worker := builder.build(PatternMatcher.rust_regex(summary_matcher), searcher.Searcher.new(),
 		summary_printer)
-	summary_result := summary_worker.search_path(&path) or { panic(err) }
+	summary_result := summary_worker.search_path(path) or { panic(err) }
 	assert summary_result.has_match()
 
 	json_matcher := regex.RegexMatcher.new('needle') or { panic(err) }
 	json_printer := Printer.json(printer.JSON.new(BufferWriter{}))
 	mut json_worker := builder.build(PatternMatcher.rust_regex(json_matcher), searcher.Searcher.new(),
 		json_printer)
-	json_result := json_worker.search_path(&path) or { panic(err) }
+	json_result := json_worker.search_path(path) or { panic(err) }
 	assert json_result.has_match()
 }
 

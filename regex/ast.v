@@ -3,6 +3,7 @@ module regex
 /// The results of analyzing AST of a regular expression (e.g., for supporting
 /// smart case).
 pub struct AstAnalysis implements IClone {
+mut:
 	/// True if and only if a literal uppercase character occurs in the regex.
 	any_uppercase bool
 	/// True if and only if the regex contains any literal at all.
@@ -20,8 +21,8 @@ pub fn AstAnalysis.from_pattern(pattern string) ?AstAnalysis {
 
 /// Perform an AST analysis given the AST.
 ///
-/// V-specific: until `regex_syntax::ast::Ast` is translated, this takes the
-/// original pattern wrapper used by this module's local parser.
+/// V-specific: `regex_syntax` is an external Cargo dependency, so this takes
+/// the original pattern wrapper used by this module's local parser.
 pub fn AstAnalysis.from_ast(ast RegexAst) AstAnalysis {
 	return AstAnalysis.from_pattern(ast.pattern) or { AstAnalysis.new() }
 }
@@ -123,7 +124,17 @@ fn (mut parser AstAnalysisParser) parse_until(end byte, in_class bool) bool {
 			}
 			else {
 				if !is_regex_meta_literal(ch, in_class) {
-					parser.add_literal_byte(ch)
+					if ch < 0x80 {
+						parser.add_literal_byte(ch)
+					} else {
+						codepoint, width := read_pattern_rune_at(parser.pattern, parser.pos)
+						if width <= 0 || codepoint == rune(0xfffd) {
+							return false
+						}
+						parser.add_literal_codepoint(u32(codepoint))
+						parser.pos += width
+						continue
+					}
 				}
 				parser.pos++
 			}
@@ -207,8 +218,17 @@ fn (mut parser AstAnalysisParser) parse_class() bool {
 				return false
 			}
 		} else {
-			parser.add_literal_byte(ch)
-			parser.pos++
+			if ch < 0x80 {
+				parser.add_literal_byte(ch)
+				parser.pos++
+			} else {
+				codepoint, width := read_pattern_rune_at(parser.pattern, parser.pos)
+				if width <= 0 || codepoint == rune(0xfffd) {
+					return false
+				}
+				parser.add_literal_codepoint(u32(codepoint))
+				parser.pos += width
+			}
 		}
 	}
 	for parser.pos < parser.pattern.len {
@@ -482,11 +502,9 @@ fn parse_hex_u32(hex string) ?u32 {
 }
 
 fn is_uppercase_codepoint(code u32) bool {
-	if code >= u32(`A`) && code <= u32(`Z`) {
-		return true
-	}
-	if code >= u32(0x41) && code <= u32(0x5a) {
-		return true
-	}
-	return false
+	character := rune(code)
+	// Unicode uppercase characters have a lowercase mapping while already being
+	// in their uppercase mapping. The second condition excludes titlecase
+	// characters such as U+01C5, matching Rust's `char::is_uppercase` behavior.
+	return character.to_lower() != character && character.to_upper() == character
 }

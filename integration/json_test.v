@@ -127,6 +127,11 @@ fn test_json_notutf8() {
 
 fn test_json_notutf8_file() {
 	dir, mut cmd := setup('json_notutf8_file')
+	// This test does not work with PCRE2 because PCRE2 does not support the
+	// `u` flag.
+	if dir.is_pcre2() {
+		return
+	}
 	dir.create_bytes('foo', [u8(`q`), u8(`u`), u8(`u`), u8(`x`), u8(0xff), u8(`b`),
 		u8(`a`), u8(`z`)])
 	cmd.args(['--json', r'(?-u)\xFF'])
@@ -212,6 +217,6 @@ fn test_json_r1412_look_behind_match_missing() {
 	msgs := json_decode(cmd.stdout())
 	assert msgs.len == 4
 	assert msgs[1].typ == 'match'
-	assert_json_contains(msgs[1].line, '"lines":{"text":"bar\n"}')
+	assert_json_contains(msgs[1].line, r'"lines":{"text":"bar\n"}')
 	assert msgs[1].line.count('"match":') == 1
 }

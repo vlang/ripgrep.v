@@ -43,11 +43,11 @@ pub fn CommandError.stderr(bytes []u8) CommandError {
 }
 
 /// Returns true if and only if this error has empty data from stderr.
-pub fn (err CommandError) is_empty() bool {
+pub fn (err &CommandError) is_empty() bool {
 	return err.kind == .stderr && err.bytes.len == 0
 }
 
-pub fn (err CommandError) msg() string {
+pub fn (err &CommandError) msg() string {
 	if err.kind == .io {
 		return err.message
 	}
@@ -59,12 +59,12 @@ pub fn (err CommandError) msg() string {
 	return '\n${div}\n${msg}\n${div}'
 }
 
-pub fn (err CommandError) code() int {
+pub fn (err &CommandError) code() int {
 	_ = err
 	return 0
 }
 
-pub fn (err CommandError) str() string {
+pub fn (err &CommandError) str() string {
 	return err.msg()
 }
 
@@ -166,13 +166,13 @@ pub fn (builder CommandReaderBuilder) clone() CommandReaderBuilder {
 ///
 /// If there was a problem spawning the given command, then its error is
 /// returned.
-pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
+pub fn (builder CommandReaderBuilder) build(command &Command) !CommandReader {
 	if command.has_stdin_path {
 		$if !windows {
 			return builder.build_with_stdin_path(command)
 		}
 	}
-	mut process := os.new_process(command.program)
+	mut process := os.new_process(command.program.clone())
 	process.set_args(command.args.clone())
 	if command.has_work_folder {
 		process.set_work_folder(command.work_folder)
@@ -203,7 +203,7 @@ pub fn (builder CommandReaderBuilder) build(command Command) !CommandReader {
 	}
 }
 
-fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !CommandReader {
+fn (builder CommandReaderBuilder) build_with_stdin_path(command &Command) !CommandReader {
 	_ = builder
 	mut stdin_file := os.open(command.stdin_path) or { return error(CommandError.io(err).msg()) }
 	mut stdout_pipe := os.pipe() or {
@@ -239,7 +239,7 @@ fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !Comman
 	stdout_pipe.write_fd = -1
 	os.fd_close(stderr_pipe.write_fd)
 	stderr_pipe.write_fd = -1
-	mut process := os.new_process(command.program)
+	mut process := os.new_process(command.program.clone())
 	process.pid = pid
 	process.status = .running
 	process.code = -1
@@ -261,7 +261,7 @@ fn (builder CommandReaderBuilder) build_with_stdin_path(command Command) !Comman
 	}
 }
 
-fn command_environment(command Command) []string {
+fn command_environment(command &Command) []string {
 	envs := if command.has_env { command.env.clone() } else { os.environ() }
 	mut entries := []string{}
 	for key, value in envs {
@@ -280,7 +280,7 @@ fn command_env_value(env []string, name string) ?string {
 	return none
 }
 
-fn command_program_path(command Command, env []string) !string {
+fn command_program_path(command &Command, env []string) !string {
 	program := command.program
 	if os.is_abs_path(program) {
 		return program.to_owned()
@@ -301,7 +301,7 @@ fn command_program_path(command Command, env []string) !string {
 	return os.find_abs_path_of_executable(program)
 }
 
-fn command_exec_child(command Command, program string, env []string, stdin_fd int, stdout_write_fd int, stderr_write_fd int, stdout_read_fd int, stderr_read_fd int) {
+fn command_exec_child(command &Command, program string, env []string, stdin_fd int, stdout_write_fd int, stderr_write_fd int, stdout_read_fd int, stderr_read_fd int) {
 	os.fd_close(stdout_read_fd)
 	os.fd_close(stderr_read_fd)
 	if os.fd_dup2(stdin_fd, 0) == -1 {
@@ -380,6 +380,7 @@ pub fn (mut builder CommandReaderBuilder) async_stderr(yes bool) &CommandReaderB
 /// rdr.read_to_end(&mut contents)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+@[heap]
 pub struct CommandReader implements Drop {
 mut:
 	process       os.Process
@@ -410,7 +411,7 @@ mut:
 ///
 /// If the caller requires additional configuration for the reader
 /// returned, then use [`CommandReaderBuilder`].
-pub fn CommandReader.new(command Command) !CommandReader {
+pub fn CommandReader.new(command &Command) !CommandReader {
 	return CommandReaderBuilder.new().build(command)
 }
 

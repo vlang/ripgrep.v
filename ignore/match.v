@@ -76,7 +76,7 @@ pub fn (m &^a Match[T]) inner[^a]() ?&^a T {
 	if !m.has_value {
 		return none
 	}
-	return &m.value
+	return unsafe { ?&T(&m.value) }
 }
 
 /// Apply the given function to the value inside this match.

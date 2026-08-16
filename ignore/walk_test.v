@@ -28,7 +28,7 @@ fn normal_path(unix string) string {
 	return unix.to_owned()
 }
 
-fn walk_collect(prefix string, builder WalkBuilder) []string {
+fn walk_collect(prefix string, builder &WalkBuilder) []string {
 	mut paths := []string{}
 	mut walk := builder.build()
 	for {
@@ -83,7 +83,7 @@ fn (mut factory ParallelCollectorFactory) create() ParallelVisitor {
 	}
 }
 
-fn walk_collect_entries_parallel(builder WalkBuilder) []DirEntry {
+fn walk_collect_entries_parallel(builder &WalkBuilder) []DirEntry {
 	state := &ParallelCollectorState{
 		mutex: sync.new_mutex()
 	}
@@ -135,7 +135,7 @@ fn (mut factory ParallelSkipCollectorFactory) create() ParallelVisitor {
 	}
 }
 
-fn walk_collect_skip_parallel(builder WalkBuilder) []string {
+fn walk_collect_skip_parallel(builder &WalkBuilder) []string {
 	state := &ParallelSkipCollectorState{
 		mutex: sync.new_mutex()
 	}
@@ -146,7 +146,7 @@ fn walk_collect_skip_parallel(builder WalkBuilder) []string {
 	return unsafe { state.paths.clone() }
 }
 
-fn walk_collect_parallel(prefix string, builder WalkBuilder) []string {
+fn walk_collect_parallel(prefix string, builder &WalkBuilder) []string {
 	mut paths := []string{}
 	for dent in walk_collect_entries_parallel(builder) {
 		path := strip_prefix(dent.path(), prefix)
@@ -164,7 +164,7 @@ fn walk_parallel_stream_test_runner(walk WalkParallel, events chan WalkParallelS
 	return true
 }
 
-fn walk_collect_stream(prefix string, builder WalkBuilder) []string {
+fn walk_collect_stream(prefix string, builder &WalkBuilder) []string {
 	stop := stdatomic.new_atomic(false)
 	events := chan WalkParallelStreamResult{cap: 32}
 	stream := spawn walk_parallel_stream_test_runner(builder.build_parallel(), events, stop)
@@ -194,7 +194,7 @@ fn mkpaths(paths []string) []string {
 	return got
 }
 
-fn assert_paths(prefix string, builder WalkBuilder, expected []string) {
+fn assert_paths(prefix string, builder &WalkBuilder, expected []string) {
 	want := mkpaths(expected)
 	got := walk_collect(prefix, builder)
 	if got != want {
@@ -206,7 +206,7 @@ fn assert_paths(prefix string, builder WalkBuilder, expected []string) {
 	}
 }
 
-fn walk_collect_entries(builder WalkBuilder) []DirEntry {
+fn walk_collect_entries(builder &WalkBuilder) []DirEntry {
 	mut dents := []DirEntry{}
 	mut walk := builder.build()
 	for {
@@ -546,13 +546,13 @@ fn test_serial_max_depth_releases_child_ignore_node() {
 	mut builder := WalkBuilder.new(td.path())
 	builder.max_depth(usize(0))
 	mut walk := builder.build()
-	root_refs := walk.ig_root.node.refs.load()
+	root_refs := walk.ig_root.node.strong_count()
 	mut dent, err := prepare_root_entry(td.path(), false)
 	assert err.kind == .other
 	mut owned_root := walk.ig_root.clone()
-	assert walk.ig_root.node.refs.load() == root_refs + 1
-	walk.enqueue_entry(mut dent, owned_root, true, 0, false)
-	assert walk.ig_root.node.refs.load() == root_refs
+	assert walk.ig_root.node.strong_count() == root_refs + 1
+	walk.enqueue_entry(mut dent, mut owned_root, true, 0, false)
+	assert walk.ig_root.node.strong_count() == root_refs
 	assert walk.stack.len == 0
 }
 
@@ -791,7 +791,7 @@ fn test_parallel_skip_prevents_descent() {
 
 	mut paths := []string{}
 	for path in collected_paths {
-		paths << normal_path(strip_prefix(path, td.path()))
+		paths << normal_path(strip_prefix(path.clone(), td.path()))
 	}
 	paths.sort()
 	if 'one/skip' !in paths {
@@ -960,7 +960,7 @@ fn test_parallel_single_root_skip_prevents_descent() {
 
 	mut paths := []string{}
 	for path in collected_paths {
-		paths << normal_path(strip_prefix(path, td.path()))
+		paths << normal_path(strip_prefix(path.clone(), td.path()))
 	}
 	paths.sort()
 	if 'skip' !in paths {

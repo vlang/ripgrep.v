@@ -3,6 +3,7 @@ module printer
 import log
 import matcher
 import searcher
+import sync.arc
 import time
 
 /// The configuration for the JSON printer.
@@ -14,19 +15,9 @@ struct JSONConfig implements IClone {
 mut:
 	pretty           bool
 	always_begin_end bool
-	replacement      ?[]u8
-}
-
-fn (config JSONConfig) clone() JSONConfig {
-	mut replacement := ?[]u8(none)
-	if value := config.replacement {
-		replacement = json_clone_u8_range(value, 0, value.len)
-	}
-	return JSONConfig{
-		pretty:           config.pretty
-		always_begin_end: config.always_begin_end
-		replacement:      replacement
-	}
+	// Rust: `Arc<Option<Vec<u8>>>`. Cloning the config shares the replacement
+	// bytes via the atomic refcount instead of deep-copying them.
+	replacement arc.Arc[?[]u8]
 }
 
 fn json_clone_u8_range(bytes []u8, start usize, end usize) []u8 {
@@ -56,7 +47,11 @@ mut:
 
 /// Return a new builder for configuring the JSON printer.
 pub fn JSONBuilder.new() JSONBuilder {
-	return JSONBuilder{}
+	return JSONBuilder{
+		config: JSONConfig{
+			replacement: arc.new(?[]u8(none))
+		}
+	}
 }
 
 /// Create a JSON printer that writes results to the given writer.
@@ -102,7 +97,7 @@ pub fn (mut builder JSONBuilder) always_begin_end(yes bool) &JSONBuilder {
 /// `interpolate` method in the
 /// [grep-printer](https://docs.rs/grep-printer) crate.
 pub fn (mut builder JSONBuilder) replacement(replacement ?[]u8) &JSONBuilder {
-	builder.config.replacement = replacement
+	builder.config.replacement = arc.new(replacement)
 	return builder
 }
 
@@ -639,12 +634,15 @@ fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher.Sea
 	// allocation for it and this greatly simplifies the printing logic to
 	// the extent that it's easy to ensure that we never do more than
 	// one search to find the matches.
-	mut matches := sink.json.matches
-	matches.clear()
-	find_iter_at_in_context(searcher_, sink.matcher, bytes, range, fn [range, mut matches] (m matcher.Match) bool {
+	// Use a fresh accumulator (not the existing `sink.json.matches` buffer):
+	// reusing it under v3 ownership carried stale entries into the results.
+	mut matches := []matcher.Match{}
+	// V closures capture by value; mutate through a pointer so appends persist.
+	matches_ptr := &matches
+	find_iter_at_in_context(searcher_, sink.matcher, bytes, range, fn [range, matches_ptr] (m matcher.Match) bool {
 		s := m.start() - range.start()
 		e := m.end() - range.start()
-		matches << match_new(s, e)
+		unsafe { (*matches_ptr) << match_new(s, e) }
 		return true
 	})!
 	if matches.len > 0 {
@@ -662,7 +660,7 @@ fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher.Sea
 /// To access the result of a replacement, use `replacer.replacement()`.
 fn (mut sink JSONSink[^p, ^s, W]) replace[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
 	sink.replacer.clear()
-	if replacement := sink.json.config.replacement {
+	if replacement := (*sink.json.config.replacement.get()) {
 		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, replacement)!
 	}
 }

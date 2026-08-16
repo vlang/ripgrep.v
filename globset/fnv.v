@@ -23,7 +23,7 @@ pub fn (h Hasher) finish() u64 {
 
 /// Write bytes into this hasher.
 pub fn (mut h Hasher) write(bytes []u8) {
-	for byte in bytes {
-		h.value = (h.value ^ u64(byte)) * hasher_prime
+	for b in bytes {
+		h.value = (h.value ^ u64(b)) * hasher_prime
 	}
 }

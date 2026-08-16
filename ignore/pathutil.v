@@ -86,7 +86,7 @@ fn matches_basename_or_segment(pattern string, path string, is_dir bool) bool {
 	if pat.ends_with('/') {
 		target = target.trim_right('/')
 	}
-	base := file_name(target)
+	base := file_name(target.clone())
 	raw_pat := pat.trim_right('/')
 	if raw_pat.contains(os.path_separator.str()) {
 		return target == raw_pat || target.ends_with(os.path_separator.str() + raw_pat)
@@ -94,7 +94,7 @@ fn matches_basename_or_segment(pattern string, path string, is_dir bool) bool {
 	if base == raw_pat {
 		return true
 	}
-	for part in path_components(target) {
+	for part in path_components(target.clone()) {
 		if part == raw_pat {
 			return true
 		}
@@ -115,7 +115,7 @@ fn glob_match(pattern string, path string, is_dir bool) bool {
 		if pat.ends_with('/') {
 			target = target.trim_right('/')
 		}
-		base := file_name(target)
+		base := file_name(target.clone())
 		raw_pat := pat.trim_right('/')
 		if raw_pat.contains(os.path_separator.str()) {
 			return target == raw_pat || target.ends_with(os.path_separator.str() + raw_pat)
@@ -123,7 +123,7 @@ fn glob_match(pattern string, path string, is_dir bool) bool {
 		if base == raw_pat {
 			return true
 		}
-		for part in normalize_path(target).split(os.path_separator.str()) {
+		for part in normalize_path(target.clone()).split(os.path_separator.str()) {
 			if part == raw_pat {
 				return true
 			}
@@ -158,9 +158,9 @@ fn glob_match(pattern string, path string, is_dir bool) bool {
 		if part == '' {
 			continue
 		}
-		pos := candidate[idx..].index(part) or { return false }
+		pos := candidate[idx..].index(part.clone()) or { return false }
 		idx += pos + part.len
-		if i == parts.len - 1 && !needle.ends_with('*') && !candidate.ends_with(part) {
+		if i == parts.len - 1 && !needle.ends_with('*') && !candidate.ends_with(part.clone()) {
 			return false
 		}
 	}

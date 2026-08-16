@@ -58,7 +58,7 @@ const complete_bash_template_case_choices = r'
 /// using Clap 2.x. Improvements on this are welcome.
 pub fn generate_complete_bash() string {
 	mut opts := ''
-	for flag in flags {
+	for flag in flag_defs {
 		opts += '--'
 		opts += flag.name_long()
 		opts += ' '
@@ -76,7 +76,7 @@ pub fn generate_complete_bash() string {
 	opts += '<PATTERN> <PATH>...'
 
 	mut cases := ''
-	for flag in flags {
+	for flag in flag_defs {
 		template := if flag.doc_choices().len > 0 {
 			complete_bash_template_case_choices.trim_right('\n').replace('!CHOICES!',
 				flag.doc_choices().join(' '))

@@ -19,6 +19,7 @@ $if !windows {
 	#flag @VMODROOT/searcher/iconv_shim.c
 	#include <sys/mman.h>
 	#include <unistd.h>
+	#include "@VMODROOT/searcher/io_shim.h"
 	#include <iconv.h>
 	#include <errno.h>
 	#include "iconv_shim.h"
@@ -26,15 +27,25 @@ $if !windows {
 	#flag freebsd -L/usr/local/lib -liconv
 	#flag openbsd -L/usr/local/lib -liconv
 	#flag termux -L/data/data/com.termux/files/usr/lib -liconv
-	fn C.mmap(addr voidptr, len u64, prot i32, flags i32, fd i32, offset i64) voidptr
-	fn C.munmap(addr voidptr, len u64) i32
-	fn C.pread(fd i32, buf voidptr, count u64, offset i64) isize
+	fn C.mmap(addr voidptr, len usize, prot i32, flags i32, fd i32, offset i64) voidptr
+	fn C.munmap(addr voidptr, len usize) i32
+	fn C.rg_pread(fd i32, buf voidptr, count usize, offset i64) isize
 	fn C.iconv_open(tocode charptr, fromcode charptr) voidptr
 	fn C.iconv_close(cd voidptr) i32
 	fn C.iconv(cd voidptr, inbuf &charptr, inbytesleft &usize, outbuf &charptr, outbytesleft &usize) usize
 	fn C.rg_iconv_error_illegal_sequence() int
 	fn C.rg_iconv_error_incomplete_sequence() int
 	fn C.rg_iconv_error_output_full() int
+}
+
+$if windows {
+	#include <windows.h>
+	#include <io.h>
+	fn C._get_osfhandle(fd int) voidptr
+	fn C.CreateFileMappingW(file voidptr, attributes voidptr, protect u32, size_high u32, size_low u32, name voidptr) voidptr
+	fn C.MapViewOfFile(mapping voidptr, access u32, offset_high u32, offset_low u32, bytes usize) voidptr
+	fn C.UnmapViewOfFile(address voidptr) bool
+	fn C.CloseHandle(handle voidptr) bool
 }
 
 interface IClone {}
@@ -44,11 +55,11 @@ interface IClone {}
 /// from satisfying the broader V interface even though this code never uses
 /// those capture operations.
 pub interface SearchMatcher {
-	find_at(haystack []u8, at usize) !matcher.FallibleMatch
-	shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize
+	find_at(haystack &[]u8, at usize) !matcher.FallibleMatch
+	shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize
 	non_matching_bytes[^a]() ?&^a matcher.ByteSet
 	line_terminator() ?matcher.LineTerminator
-	find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind
+	find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind
 }
 
 fn is_reader_eof(err IError) bool {
@@ -259,7 +270,11 @@ fn (m Mmap) unmap() {
 	}
 	$if !windows {
 		unsafe {
-			C.munmap(m.data, u64(m.len))
+			C.munmap(m.data, m.len)
+		}
+	} $else {
+		unsafe {
+			C.UnmapViewOfFile(m.data)
 		}
 	}
 }
@@ -272,8 +287,6 @@ fn (m Mmap) unmap() {
 /// is returned and the corresponding error (along with the file path, if
 /// present) is logged at the debug level.
 ///
-/// V-specific: the translated searcher does not have logging wired in yet,
-/// so failed memory map attempts currently fall back silently.
 fn (choice MmapChoice) open(mut file os.File, path string, has_path bool) ?Mmap {
 	if !choice.is_enabled() {
 		return none
@@ -282,21 +295,69 @@ fn (choice MmapChoice) open(mut file os.File, path string, has_path bool) ?Mmap 
 		// I guess memory maps on macOS aren't great. Should re-evaluate.
 		return none
 	} $else $if windows {
-		return none
-	} $else {
-		size := mmap_file_size(mut file, path, has_path) or { return none }
+		size := mmap_file_size(mut file, path, has_path) or {
+			log_mmap_error(path, has_path, os.last_error().msg())
+			return none
+		}
 		if size == 0 {
 			return none
 		}
-		data := &u8(C.mmap(C.NULL, u64(size), C.PROT_READ, C.MAP_PRIVATE, file.fd,
-			i64(0)))
-		if data == &u8(C.MAP_FAILED) || isnil(data) {
+		// SAFETY: This is acceptable because the only way `MmapChoiceImpl` can
+		// be `Auto` is if the caller invoked the `auto` constructor, which
+		// is itself not safe. Thus, this is a propagation of the caller's
+		// assertion that using memory maps is safe.
+		file_handle := C._get_osfhandle(file.fd)
+		if isnil(file_handle) || file_handle == C.INVALID_HANDLE_VALUE {
+			log_mmap_error(path, has_path, os.last_error().msg())
+			return none
+		}
+		mapping := C.CreateFileMappingW(file_handle, C.NULL, u32(C.PAGE_READONLY), 0, 0,
+			C.NULL)
+		if isnil(mapping) {
+			log_mmap_error(path, has_path, os.last_error().msg())
+			return none
+		}
+		data := &u8(C.MapViewOfFile(mapping, u32(C.FILE_MAP_READ), 0, 0, size))
+		map_error := if isnil(data) { os.last_error().msg() } else { '' }
+		C.CloseHandle(mapping)
+		if isnil(data) {
+			log_mmap_error(path, has_path, map_error)
 			return none
 		}
 		return Mmap{
 			data: data
 			len:  size
 		}
+	} $else {
+		size := mmap_file_size(mut file, path, has_path) or {
+			log_mmap_error(path, has_path, os.last_error().msg())
+			return none
+		}
+		if size == 0 {
+			return none
+		}
+		// SAFETY: This is acceptable because the only way `MmapChoiceImpl` can
+		// be `Auto` is if the caller invoked the `auto` constructor, which
+		// is itself not safe. Thus, this is a propagation of the caller's
+		// assertion that using memory maps is safe.
+		data := &u8(C.mmap(C.NULL, size, C.PROT_READ, C.MAP_PRIVATE, file.fd,
+			i64(0)))
+		if data == &u8(C.MAP_FAILED) || isnil(data) {
+			log_mmap_error(path, has_path, os.last_error().msg())
+			return none
+		}
+		return Mmap{
+			data: data
+			len:  size
+		}
+	}
+}
+
+fn log_mmap_error(path string, has_path bool, message string) {
+	if has_path {
+		log.debug('${path}: failed to open memory map: ${message}')
+	} else {
+		log.debug('failed to open memory map: ${message}')
 	}
 }
 
@@ -350,9 +411,9 @@ enum EncodingKind {
 /// [Encoding Standard](https://encoding.spec.whatwg.org/#concept-encoding-get).
 /// If the given label does not correspond to a valid encoding, then this
 /// returns an error.
-pub fn Encoding.new(label string) !Encoding {
+pub fn Encoding.new(label &string) !Encoding {
 	normalized := normalize_encoding_label(label)
-	kind, canonical, iconv_name := encoding_for_label(normalized) or {
+	kind, canonical, iconv_name := encoding_for_label(&normalized) or {
 		return ConfigError.unknown_encoding(label.bytes())
 	}
 	return Encoding{
@@ -362,7 +423,7 @@ pub fn Encoding.new(label string) !Encoding {
 	}
 }
 
-fn normalize_encoding_label(label string) string {
+fn normalize_encoding_label(label &string) string {
 	bytes := label.bytes()
 	mut start := 0
 	mut end := bytes.len
@@ -383,8 +444,8 @@ fn is_encoding_label_space(byte u8) bool {
 	return byte in [`\t`, `\n`, `\f`, `\r`, ` `]
 }
 
-fn encoding_for_label(label string) ?(EncodingKind, string, string) {
-	match label {
+fn encoding_for_label(label &string) ?(EncodingKind, string, string) {
+	match *label {
 		'unicode-1-1-utf-8', 'unicode11utf8', 'unicode20utf8', 'utf-8', 'utf8', 'x-unicode20utf8' {
 			return EncodingKind.utf8, 'UTF-8', ''
 		}
@@ -412,8 +473,8 @@ fn encoding_for_label(label string) ?(EncodingKind, string, string) {
 	}
 }
 
-fn iconv_encoding_for_label(label string) ?(EncodingKind, string, string) {
-	match label {
+fn iconv_encoding_for_label(label &string) ?(EncodingKind, string, string) {
+	match *label {
 		'866', 'cp866', 'csibm866', 'ibm866' {
 			return EncodingKind.iconv, 'IBM866', 'IBM866'
 		}
@@ -519,6 +580,7 @@ fn iconv_encoding_for_label(label string) ?(EncodingKind, string, string) {
 /// The internal configuration of a searcher. This is shared among several
 /// search related types, but is only ever written to by the SearcherBuilder.
 pub struct Config implements IClone {
+mut:
 	/// The line terminator to use.
 	line_term matcher.LineTerminator
 	/// Whether to invert matching.
@@ -934,6 +996,7 @@ pub fn (mut builder SearcherBuilder) max_matches(limit ?u64) &SearcherBuilder {
 /// be provided by the caller when executing a search.
 ///
 /// When possible, a searcher should be reused.
+@[heap]
 pub struct Searcher implements IClone {
 mut:
 	/// The configuration for this searcher.
@@ -964,10 +1027,9 @@ pub fn Searcher.new() Searcher {
 
 // V-specific: release reusable search buffers when a worker is retired.
 pub fn (mut s Searcher) free() {
-	unsafe {
-		s.line_buffer.buf.free()
-		s.multi_line_buffer.free()
-	}
+	// Assigning empty arrays auto-drops (frees) the buffers exactly once under
+	// v3 ownership; a manual `.free()` first would double-free (only observable
+	// once the buffers actually hold allocated data, e.g. with context lines).
 	s.line_buffer.buf = []u8{}
 	s.multi_line_buffer = []u8{}
 }
@@ -1001,7 +1063,7 @@ fn (mut rdr SearchSliceReader[^a]) read[^a](mut buf []u8) !int {
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_file` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_path[^p](matcher_ &SearchMatcher, path &^p string, write_to Sink) ! {
+pub fn (mut s Searcher) search_path[^m, ^p](matcher_ &^m SearchMatcher, path &^p string, write_to Sink) ! {
 	mut file := os.open(*path) or { return err }
 	defer {
 		file.close()
@@ -1015,11 +1077,11 @@ pub fn (mut s Searcher) search_path[^p](matcher_ &SearchMatcher, path &^p string
 /// memory maps will help the search run faster, then this will use
 /// memory maps. For this reason, callers should prefer using this method
 /// or `search_path` over the more generic `search_reader` when possible.
-pub fn (mut s Searcher) search_file(matcher_ &SearchMatcher, mut file os.File, write_to Sink) ! {
+pub fn (mut s Searcher) search_file[^m](matcher_ &^m SearchMatcher, mut file os.File, write_to Sink) ! {
 	s.search_file_maybe_path(matcher_, mut file, '', false, write_to)!
 }
 
-fn (mut s Searcher) search_file_maybe_path(matcher_ &SearchMatcher, mut file os.File, path string, has_path bool, write_to Sink) ! {
+fn (mut s Searcher) search_file_maybe_path[^m](matcher_ &^m SearchMatcher, mut file os.File, path string, has_path bool, write_to Sink) ! {
 	$if !macos {
 		if mmap := s.config.mmap.open(mut file, path, has_path) {
 			defer {
@@ -1035,7 +1097,7 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &SearchMatcher, mut file os.
 	}
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_file(mut file, path, has_path)!
-			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &s.multi_line_buffer,
+		mut search := MultiLine.new(s, matcher_ref_value(matcher_), &s.multi_line_buffer,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if needs_transcoding {
@@ -1043,15 +1105,16 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &SearchMatcher, mut file os.
 		defer {
 			decoded.close()
 		}
-		mut rdr := LineBufferReader.new(&decoded, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr,
-				sink_ref_value(&write_to))
-		search.run()!
+		s.search_reader_by_line(matcher_, &decoded, write_to)!
 	} else {
-		mut rdr := LineBufferReader.new(&file, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
-		search.run()!
+		s.search_reader_by_line(matcher_, &file, write_to)!
 	}
+}
+
+fn (mut s Searcher) search_reader_by_line[^m, ^r](matcher_ &^m SearchMatcher, read_from &^r io.Reader, write_to Sink) ! {
+	mut rdr := LineBufferReader.new(read_from, &s.line_buffer)
+	mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
+	search.run()!
 }
 
 /// Execute a search over any implementation of `std::io::Read` and write
@@ -1065,12 +1128,12 @@ fn (mut s Searcher) search_file_maybe_path(matcher_ &SearchMatcher, mut file os.
 /// one should try to use higher level APIs (e.g., searching by file or
 /// file path) so that memory maps can be used if they are available and
 /// enabled.
-pub fn (mut s Searcher) search_reader(matcher_ &SearchMatcher, mut read_from io.Reader, write_to Sink) ! {
+pub fn (mut s Searcher) search_reader[^m](matcher_ &^m SearchMatcher, mut read_from io.Reader, write_to Sink) ! {
 	s.check_config(matcher_)!
 
 	if s.multi_line_with_matcher(matcher_) {
 		s.fill_multi_line_buffer_from_reader(mut read_from)!
-			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &s.multi_line_buffer,
+		mut search := MultiLine.new(s, matcher_ref_value(matcher_), &s.multi_line_buffer,
 				sink_ref_value(&write_to))
 		search.run()!
 	} else if s.config.encoding != none || s.config.bom_sniffing {
@@ -1078,19 +1141,15 @@ pub fn (mut s Searcher) search_reader(matcher_ &SearchMatcher, mut read_from io.
 		defer {
 			decoded.close()
 		}
-		mut rdr := LineBufferReader.new(&decoded, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
-		search.run()!
+		s.search_reader_by_line(matcher_, &decoded, write_to)!
 	} else {
-		mut rdr := LineBufferReader.new(&read_from, &s.line_buffer)
-			mut search := ReadByLine.new(s, matcher_ref_value(matcher_), rdr, sink_ref_value(&write_to))
-		search.run()!
+		s.search_reader_by_line(matcher_, &read_from, write_to)!
 	}
 }
 
 /// Execute a search over the given slice and write the results to the
 /// given sink.
-pub fn (mut s Searcher) search_slice(matcher_ &SearchMatcher, slice []u8, write_to Sink) ! {
+pub fn (mut s Searcher) search_slice[^m](matcher_ &^m SearchMatcher, slice []u8, write_to Sink) ! {
 	s.check_config(matcher_)!
 
 	// We can search the slice directly, unless we need to do transcoding.
@@ -1099,10 +1158,10 @@ pub fn (mut s Searcher) search_slice(matcher_ &SearchMatcher, slice []u8, write_
 		return s.search_reader(matcher_, mut read_from, write_to)
 	}
 	if s.multi_line_with_matcher(matcher_) {
-			mut search := MultiLine.new(s, matcher_ref_value(matcher_), &slice, sink_ref_value(&write_to))
+		mut search := MultiLine.new(s, matcher_ref_value(matcher_), &slice, sink_ref_value(&write_to))
 		search.run()!
 	} else {
-			mut search := SliceByLine.new(s, matcher_ref_value(matcher_), &slice,
+		mut search := SliceByLine.new(s, matcher_ref_value(matcher_), &slice,
 				sink_ref_value(&write_to))
 		search.run()!
 	}
@@ -1174,7 +1233,7 @@ fn file_has_bom_at(mut file os.File, pos i64) bool {
 	} $else {
 		mut prefix := []u8{len: 3}
 		defer { unsafe { prefix.free() } }
-		nread := C.pread(file.fd, prefix.data, u64(prefix.len), pos)
+		nread := C.rg_pread(file.fd, prefix.data, usize(prefix.len), pos)
 		if nread <= 0 {
 			return false
 		}
@@ -1230,7 +1289,7 @@ fn transcode_slice_with_config(config &Config, slice []u8) ![]u8 {
 }
 
 fn decode_iconv(slice []u8, label string) ![]u8 {
-	if decoded := decode_encoding_single_byte(slice, label) {
+	if decoded := decode_encoding_single_byte(slice.clone(), label) {
 		return decoded
 	}
 	$if windows {
@@ -1442,11 +1501,11 @@ fn (mut rdr TranscodingReader[^r]) decode_stream_chunk(raw []u8, final bool) []u
 			return decode_x_user_defined(raw)
 		}
 		.utf16le {
-			usable := rdr.utf16_stream_usable_len(raw, false, final)
+			usable := rdr.utf16_stream_usable_len(&raw, false, final)
 			return decode_utf16(raw[..usable], false)
 		}
 		.utf16be {
-			usable := rdr.utf16_stream_usable_len(raw, true, final)
+			usable := rdr.utf16_stream_usable_len(&raw, true, final)
 			return decode_utf16(raw[..usable], true)
 		}
 		else {
@@ -1457,7 +1516,7 @@ fn (mut rdr TranscodingReader[^r]) decode_stream_chunk(raw []u8, final bool) []u
 
 // A streaming UTF-16 decoder must retain both an incomplete code unit and a
 // complete high surrogate until the following chunk supplies its low surrogate.
-fn (mut rdr TranscodingReader[^r]) utf16_stream_usable_len(raw []u8, big_endian bool, final bool) int {
+fn (mut rdr TranscodingReader[^r]) utf16_stream_usable_len[^b, ^r](raw &^b []u8, big_endian bool, final bool) int {
 	if final {
 		return raw.len
 	}
@@ -2369,12 +2428,13 @@ fn decode_utf8_lossy(input []u8, final bool) DecodedUtf8 {
 			i++
 			continue
 		}
-		width := if first >= 0xc2 && first <= 0xdf {
-			2
+		mut width := 0
+		if first >= 0xc2 && first <= 0xdf {
+			width = 2
 		} else if first >= 0xe0 && first <= 0xef {
-			3
+			width = 3
 		} else if first >= 0xf0 && first <= 0xf4 {
-			4
+			width = 4
 		} else {
 			append_utf8(mut out, u32(0xfffd))
 			i++
@@ -2828,7 +2888,7 @@ pub struct SinkMatch[^b] implements IClone {
 }
 
 // V-specific constructor used where Rust initializes crate-private fields.
-pub fn SinkMatch.new[^b](buffer []u8, bytes_range_in_buffer matcher.Match) SinkMatch[^b] {
+pub fn SinkMatch.new[^b](buffer &^b []u8, bytes_range_in_buffer matcher.Match) SinkMatch[^b] {
 	return SinkMatch[^b]{
 		bytes_:                 buffer[bytes_range_in_buffer.start()..bytes_range_in_buffer.end()]
 		buffer_:                buffer
@@ -3108,7 +3168,7 @@ pub struct SinkContext[^b] implements IClone {
 }
 
 // V-specific constructor used where Rust initializes crate-private fields.
-fn SinkContext.new[^b](line_term matcher.LineTerminator, bytes []u8, kind SinkContextKind, absolute_byte_offset u64, line_number ?u64) SinkContext[^b] {
+fn SinkContext.new[^b](line_term matcher.LineTerminator, bytes &^b []u8, kind SinkContextKind, absolute_byte_offset u64, line_number ?u64) SinkContext[^b] {
 	return SinkContext[^b]{
 		line_term_:            line_term
 		bytes_:                bytes
@@ -3220,7 +3280,7 @@ mut:
 	/// If this returns an error, then searching is stopped immediately,
 	/// `finish` is not called and the error is bubbled back up to the caller
 	/// of the searcher.
-	matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool
+	matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool
 	/// This method is called whenever a context line is found, and is optional
 	/// to implement. By default, it does nothing and returns `true`.
 	///
@@ -3233,7 +3293,7 @@ mut:
 	/// If this returns an error, then searching is stopped immediately,
 	/// `finish` is not called and the error is bubbled back up to the caller
 	/// of the searcher.
-	context[^b](searcher &Searcher, ctx &SinkContext[^b]) !bool
+	context[^b](searcher_ &Searcher, ctx &SinkContext[^b]) !bool
 	/// This method is called whenever a break in contextual lines is found,
 	/// and is optional to implement. By default, it does nothing and returns
 	/// `true`.
@@ -3249,7 +3309,7 @@ mut:
 	/// If this returns an error, then searching is stopped immediately,
 	/// `finish` is not called and the error is bubbled back up to the caller
 	/// of the searcher.
-	context_break(searcher &Searcher) !bool
+	context_break(searcher_ &Searcher) !bool
 	/// This method is called whenever binary detection is enabled and binary
 	/// data is found. If binary data is found, then this is called at least
 	/// once for the first occurrence with the absolute byte offset at which
@@ -3263,7 +3323,7 @@ mut:
 	/// of the searcher.
 	///
 	/// By default, it does nothing and returns `true`.
-	binary_data(searcher &Searcher, binary_byte_offset u64) !bool
+	binary_data(searcher_ &Searcher, binary_byte_offset u64) !bool
 	/// This method is called when a search has begun, before any search is
 	/// executed. By default, this does nothing.
 	///
@@ -3273,47 +3333,47 @@ mut:
 	/// If this returns an error, then searching is stopped immediately,
 	/// `finish` is not called and the error is bubbled back up to the caller
 	/// of the searcher.
-	begin(searcher &Searcher) !bool
+	begin(searcher_ &Searcher) !bool
 	/// This method is called when a search has completed. By default, this
 	/// does nothing.
 	///
 	/// If this returns an error, the error is bubbled back up to the caller of
 	/// the searcher.
-	finish(searcher &Searcher, finish &SinkFinish) !
+	finish(searcher_ &Searcher, finish &SinkFinish) !
 }
 
 /// Default implementations of the optional `Sink` behavior.
 pub struct SinkDefaults {}
 
-pub fn (mut sink SinkDefaults) context[^b](searcher &Searcher, ctx &SinkContext[^b]) !bool {
+pub fn (mut sink SinkDefaults) context[^b](searcher_ &Searcher, ctx &SinkContext[^b]) !bool {
 	_ = sink
-	_ = searcher
+	_ = searcher_
 	_ = ctx
 	return true
 }
 
-pub fn (mut sink SinkDefaults) context_break(searcher &Searcher) !bool {
+pub fn (mut sink SinkDefaults) context_break(searcher_ &Searcher) !bool {
 	_ = sink
-	_ = searcher
+	_ = searcher_
 	return true
 }
 
-pub fn (mut sink SinkDefaults) binary_data(searcher &Searcher, binary_byte_offset u64) !bool {
+pub fn (mut sink SinkDefaults) binary_data(searcher_ &Searcher, binary_byte_offset u64) !bool {
 	_ = sink
-	_ = searcher
+	_ = searcher_
 	_ = binary_byte_offset
 	return true
 }
 
-pub fn (mut sink SinkDefaults) begin(searcher &Searcher) !bool {
+pub fn (mut sink SinkDefaults) begin(searcher_ &Searcher) !bool {
 	_ = sink
-	_ = searcher
+	_ = searcher_
 	return true
 }
 
-pub fn (mut sink SinkDefaults) finish(searcher &Searcher, finish &SinkFinish) ! {
+pub fn (mut sink SinkDefaults) finish(searcher_ &Searcher, finish &SinkFinish) ! {
 	_ = sink
-	_ = searcher
+	_ = searcher_
 	_ = finish
 }
 
@@ -3375,8 +3435,8 @@ pub fn UTF8.new(callback StringSinkCallback) UTF8 {
 	}
 }
 
-pub fn (mut sink UTF8) matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool {
-	_ = searcher
+pub fn (mut sink UTF8) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
+	_ = searcher_
 	matched := mat.bytes()
 	if err := first_utf8_error(matched) {
 		return error(err.msg())
@@ -3414,8 +3474,8 @@ pub fn Lossy.new(callback StringSinkCallback) Lossy {
 	}
 }
 
-pub fn (mut sink Lossy) matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool {
-	_ = searcher
+pub fn (mut sink Lossy) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
+	_ = searcher_
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
 	return sink.callback(line_number, lossy_utf8_string(mat.bytes()))!
 }
@@ -3445,8 +3505,8 @@ pub fn Bytes.new(callback BytesSinkCallback) Bytes {
 	}
 }
 
-pub fn (mut sink Bytes) matched[^b](searcher &Searcher, mat &SinkMatch[^b]) !bool {
-	_ = searcher
+pub fn (mut sink Bytes) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
+	_ = searcher_
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
 	return sink.callback(line_number, mat.bytes())!
 }
@@ -3621,15 +3681,15 @@ mut:
 	count_              u64
 }
 
-fn Core.new[^s](searcher &^s Searcher, matcher_ SearchMatcher, sink Sink, binary bool) Core[^s] {
+fn Core.new[^s](searcher_ &^s Searcher, matcher_ SearchMatcher, sink Sink, binary bool) Core[^s] {
 	mut line_number := ?u64(none)
-	if searcher.config.line_number {
+	if searcher_.config.line_number {
 		line_number = u64(1)
 	}
 	core := Core[^s]{
-		config:      &searcher.config
+		config:      &searcher_.config
 		matcher_:    matcher_
-		searcher:    searcher
+		searcher:    searcher_
 		sink:        sink
 		binary:      binary
 		line_number: line_number
@@ -3998,7 +4058,8 @@ fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
 		if core.has_exceeded_match_limit() {
 			return matcher.FallibleMatch.absent()
 		}
-		maybe_kind := core.matcher_.find_candidate_line(buf[pos..])!
+		candidate_haystack := unsafe { buf[pos..] }
+		maybe_kind := core.matcher_.find_candidate_line(candidate_haystack)!
 		kind := maybe_kind.get() or {
 			return matcher.FallibleMatch.absent()
 		}
@@ -4031,7 +4092,7 @@ fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	mut mat := SinkMatch.new(buf, range)
+	mut mat := SinkMatch.new(&buf, range)
 	mat = mat.with_line_term(core.config.line_term)
 	mat = mat.with_absolute_byte_offset(offset)
 	mat = mat.with_line_number(core.line_number)
@@ -4051,7 +4112,8 @@ fn (mut core Core[^s]) sink_before_context[^s](buf []u8, range matcher.Match) !b
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	ctx := SinkContext.new(core.config.line_term, buf[range.start()..range.end()],
+	ctx_bytes := buf[range.start()..range.end()]
+	ctx := SinkContext.new(core.config.line_term, &ctx_bytes,
 		.before, offset, core.line_number)
 	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
@@ -4070,7 +4132,8 @@ fn (mut core Core[^s]) sink_after_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	ctx := SinkContext.new(core.config.line_term, buf[range.start()..range.end()],
+	ctx_bytes := buf[range.start()..range.end()]
+	ctx := SinkContext.new(core.config.line_term, &ctx_bytes,
 		.after, offset, core.line_number)
 	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
@@ -4088,7 +4151,8 @@ fn (mut core Core[^s]) sink_other_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	ctx := SinkContext.new(core.config.line_term, buf[range.start()..range.end()],
+	ctx_bytes := buf[range.start()..range.end()]
+	ctx := SinkContext.new(core.config.line_term, &ctx_bytes,
 		.other, offset, core.line_number)
 	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {

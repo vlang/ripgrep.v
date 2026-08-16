@@ -43,8 +43,8 @@ fn json_buffer() cli.Buffer {
 	return cli.BufferWriter.stdout(.never).buffer()
 }
 
-fn json_printer_contents(mut printer JSON[cli.Buffer]) string {
-	return printer.get_mut().as_slice().bytestr()
+fn json_printer_contents(mut printer_ JSON[cli.Buffer]) string {
+	return printer_.get_mut().as_slice().bytestr()
 }
 
 fn json_line_count(text string) int {
@@ -98,8 +98,8 @@ fn test_json_builder_build_is_reusable() {
 
 fn test_json_sink_stats_accumulate_across_searches() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut printer_ := JSONBuilder.new().build(json_buffer())
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built := searcher.SearcherBuilder.new().build()
 	assert sink.begin(built)!
 	sink.finish(built, searcher.SinkFinish.new(3))!
@@ -111,8 +111,8 @@ fn test_json_sink_stats_accumulate_across_searches() {
 
 fn test_json_binary_callback_does_not_publish_offset_before_finish() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut printer_ := JSONBuilder.new().build(json_buffer())
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	mut builder := searcher.SearcherBuilder.new()
 	builder.binary_detection(searcher.BinaryDetection.quit(`\x00`))
 	built := builder.build()
@@ -129,15 +129,15 @@ but Doctor Watson has to have it taken out for him and dusted,
 and exhibited clearly, with a label attached.'
 
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
+	mut printer_ := JSONBuilder.new().build(json_buffer())
 	mut builder := searcher.SearcherBuilder.new()
 	builder.binary_detection(searcher.BinaryDetection.quit(`\x00`))
 	builder.heap_limit(usize(80))
 	mut built := builder.build()
 	mut rdr := JsonByteSliceReader.from_string(binary)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	got := json_printer_contents(mut printer)
+	got := json_printer_contents(mut printer_)
 
 	assert json_line_count(got) == 3
 	last := json_last_line(got)
@@ -146,14 +146,14 @@ and exhibited clearly, with a label attached.'
 
 fn test_json_max_matches() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
+	mut printer_ := JSONBuilder.new().build(json_buffer())
 	mut builder := searcher.SearcherBuilder.new()
 	builder.max_matches(u64(1))
 	mut built := builder.build()
 	mut rdr := JsonByteSliceReader.from_string(json_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	got := json_printer_contents(mut printer)
+	got := json_printer_contents(mut printer_)
 
 	assert json_line_count(got) == 3
 }
@@ -172,27 +172,27 @@ d
 e
 '
 	matcher_ := regex.RegexMatcher.new(r'd') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
+	mut printer_ := JSONBuilder.new().build(json_buffer())
 	mut builder := searcher.SearcherBuilder.new()
 	builder.after_context(2)
 	builder.max_matches(u64(1))
 	mut built := builder.build()
 	mut rdr := JsonByteSliceReader.from_string(haystack)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	got := json_printer_contents(mut printer)
+	got := json_printer_contents(mut printer_)
 
 	assert json_line_count(got) == 5
 }
 
 fn test_json_no_match() {
 	matcher_ := regex.RegexMatcher.new(r'DOES NOT MATCH') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
+	mut printer_ := JSONBuilder.new().build(json_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := JsonByteSliceReader.from_string(json_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	got := json_printer_contents(mut printer)
+	got := json_printer_contents(mut printer_)
 
 	assert got.len == 0
 }
@@ -201,12 +201,12 @@ fn test_json_always_begin_end_no_match() {
 	matcher_ := regex.RegexMatcher.new(r'DOES NOT MATCH') or { panic(err) }
 	mut builder := JSONBuilder.new()
 	builder.always_begin_end(true)
-	mut printer := builder.build(json_buffer())
+	mut printer_ := builder.build(json_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := JsonByteSliceReader.from_string(json_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	got := json_printer_contents(mut printer)
+	got := json_printer_contents(mut printer_)
 
 	assert json_line_count(got) == 2
 	assert got.contains('begin') && got.contains('end')
@@ -217,12 +217,12 @@ fn test_json_pretty() {
 	mut builder := JSONBuilder.new()
 	builder.pretty(true)
 	builder.always_begin_end(true)
-	mut printer := builder.build(json_buffer())
+	mut printer_ := builder.build(json_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := JsonByteSliceReader.from_string(json_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	got := json_printer_contents(mut printer)
+	got := json_printer_contents(mut printer_)
 
 	assert got.starts_with('{\n  "type": "begin",\n')
 	assert json_line_count(got) > 2
@@ -233,12 +233,12 @@ fn test_json_missing_crlf() {
 
 	mut matcher_builder := regex.RegexMatcherBuilder.new()
 	matcher_ := matcher_builder.build('test') or { panic(err) }
-	mut printer := JSONBuilder.new().build(json_buffer())
+	mut printer_ := JSONBuilder.new().build(json_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := JsonByteSliceReader.new(haystack)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
-	mut got := json_printer_contents(mut printer)
+	mut got := json_printer_contents(mut printer_)
 	assert json_line_count(got) == 3
 	assert json_nth_line(got, 1).contains(r'test\r\n'), 'missing \'test\\r\\n\' in \'${json_nth_line(got,
 		1)}\''

@@ -291,7 +291,7 @@ pub fn Candidate.from_bytes[^a](path &^a []u8) Candidate[^a] {
 fn candidate_from_string[^a](path &^a string) Candidate[^a] {
 	npath := normalize_path(*path)
 	basename := file_name(npath) or { '' }
-	ext := file_name_ext(basename) or { '' }
+	ext := file_name_ext(basename.clone()) or { '' }
 	return Candidate[^a]{
 		path_:     npath
 		basename_: basename
@@ -410,8 +410,9 @@ fn (s &ExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches
 }
 
 struct PrefixStrategy implements IClone {
-	// V-specific: the untranslated Aho-Corasick dependency is represented by
-	// its literal patterns while preserving overlapping-prefix match behavior.
+	// V-specific: Aho-Corasick is an external Cargo dependency, so this port
+	// stores its literal patterns directly while preserving overlapping-prefix
+	// match behavior.
 	patterns []string
 	map_     []usize
 	longest  usize
@@ -438,8 +439,9 @@ fn (s &PrefixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []
 }
 
 struct SuffixStrategy implements IClone {
-	// V-specific: the untranslated Aho-Corasick dependency is represented by
-	// its literal patterns while preserving overlapping-suffix match behavior.
+	// V-specific: Aho-Corasick is an external Cargo dependency, so this port
+	// stores its literal patterns directly while preserving overlapping-suffix
+	// match behavior.
 	patterns []string
 	map_     []usize
 	longest  usize
@@ -528,68 +530,54 @@ fn (s &RegexSetStrategy) matches_into[^a](candidate &Candidate[^a], mut matches 
 	}
 }
 
-fn glob_set_strategy_is_match[^a](strat GlobSetMatchStrategy, candidate &Candidate[^a]) bool {
-	if strat is LiteralStrategy {
-		s := strat as LiteralStrategy
-		return s.is_match(candidate)
+fn glob_set_strategy_is_match[^a](strat &GlobSetMatchStrategy, candidate &Candidate[^a]) bool {
+	if *strat is LiteralStrategy {
+		return ((*strat) as LiteralStrategy).is_match(candidate)
 	}
-	if strat is BasenameLiteralStrategy {
-		s := strat as BasenameLiteralStrategy
-		return s.is_match(candidate)
+	if *strat is BasenameLiteralStrategy {
+		return ((*strat) as BasenameLiteralStrategy).is_match(candidate)
 	}
-	if strat is ExtensionStrategy {
-		s := strat as ExtensionStrategy
-		return s.is_match(candidate)
+	if *strat is ExtensionStrategy {
+		return ((*strat) as ExtensionStrategy).is_match(candidate)
 	}
-	if strat is PrefixStrategy {
-		s := strat as PrefixStrategy
-		return s.is_match(candidate)
+	if *strat is PrefixStrategy {
+		return ((*strat) as PrefixStrategy).is_match(candidate)
 	}
-	if strat is SuffixStrategy {
-		s := strat as SuffixStrategy
-		return s.is_match(candidate)
+	if *strat is SuffixStrategy {
+		return ((*strat) as SuffixStrategy).is_match(candidate)
 	}
-	if strat is RequiredExtensionStrategy {
-		s := strat as RequiredExtensionStrategy
-		return s.is_match(candidate)
+	if *strat is RequiredExtensionStrategy {
+		return ((*strat) as RequiredExtensionStrategy).is_match(candidate)
 	}
-	s := strat as RegexSetStrategy
-	return s.is_match(candidate)
+	return ((*strat) as RegexSetStrategy).is_match(candidate)
 }
 
-fn glob_set_strategy_matches_into[^a](strat GlobSetMatchStrategy, candidate &Candidate[^a], mut matches []usize) {
-	if strat is LiteralStrategy {
-		s := strat as LiteralStrategy
-		s.matches_into(candidate, mut matches)
+fn glob_set_strategy_matches_into[^a](strat &GlobSetMatchStrategy, candidate &Candidate[^a], mut matches []usize) {
+	if *strat is LiteralStrategy {
+		((*strat) as LiteralStrategy).matches_into(candidate, mut matches)
 		return
 	}
-	if strat is BasenameLiteralStrategy {
-		s := strat as BasenameLiteralStrategy
-		s.matches_into(candidate, mut matches)
+	if *strat is BasenameLiteralStrategy {
+		((*strat) as BasenameLiteralStrategy).matches_into(candidate, mut matches)
 		return
 	}
-	if strat is ExtensionStrategy {
-		s := strat as ExtensionStrategy
-		s.matches_into(candidate, mut matches)
+	if *strat is ExtensionStrategy {
+		((*strat) as ExtensionStrategy).matches_into(candidate, mut matches)
 		return
 	}
-	if strat is PrefixStrategy {
-		s := strat as PrefixStrategy
-		s.matches_into(candidate, mut matches)
+	if *strat is PrefixStrategy {
+		((*strat) as PrefixStrategy).matches_into(candidate, mut matches)
 		return
 	}
-	if strat is SuffixStrategy {
-		s := strat as SuffixStrategy
-		s.matches_into(candidate, mut matches)
+	if *strat is SuffixStrategy {
+		((*strat) as SuffixStrategy).matches_into(candidate, mut matches)
 		return
 	}
-	if strat is RequiredExtensionStrategy {
-		s := strat as RequiredExtensionStrategy
-		s.matches_into(candidate, mut matches)
+	if *strat is RequiredExtensionStrategy {
+		((*strat) as RequiredExtensionStrategy).matches_into(candidate, mut matches)
 		return
 	}
-	s := strat as RegexSetStrategy
-	s.matches_into(candidate, mut matches)
+	((*strat) as RegexSetStrategy).matches_into(candidate, mut matches)
 }
 
 struct MultiStrategyBuilder implements IClone {
@@ -693,8 +681,45 @@ fn (b RequiredExtensionStrategyBuilder) build() !RequiredExtensionStrategy {
 /// GlobSet represents a group of globs that can be matched together in a
 /// single pass.
 pub struct GlobSet implements IClone {
-	len    usize
+	mut:
+	len_   usize
 	strats []GlobSetMatchStrategy
+}
+
+// V-specific: V3 cannot yet synthesize cloning for a struct field whose
+// element is a private sum type with owned payloads. This is the direct clone
+// of each strategy variant used by Rust's derived `Clone` implementation.
+pub fn (gs &GlobSet) clone() GlobSet {
+	mut strats := []GlobSetMatchStrategy{cap: gs.strats.len}
+	for i in 0 .. gs.strats.len {
+		strats << clone_glob_set_match_strategy(&gs.strats[i])
+	}
+	return GlobSet{
+		len_:   gs.len_
+		strats: strats
+	}
+}
+
+fn clone_glob_set_match_strategy(strat &GlobSetMatchStrategy) GlobSetMatchStrategy {
+	if *strat is LiteralStrategy {
+		return ((*strat) as LiteralStrategy).clone()
+	}
+	if *strat is BasenameLiteralStrategy {
+		return ((*strat) as BasenameLiteralStrategy).clone()
+	}
+	if *strat is ExtensionStrategy {
+		return ((*strat) as ExtensionStrategy).clone()
+	}
+	if *strat is PrefixStrategy {
+		return ((*strat) as PrefixStrategy).clone()
+	}
+	if *strat is SuffixStrategy {
+		return ((*strat) as SuffixStrategy).clone()
+	}
+	if *strat is RequiredExtensionStrategy {
+		return ((*strat) as RequiredExtensionStrategy).clone()
+	}
+	return ((*strat) as RegexSetStrategy).clone()
 }
 
 /// Create a new `GlobSetBuilder`. A `GlobSetBuilder` can be used to add
@@ -707,26 +732,26 @@ pub fn GlobSet.builder() GlobSetBuilder {
 /// Create an empty `GlobSet`. An empty set matches nothing.
 pub fn GlobSet.empty() GlobSet {
 	return GlobSet{
-		len:    0
+		len_:   0
 		strats: []GlobSetMatchStrategy{}
 	}
 }
 
 /// Returns true if this set is empty, and therefore matches nothing.
 pub fn (gs &GlobSet) is_empty() bool {
-	return gs.len == 0
+	return gs.len_ == 0
 }
 
 /// Returns the number of globs in this set.
 pub fn (gs &GlobSet) len() usize {
-	return gs.len
+	return gs.len_
 }
 
 // V-specific: release the allocation owned by an empty set without needing
 // sum-type payload destruction. Non-empty sets are released with their owning
 // ignore matcher once ownership-aware sum-type drops are available.
 pub fn (mut gs GlobSet) free_empty() {
-	if gs.len != 0 {
+	if gs.len_ != 0 {
 		return
 	}
 	unsafe { gs.strats.free() }
@@ -747,8 +772,8 @@ pub fn (gs &GlobSet) is_match_candidate[^a](path &Candidate[^a]) bool {
 	if gs.is_empty() {
 		return false
 	}
-	for strat in gs.strats {
-		if glob_set_strategy_is_match(strat, path) {
+	for i in 0 .. gs.strats.len {
+		if glob_set_strategy_is_match(&gs.strats[i], path) {
 			return true
 		}
 	}
@@ -783,8 +808,8 @@ pub fn (gs &GlobSet) matches_all(path string) bool {
 /// This will return true if the set of globs is empty, as in that case all
 /// `0` of the globs will match.
 pub fn (gs &GlobSet) matches_all_candidate[^a](path &Candidate[^a]) bool {
-	for strat in gs.strats {
-		if !glob_set_strategy_is_match(strat, path) {
+	for i in 0 .. gs.strats.len {
+		if !glob_set_strategy_is_match(&gs.strats[i], path) {
 			return false
 		}
 	}
@@ -837,8 +862,8 @@ pub fn (gs &GlobSet) matches_candidate_into[^a](path &Candidate[^a], mut into []
 	if gs.is_empty() {
 		return
 	}
-	for strat in gs.strats {
-		glob_set_strategy_matches_into(strat, path, mut into)
+	for i in 0 .. gs.strats.len {
+		glob_set_strategy_matches_into(&gs.strats[i], path, mut into)
 	}
 	into.sort()
 	dedup_usize(mut into)
@@ -859,7 +884,7 @@ pub fn GlobSet.new(globs &[]Glob) !GlobSet {
 	mut required_exts := RequiredExtensionStrategyBuilder.new()
 	mut regexes := MultiStrategyBuilder.new()
 	for i, glob in globs {
-		strategy := match_strategy_new(&glob)
+		strategy := match_strategy_new(glob)
 		match strategy.kind {
 			.literal {
 				lits.add(usize(i), strategy.value)
@@ -910,7 +935,7 @@ pub fn GlobSet.new(globs &[]Glob) !GlobSet {
 		strats << regexes.regex_set()!
 	}
 	return GlobSet{
-		len:    usize(globs.len)
+		len_:   usize(globs.len)
 		strats: strats
 	}
 }

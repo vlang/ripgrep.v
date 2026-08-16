@@ -17,7 +17,11 @@ mut:
 
 /// Return a new path printer builder with a default configuration.
 pub fn PathPrinterBuilder.new() PathPrinterBuilder {
-	return PathPrinterBuilder{}
+	return PathPrinterBuilder{
+		config: PathConfig{
+			hyperlink: HyperlinkConfig.default()
+		}
+	}
 }
 
 /// Create a new path printer with the current configuration that writes
@@ -118,23 +122,23 @@ mut:
 }
 
 /// Write the given path to the underlying writer.
-pub fn (mut printer PathPrinter[W]) write[^p](path &^p string) ! {
+pub fn (mut pp PathPrinter[W]) write[^p](path &^p string) ! {
 	$if W is WriteColor {
-		mut ppath := PrinterPath.new(path).with_separator(printer.config.separator)
+		mut ppath := PrinterPath.new(path).with_separator(pp.config.separator)
 		defer {
 			ppath.free()
 		}
 		bytes := ppath.as_bytes()
-		if !printer.wtr.supports_color() {
-			printer.wtr.write(bytes)!
+		if !pp.wtr.supports_color() {
+			pp.wtr.write(bytes)!
 		} else {
-			status := printer.start_hyperlink(ppath)!
-			printer.wtr.set_color(printer.config.colors.path())!
-			printer.wtr.write(bytes)!
-			printer.wtr.reset()!
-			printer.interpolator.finish(status, mut printer.wtr)!
+			status := pp.start_hyperlink(ppath)!
+			pp.wtr.set_color(pp.config.colors.path())!
+			pp.wtr.write(bytes)!
+			pp.wtr.reset()!
+			pp.interpolator.finish(status, mut pp.wtr)!
 		}
-		printer.wtr.write([printer.config.terminator])!
+		pp.wtr.write([pp.config.terminator])!
 	} $else {
 		_ = path
 		return error('PathPrinter requires a WriteColor implementation')
@@ -142,18 +146,18 @@ pub fn (mut printer PathPrinter[W]) write[^p](path &^p string) ! {
 }
 
 /// Flush the underlying writer.
-pub fn (mut printer PathPrinter[W]) flush() ! {
+pub fn (mut pp PathPrinter[W]) flush() ! {
 	$if W is WriteColor {
-		printer.wtr.flush()!
+		pp.wtr.flush()!
 	}
 }
 
 /// Starts a hyperlink span when applicable.
-fn (mut printer PathPrinter[W]) start_hyperlink[^p](mut path PrinterPath[^p]) !InterpolatorStatus {
+fn (mut pp PathPrinter[W]) start_hyperlink[^p](mut path PrinterPath[^p]) !InterpolatorStatus {
 	$if W is WriteColor {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)
-		return printer.interpolator.begin(&values, mut printer.wtr)
+		return pp.interpolator.begin(&values, mut pp.wtr)
 	} $else {
 		_ = path
 		return InterpolatorStatus.inactive()

@@ -10,7 +10,7 @@ pub fn generate_complete_fish() string {
 	mut out := ''
 	out += $embed_file('complete/prelude.fish').to_string()
 	out += '\n'
-	for flag in flags {
+	for flag in flag_defs {
 		short := if short_byte := flag.name_short() {
 			'-s ${short_byte.ascii_str()}'
 		} else {

@@ -59,7 +59,7 @@ pub fn StandardBuilder.new() StandardBuilder {
 	return StandardBuilder{
 		config: StandardConfig{
 			colors:                  ColorSpecs{}
-			hyperlink:               HyperlinkConfig{}
+			hyperlink:               HyperlinkConfig.default()
 			stats:                   false
 			heading:                 false
 			path:                    true
@@ -100,7 +100,7 @@ pub fn StandardBuilder.new() StandardBuilder {
 /// As a convenience, callers may use `build_no_color` to automatically
 /// select the `termcolor::NoColor` wrapper to avoid needing to import
 /// from `termcolor` explicitly.
-pub fn (builder StandardBuilder) build[W](wtr W) Standard[W] {
+pub fn (builder &StandardBuilder) build[W](wtr W) Standard[W] {
 	return Standard[W]{
 		config:  builder.config.clone()
 		wtr:     CounterWriter.new(wtr)
@@ -113,7 +113,7 @@ pub fn (builder StandardBuilder) build[W](wtr W) Standard[W] {
 ///
 /// This is a convenience routine for
 /// `StandardBuilder::build(termcolor::NoColor::new(wtr))`.
-pub fn (builder StandardBuilder) build_no_color[W](wtr W) Standard[NoColor[W]] {
+pub fn (builder &StandardBuilder) build_no_color[W](wtr W) Standard[NoColor[W]] {
 	return builder.build(NoColor.new(wtr))
 }
 
@@ -586,10 +586,10 @@ fn (mut sink StandardSink[^p, ^s, W]) drop[^p, ^s]() {
 	sink.matcher.drop()
 	sink.replacer.free()
 	sink.interpolator.free()
-	if mut path := sink.path {
-		path.free()
-		sink.path = ?PrinterPath(none)
-	}
+	// Assigning `none` auto-drops the `PrinterPath` (freeing its bytes exactly
+	// once). Unwrapping into a shallow copy and calling `.free()` first would
+	// double-free the shared byte buffer.
+	sink.path = ?PrinterPath(none)
 }
 
 /// Release resources owned by this sink once its search is complete.
@@ -613,7 +613,7 @@ pub fn (sink &StandardSink[^p, ^s, W]) has_match[^p, ^s]() bool {
 ///
 /// This is unaffected by the result of searches before the previous
 /// search on this sink.
-pub fn (sink StandardSink[^p, ^s, W]) match_count[^p, ^s]() u64 {
+pub fn (sink &StandardSink[^p, ^s, W]) match_count[^p, ^s]() u64 {
 	return sink.match_count
 }
 
@@ -627,7 +627,7 @@ pub fn (sink StandardSink[^p, ^s, W]) match_count[^p, ^s]() u64 {
 /// search. e.g., If the search prior to the previous search found binary
 /// data but the previous search found no binary data, then this will
 /// return `None`.
-pub fn (sink StandardSink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
+pub fn (sink &StandardSink[^p, ^s, W]) binary_byte_offset[^p, ^s]() ?u64 {
 	return sink.binary_byte_offset
 }
 
@@ -646,7 +646,7 @@ pub fn (sink &^a StandardSink[^p, ^s, W]) stats[^a, ^p, ^s]() ?&^a Stats {
 /// Execute the matcher over the given bytes and record the match
 /// locations if the current configuration demands match granularity.
 fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
-	sink.standard.matches = []matcher.Match{}
+	sink.standard.matches.clear()
 	if !sink.needs_match_granularity {
 		return
 	}
@@ -657,20 +657,22 @@ fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher
 	// the extent that it's easy to ensure that we never do more than
 	// one search to find the matches (well, for replacements, we do one
 	// additional search to perform the actual replacement).
-	mut matches := []matcher.Match{}
-	find_iter_at_in_context(searcher_, sink.matcher, bytes, range, fn [range, mut matches] (m matcher.Match) bool {
+	// V closures capture by value, so a `[mut matches]` capture would append to a
+	// private copy and lose the results. Mutate the accumulator through a pointer
+	// so the matches persist out of the callback.
+	matches_ptr := &sink.standard.matches
+	find_iter_at_in_context(searcher_, sink.matcher, bytes, range, fn [range, matches_ptr] (m matcher.Match) bool {
 		s := m.start() - range.start()
 		e := m.end() - range.start()
-		matches << match_new(s, e)
+		unsafe { (*matches_ptr) << match_new(s, e) }
 		return true
 	})!
-	if matches.len > 0 {
-		last := matches[matches.len - 1]
+	if sink.standard.matches.len > 0 {
+		last := sink.standard.matches[sink.standard.matches.len - 1]
 		if last.is_empty() && last.start() >= range.end() {
-			matches.delete(matches.len - 1)
+			sink.standard.matches.delete(sink.standard.matches.len - 1)
 		}
 	}
-	sink.standard.matches = matches
 }
 
 /// If the configuration specifies a replacement, then this executes the
@@ -921,9 +923,9 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_line[^a, ^p, ^s]() ! {
 		count++
 		imp.trim_ascii_prefix(bytes, mut line)
 		if imp.exceeds_max_columns(bytes[line.start()..line.end()]) {
-			imp.write_exceeded_line(bytes, line, matches, mut midx)!
+			imp.write_exceeded_line(bytes, line, matches, &midx)!
 		} else {
-			imp.write_colored_matches(bytes, line, matches, mut midx)!
+			imp.write_colored_matches(bytes, line, matches, &midx)!
 			imp.write_line_term()!
 		}
 	}
@@ -961,7 +963,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_line_only_matching[^a, 
 				this_line := line.with_end(upto)
 				line = line.with_start(upto)
 				if imp.exceeds_max_columns(bytes[this_line.start()..this_line.end()]) {
-					imp.write_exceeded_line(bytes, this_line, matches, mut midx)!
+					imp.write_exceeded_line(bytes, this_line, matches, &midx)!
 				} else {
 					imp.write_spec(spec, bytes[this_line.start()..this_line.end()])!
 					imp.write_line_term()!
@@ -996,7 +998,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_per_match[^a, ^p, ^s]()
 			imp.trim_ascii_prefix(bytes, mut line)
 			if imp.exceeds_max_columns(bytes[line.start()..line.end()]) {
 				mut zero := usize(0)
-				imp.write_exceeded_line(bytes, line, [m], mut zero)!
+				imp.write_exceeded_line(bytes, line, [m], &zero)!
 				continue
 			}
 			for !line.is_empty() {
@@ -1101,7 +1103,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_line[^a, ^p, ^s](line []u8) ! {
 	if imp.exceeds_max_columns(trimmed) {
 		full_range := matcher.Match.new(0, trimmed.len)
 		mut zero := usize(0)
-		imp.write_exceeded_line(trimmed, full_range, imp.sunk.matches(), mut zero)!
+		imp.write_exceeded_line(trimmed, full_range, imp.sunk.matches(), &zero)!
 	} else {
 		imp.write(trimmed)!
 		if !imp.has_line_terminator(trimmed) {
@@ -1121,10 +1123,10 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_line[^a, ^p, ^s](matches 
 	imp.trim_ascii_prefix(bytes, mut line)
 	if imp.exceeds_max_columns(bytes) {
 		mut zero := usize(0)
-		imp.write_exceeded_line(bytes, line, matches, mut zero)!
+		imp.write_exceeded_line(bytes, line, matches, &zero)!
 	} else {
 		mut zero := usize(0)
-		imp.write_colored_matches(bytes, line, matches, mut zero)!
+		imp.write_colored_matches(bytes, line, matches, &zero)!
 		imp.write_line_term()!
 	}
 }
@@ -1135,7 +1137,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_line[^a, ^p, ^s](matches 
 /// This accounts for trimming any whitespace prefix and will *never* print
 /// a line terminator. If a match exceeds the range specified by `line`,
 /// then only the part of the match within `line` (if any) is printed.
-fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, match_index &usize) ! {
 	imp.trim_line_terminator(bytes, mut line)
 	if matches.len == 0 {
 		imp.write(bytes[line.start()..line.end()])!
@@ -1146,7 +1148,9 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes
 		idx := *match_index
 		if matches[idx].end() <= line.start() {
 			if idx + 1 < matches.len {
-				match_index++
+				unsafe {
+					(*match_index)++
+				}
 				continue
 			}
 			imp.end_color_match()!
@@ -1172,13 +1176,13 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes
 	imp.end_line_highlight()!
 }
 
-fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_exceeded_line[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, mut match_index usize) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_exceeded_line[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, match_index &usize) ! {
 	if imp.config().max_columns_preview {
 		original_end := line.end()
 		limit := usize(imp.config().max_columns or { 0 })
 		preview_end := grapheme_preview_end(bytes, line, limit)
 		line = line.with_end(preview_end)
-		imp.write_colored_matches(bytes, line, matches, mut match_index)!
+		imp.write_colored_matches(bytes, line, matches, match_index)!
 		if matches.len == 0 {
 			imp.write(' [... omitted end of long line]'.bytes())!
 		} else {
@@ -1298,7 +1302,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_line_term[^a, ^p, ^s]() ! {
 	imp.write(imp.searcher.line_terminator().as_bytes())!
 }
 
-fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_spec[^a, ^p, ^s](spec ColorSpec, buf []u8) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_spec[^a, ^p, ^s](spec &ColorSpec, buf []u8) ! {
 	imp.sink.standard.wtr.set_color(spec)!
 	imp.write(buf)!
 	imp.sink.standard.wtr.reset()!

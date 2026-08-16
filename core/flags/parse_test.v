@@ -33,7 +33,8 @@ fn test_ngrams_pads_short_names() {
 }
 
 fn test_find_similar_names_includes_close_flags() {
-	similar := find_similar_names('maxdepth')
+	unrecognized := 'maxdepth'.to_owned()
+	similar := find_similar_names(&unrecognized)
 	assert 'maxdepth' in similar
 	assert 'max-depth' in similar
 }
@@ -145,7 +146,7 @@ fn test_parse_from_raw_reads_file_patterns() {
 	assert low.patterns[0].value == path
 	assert low.positional == ['sherlock']
 
-	mut step_low := low
+	mut step_low := parse_low_raw(['-f', path, 'sherlock'])!
 	mut state := State.new()!
 	step_patterns := Patterns.from_low_args(mut state, mut step_low)!
 	assert step_patterns.patterns == ['Sherlock', 'Holmes']
@@ -157,8 +158,12 @@ fn test_parse_from_raw_reads_file_patterns() {
 	_ = globs(&state, &step_low)!
 	_ = preprocessor_globs(&state, &step_low)!
 
-	mut high_low := low
+	mut high_low := parse_low_raw(['-f', path, 'sherlock'])!
 	hi := HiArgs.from_low_args(mut high_low)!
 	assert hi.patterns.patterns == ['Sherlock', 'Holmes']
 	assert hi.paths.paths == ['sherlock']
+}
+
+fn test_parse_usize_accepts_platform_maximum() {
+	assert parse_usize('18446744073709551615')! == ~usize(0)
 }

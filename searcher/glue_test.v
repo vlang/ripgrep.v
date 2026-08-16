@@ -97,11 +97,11 @@ fn (mut m RegexMatcher) every_line_is_candidate(yes bool) &RegexMatcher {
 	return m
 }
 
-fn (m &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+fn (m &RegexMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	return m.regex.find_at(haystack, at)!
 }
 
-fn (m &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+fn (m &RegexMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
 	return m.regex.shortest_match_at(haystack, at)!
 }
 
@@ -121,7 +121,7 @@ fn (m &RegexMatcher) capture_index(name string) ?usize {
 	return none
 }
 
-fn (m &RegexMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m &RegexMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	_ = haystack
 	_ = at
@@ -138,7 +138,7 @@ fn (m &RegexMatcher) line_terminator() ?matcher.LineTerminator {
 	return m.line_term
 }
 
-fn (m &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+fn (m &RegexMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind {
 	if m.every_line_is_candidate {
 		line_term := m.line_term or { panic('line terminator required') }
 		if haystack.len == 0 {
@@ -263,6 +263,7 @@ fn (mut sink KitchenSink) finish(searcher_ &Searcher, sink_finish &SinkFinish) !
 /// The tester works by assuming you want to test all pertinent code paths.
 /// These can be trimmed down as necessary via the various builder methods.
 struct SearcherTester {
+	mut:
 	haystack                        string
 	pattern                         string
 	filter                          ?regex_meta.Regex
@@ -271,7 +272,6 @@ struct SearcherTester {
 	expected_with_line_number       ?string
 	expected_slice_no_line_number   ?string
 	expected_slice_with_line_number ?string
-mut:
 	by_line         bool
 	multi_line      bool
 	invert_match    bool
@@ -321,7 +321,7 @@ fn (tester &SearcherTester) test() {
 		for config in configs {
 			labels := ['reader-${config.label}', 'slice-${config.label}']
 			for label in labels {
-				if tester.include(label) {
+				if tester.include(label.clone()) {
 					println(label)
 				} else {
 					println('${label} (ignored)')
@@ -695,7 +695,7 @@ fn (tester &SearcherTester) configs() []TesterConfig {
 	return configs
 }
 
-struct TesterConfig {
+struct TesterConfig implements IClone {
 	label           string
 	expected_reader string
 	expected_slice  string
@@ -1860,8 +1860,11 @@ fn test_glue_regression_2260() {
 	mut searcher_ := builder.build()
 
 	mut matched := false
-	mut sink := UTF8.new(fn [mut matched] (_ u64, _ string) !bool {
-		matched = true
+	matched_ptr := &matched
+	mut sink := UTF8.new(fn [matched_ptr] (_ u64, _ string) !bool {
+		unsafe {
+			*matched_ptr = true
+		}
 		return true
 	})
 	searcher_.search_slice(matcher_ref, 'GATC\n'.bytes(), &sink)!

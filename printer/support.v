@@ -59,14 +59,14 @@ fn (mut pm PrinterMatcher) drop() {
 	}
 }
 
-fn (pm &PrinterMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+fn (pm &PrinterMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	return match pm.kind {
 		.rust_regex { pm.regex.find_at(haystack, at)! }
 		.pcre2 { pm.pcre2.find_at(haystack, at)! }
 	}
 }
 
-fn (pm &PrinterMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+fn (pm &PrinterMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
 	return match pm.kind {
 		.rust_regex { pm.regex.shortest_match_at(haystack, at)! }
 		.pcre2 { pm.pcre2.shortest_match_at(haystack, at)! }
@@ -94,12 +94,12 @@ fn (pm &PrinterMatcher) capture_index(name string) ?usize {
 	}
 }
 
-fn (pm &PrinterMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (pm &PrinterMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = pm
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
-fn (pm &PrinterMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+fn (pm &PrinterMatcher) capture_groups_at(haystack &[]u8, at usize) !(matcher.FallibleMatch, []string) {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_groups_at(haystack, at)! }
 		.pcre2 { pm.pcre2.capture_groups_at(haystack, at)! }
@@ -120,7 +120,7 @@ fn (pm &PrinterMatcher) line_terminator() ?matcher.LineTerminator {
 	}
 }
 
-fn (pm &PrinterMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+fn (pm &PrinterMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind {
 	return match pm.kind {
 		.rust_regex { pm.regex.find_candidate_line(haystack)! }
 		.pcre2 { pm.pcre2.find_candidate_line(haystack)! }
@@ -165,13 +165,8 @@ mut:
 }
 
 fn (mut pp PrinterPath[^a]) free[^a]() {
-	unsafe { pp.bytes.free() }
-	if pp.has_rendered_path {
-		unsafe { pp.rendered_path.free() }
-	}
-	if pp.has_hyperlink {
-		unsafe { pp.hyperlink.bytes.free() }
-	}
+	// Assigning defaults auto-drops (frees) each owned field exactly once under
+	// v3 ownership; a manual `.free()` first would double-free.
 	pp.bytes = []u8{}
 	pp.rendered_path = ''
 	pp.has_rendered_path = false
@@ -192,24 +187,25 @@ pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
 ///
 /// When set, `PrinterPath::as_bytes` will return the path provided but
 /// with its separator replaced with the one given.
-pub fn (mut pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
+pub fn (pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
 	sep_value := sep or { return pp }
-	for i, byte in pp.bytes {
+	mut result := pp.clone()
+	for i, byte in result.bytes {
 		$if windows {
 			if byte == `/` || byte == `\\` {
-				pp.bytes[i] = sep_value
+				result.bytes[i] = sep_value
 			}
 		} $else {
 			if byte == `/` {
-				pp.bytes[i] = sep_value
+				result.bytes[i] = sep_value
 			}
 		}
 	}
 	$if unix {
-		pp.rendered_path = pp.bytes.bytestr()
-		pp.has_rendered_path = true
+		result.rendered_path = result.bytes.bytestr()
+		result.has_rendered_path = true
 	}
-	return pp
+	return result
 }
 
 /// Return the raw bytes for this path.
@@ -442,10 +438,8 @@ mut:
 }
 
 fn (mut replacer Replacer) free() {
-	unsafe {
-		replacer.dst.free()
-		replacer.matches.free()
-	}
+	// Assigning empty arrays auto-drops (frees) the buffers exactly once under
+	// v3 ownership; a manual `.free()` first would double-free.
 	replacer.dst = []u8{}
 	replacer.matches = []matcher.Match{}
 	replacer.active = false
@@ -494,8 +488,8 @@ pub fn (replacer &^a Replacer) replacement[^a]() ?Replacement[^a] {
 		return none
 	}
 	return Replacement[^a]{
-		bytes:   replacer.dst
-		matches: replacer.matches
+		bytes:   replacer.dst[0..replacer.dst.len]
+		matches: replacer.matches[0..replacer.matches.len]
 	}
 }
 
@@ -548,19 +542,22 @@ pub fn Sunk.empty[^a]() Sunk[^a] {
 pub fn Sunk.from_sink_match[^a, ^b](sunk &^a searcher.SinkMatch[^b], original_matches &^a []matcher.Match, replacement ?Replacement[^a]) Sunk[^a] {
 	if repl := replacement {
 		return Sunk[^a]{
-			bytes_:                repl.bytes
+			bytes_:                repl.bytes[0..repl.bytes.len]
 			absolute_byte_offset_: sunk.absolute_byte_offset()
 			line_number_:          sunk.line_number()
-			matches_:              repl.matches
-			original_matches_:     *original_matches
+			matches_:              repl.matches[0..repl.matches.len]
+			original_matches_:     unsafe {
+				(*original_matches)[0..original_matches.len]
+			}
 		}
 	}
+	bytes := sunk.bytes()
 	return Sunk[^a]{
-		bytes_:                sunk.bytes()
+		bytes_:                bytes[0..bytes.len]
 		absolute_byte_offset_: sunk.absolute_byte_offset()
 		line_number_:          sunk.line_number()
-		matches_:              *original_matches
-		original_matches_:     *original_matches
+		matches_:              unsafe { (*original_matches)[0..original_matches.len] }
+		original_matches_:     unsafe { (*original_matches)[0..original_matches.len] }
 	}
 }
 
@@ -568,21 +565,24 @@ pub fn Sunk.from_sink_match[^a, ^b](sunk &^a searcher.SinkMatch[^b], original_ma
 pub fn Sunk.from_sink_context[^a, ^b](sunk &^a searcher.SinkContext[^b], original_matches &^a []matcher.Match, replacement ?Replacement[^a]) Sunk[^a] {
 	if repl := replacement {
 		return Sunk[^a]{
-			bytes_:                repl.bytes
+			bytes_:                repl.bytes[0..repl.bytes.len]
 			absolute_byte_offset_: sunk.absolute_byte_offset()
 			line_number_:          sunk.line_number()
 			context_kind_:         sunk.kind()
-			matches_:              repl.matches
-			original_matches_:     *original_matches
+			matches_:              repl.matches[0..repl.matches.len]
+			original_matches_:     unsafe {
+				(*original_matches)[0..original_matches.len]
+			}
 		}
 	}
+	bytes := sunk.bytes()
 	return Sunk[^a]{
-		bytes_:                sunk.bytes()
+		bytes_:                bytes[0..bytes.len]
 		absolute_byte_offset_: sunk.absolute_byte_offset()
 		line_number_:          sunk.line_number()
 		context_kind_:         sunk.kind()
-		matches_:              *original_matches
-		original_matches_:     *original_matches
+		matches_:              unsafe { (*original_matches)[0..original_matches.len] }
+		original_matches_:     unsafe { (*original_matches)[0..original_matches.len] }
 	}
 }
 

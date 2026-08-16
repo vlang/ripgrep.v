@@ -1,6 +1,9 @@
 module cli
 
+import log
 import os
+
+fn C.GetFileType(voidptr) u32
 
 /*
 This crate provides common routines used in command line applications, with a
@@ -148,12 +151,31 @@ pub fn is_readable_stdin() bool {
 		return false
 	}
 	$if unix {
-		stat := os.stat('/dev/stdin') or { return false }
+		stat := os.stat('/dev/stdin') or {
+			log.debug('for heuristic stdin detection on Unix, could not get file metadata for stdin (thus assuming stdin is not readable): ${err.msg()}')
+			return false
+		}
 		file_type := stat.get_filetype()
-		return file_type == .regular || file_type == .fifo || file_type == .socket
+		is_file := file_type == .regular
+		is_fifo := file_type == .fifo
+		is_socket := file_type == .socket
+		is_readable := is_file || is_fifo || is_socket
+		log.debug('for heuristic stdin detection on Unix, found that is_file=${is_file}, is_fifo=${is_fifo} and is_socket=${is_socket}, and thus concluded that is_stdin_readable=${is_readable}')
+		return is_readable
 	} $else $if windows {
-		return os.is_atty(0) <= 0
+		stdin_handle := C.GetStdHandle(C.STD_INPUT_HANDLE)
+		if isnil(stdin_handle) || stdin_handle == C.INVALID_HANDLE_VALUE {
+			log.debug('for heuristic stdin detection on Windows, could not get file type of stdin (thus assuming stdin is not readable)')
+			return false
+		}
+		file_type := C.GetFileType(stdin_handle)
+		is_disk := file_type == u32(1)
+		is_pipe := file_type == u32(3)
+		is_readable := is_disk || is_pipe
+		log.debug('for heuristic stdin detection on Windows, found that is_disk=${is_disk} and is_pipe=${is_pipe}, and thus concluded that is_stdin_readable=${is_readable}')
+		return is_readable
 	} $else {
+		log.debug('on non-{Unix,Windows}, assuming stdin is not readable')
 		return false
 	}
 }

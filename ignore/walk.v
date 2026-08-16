@@ -33,6 +33,7 @@ fn followed_path_info(path string) !os.Stat {
 struct StdinEntry {}
 
 struct DirEntryRaw implements IClone {
+	mut:
 	// V strings are length-delimited byte strings. On Unix this preserves the
 	// same arbitrary non-NUL path bytes represented by Rust's `OsStr`.
 	path              string
@@ -40,7 +41,7 @@ struct DirEntryRaw implements IClone {
 	ty                os.FileType
 	follow_link       bool
 	depth             usize
-	metadata          os.Stat
+	metadata_value    os.Stat
 	ino_value         u64
 }
 
@@ -51,16 +52,25 @@ fn (raw &DirEntryRaw) clone() DirEntryRaw {
 		ty:                raw.ty
 		follow_link:       raw.follow_link
 		depth:             raw.depth
-		metadata:          raw.metadata
+		metadata_value:    raw.metadata_value
 		ino_value:         raw.ino_value
 	}
 }
 
-struct DirChild {
+struct DirChild implements IClone {
 	name     string
 	ty       os.FileType
 	has_type bool
 	ino      u64
+}
+
+fn (child &DirChild) clone() DirChild {
+	return DirChild{
+		name: child.name.clone()
+		ty: child.ty
+		has_type: child.has_type
+		ino: child.ino
+	}
 }
 
 /// A directory entry with a possible error attached.
@@ -103,35 +113,23 @@ pub fn (d &^a DirEntry) path[^a]() &^a string {
 
 // V-specific: releases storage owned by a completed walk result.
 pub fn (mut d DirEntry) free() {
+	// Assigning defaults makes v3 ownership auto-drop (free) the current owned
+	// value exactly once. Do NOT also call `.free()` manually first: the Rust
+	// manual-free idiom double-frees because the assignment already drops.
+	d.err = ?IgnoreError(none)
 	if !d.stdin_value {
-		unsafe {
-			d.raw.path.free()
-			d.raw.file_name_value.free()
-		}
+		d.raw.path = ''
+		d.raw.file_name_value = ''
 	}
-	if mut err := d.err {
-		err.free()
-		d.err = ?IgnoreError(none)
-	}
-	d.raw.path = ''
-	d.raw.file_name_value = ''
 }
 
 /// The full path that this entry represents.
 /// Analogous to [`DirEntry::path`], but moves ownership of the path.
-pub fn (mut d DirEntry) into_path() string {
+pub fn (d DirEntry) into_path() string {
 	if d.stdin_value {
 		return stdin_entry_name.to_owned()
 	}
-	path := d.raw.path
-	d.raw.path = ''
-	unsafe { d.raw.file_name_value.free() }
-	d.raw.file_name_value = ''
-	if mut err := d.err {
-		err.free()
-		d.err = ?IgnoreError(none)
-	}
-	return path
+	return d.raw.path
 }
 
 /// Whether this entry corresponds to a symbolic link or not.
@@ -243,7 +241,7 @@ fn (raw &DirEntryRaw) path_is_symlink() bool {
 fn (raw &DirEntryRaw) metadata() !os.Stat {
 	$if windows {
 		if !raw.follow_link {
-			return raw.metadata
+			return raw.metadata_value
 		}
 	}
 	return if raw.follow_link {
@@ -279,7 +277,7 @@ fn DirEntryRaw.from_path(depth usize, path string, link bool) !DirEntryRaw {
 		ty:                ty
 		follow_link:       link
 		depth:             depth
-		metadata:          info
+		metadata_value:    info
 		ino_value:         info.inode
 	}
 }
@@ -294,7 +292,7 @@ fn DirEntryRaw.from_child(depth usize, parent_path string, name string) !DirEntr
 		ty:              ty
 		follow_link:     false
 		depth:           depth
-		metadata:        info
+		metadata_value:  info
 		ino_value:       info.inode
 	}
 }
@@ -307,7 +305,7 @@ fn DirEntryRaw.from_child_known(depth usize, parent_path string, name string, ty
 		ty:                ty
 		follow_link:       false
 		depth:             depth
-		metadata:          os.Stat{}
+		metadata_value:    os.Stat{}
 		ino_value:         ino
 	}
 }
@@ -330,11 +328,19 @@ fn join_child_path(parent_path string, name string) string {
 // The original Rust iterator yields `Result<DirEntry, Error>`. This port keeps
 // the same shape explicitly in a struct so it can be used from both the
 // sequential and visitor-style APIs.
-pub struct WalkResult {
+pub struct WalkResult implements IClone {
 pub:
 	is_error bool
 	entry    DirEntry
 	err      IgnoreError
+}
+
+pub fn (result &WalkResult) clone() WalkResult {
+	return if result.is_error {
+		walk_result_from_error(result.err.clone())
+	} else {
+		walk_result_from_entry(result.entry.clone())
+	}
 }
 
 // V-specific: releases a result after its visitor has returned.
@@ -429,12 +435,21 @@ fn (mut visitor NoopParallelVisitor) free() {
 }
 
 // Handle used for path equality checks, for example when skipping stdout.
-struct Handle {
+struct Handle implements IClone {
 pub:
 	path      string
 	dev       u64
 	ino       u64
 	is_stdout bool
+}
+
+fn (handle &Handle) clone() Handle {
+	return Handle{
+		path: handle.path.clone()
+		dev: handle.dev
+		ino: handle.ino
+		is_stdout: handle.is_stdout
+	}
 }
 
 fn Handle.from_path(path string) !Handle {
@@ -447,7 +462,7 @@ fn Handle.from_path(path string) !Handle {
 	}
 }
 
-fn (left Handle) same_file(right Handle) bool {
+fn (left &Handle) same_file(right &Handle) bool {
 	return left.dev == right.dev && left.ino == right.ino
 }
 
@@ -529,13 +544,22 @@ pub struct WalkBuilder implements IClone {
 mut:
 	paths            []string
 	ig_builder       IgnoreBuilder
-	max_depth        ?usize
-	min_depth        ?usize
-	max_filesize     ?u64
-	follow_links     bool
-	same_file_system bool
-	threads          usize
-	skip             ?Handle
+	// V-specific: the ownership frontend cannot inspect an optional field on a
+	// borrowed builder without consuming it, so these three `Option` fields use
+	// an explicit presence bit until optional borrowed-field reads are supported.
+	max_depth_value        usize
+	has_max_depth          bool
+	min_depth_value        usize
+	has_min_depth          bool
+	max_filesize_value     u64
+	has_max_filesize       bool
+	follow_links_value     bool
+	same_file_system_value bool
+	threads_value          usize
+	// V-specific: same optional borrowed-field limitation as the numeric
+	// options above.
+	skip_value       Handle
+	has_skip         bool
 	// V-specific: Rust stores callback slots as `Option<Fn>`. The port keeps
 	// function pointers with explicit presence bits because optional function
 	// fields are not reliable in the current ownership frontend.
@@ -586,16 +610,16 @@ pub fn (builder &WalkBuilder) build() Walk {
 	}
 	return Walk{
 		paths:            builder.paths.clone()
-		ig_root:          ig_root
+		ig_root:          ig_root.clone()
 		ig:               ig_root
-		max_filesize:     builder.max_filesize
-		skip:             builder.skip
+		max_filesize:     if builder.has_max_filesize { builder.max_filesize_value } else { none }
+		skip:             if builder.has_skip { builder.skip_value.clone() } else { none }
 		filter:           builder.filter
 		has_filter:       builder.has_filter
-		min_depth:        builder.min_depth
-		max_depth:        builder.max_depth
-		follow_links:     builder.follow_links
-		same_file_system: builder.same_file_system
+		min_depth:        if builder.has_min_depth { builder.min_depth_value } else { none }
+		max_depth:        if builder.has_max_depth { builder.max_depth_value } else { none }
+		follow_links:     builder.follow_links_value
+		same_file_system: builder.same_file_system_value
 		has_sort_by_name: builder.has_sort_by_name
 		sort_by_name:     builder.sort_by_name
 		has_sort_by_path: builder.has_sort_by_path
@@ -617,13 +641,13 @@ pub fn (builder &WalkBuilder) build_parallel() WalkParallel {
 	return WalkParallel{
 		paths:            builder.paths.clone()
 		ig_root:          ig_root
-		max_filesize:     builder.max_filesize
-		max_depth:        builder.max_depth
-		min_depth:        builder.min_depth
-		follow_links:     builder.follow_links
-		same_file_system: builder.same_file_system
-		threads:          builder.threads
-		skip:             builder.skip
+		max_filesize:     if builder.has_max_filesize { builder.max_filesize_value } else { none }
+		max_depth:        if builder.has_max_depth { builder.max_depth_value } else { none }
+		min_depth:        if builder.has_min_depth { builder.min_depth_value } else { none }
+		follow_links:     builder.follow_links_value
+		same_file_system: builder.same_file_system_value
+		threads:          builder.threads_value
+		skip:             if builder.has_skip { builder.skip_value.clone() } else { none }
 		filter:           builder.filter
 		has_filter:       builder.has_filter
 	}
@@ -643,13 +667,15 @@ pub fn (mut builder WalkBuilder) add(path string) &WalkBuilder {
 ///
 /// The default, `None`, imposes no depth restriction.
 pub fn (mut builder WalkBuilder) max_depth(depth ?usize) &WalkBuilder {
-	builder.max_depth = depth
-	if min_depth := builder.min_depth {
-		if max_depth := builder.max_depth {
-			if max_depth < min_depth {
-				builder.max_depth = min_depth
-			}
-		}
+	if value := depth {
+		builder.max_depth_value = value
+		builder.has_max_depth = true
+	} else {
+		builder.has_max_depth = false
+	}
+	if builder.has_min_depth && builder.has_max_depth
+		&& builder.max_depth_value < builder.min_depth_value {
+		builder.max_depth_value = builder.min_depth_value
 	}
 	return builder
 }
@@ -658,26 +684,33 @@ pub fn (mut builder WalkBuilder) max_depth(depth ?usize) &WalkBuilder {
 ///
 /// The default, `None`, imposes no minimum depth restriction.
 pub fn (mut builder WalkBuilder) min_depth(depth ?usize) &WalkBuilder {
-	builder.min_depth = depth
-	if max_depth := builder.max_depth {
-		if min_depth := builder.min_depth {
-			if min_depth > max_depth {
-				builder.min_depth = max_depth
-			}
-		}
+	if value := depth {
+		builder.min_depth_value = value
+		builder.has_min_depth = true
+	} else {
+		builder.has_min_depth = false
+	}
+	if builder.has_max_depth && builder.has_min_depth
+		&& builder.min_depth_value > builder.max_depth_value {
+		builder.min_depth_value = builder.max_depth_value
 	}
 	return builder
 }
 
 /// Whether to follow symbolic links or not.
 pub fn (mut builder WalkBuilder) follow_links(yes bool) &WalkBuilder {
-	builder.follow_links = yes
+	builder.follow_links_value = yes
 	return builder
 }
 
 /// Whether to ignore files above the specified limit.
 pub fn (mut builder WalkBuilder) max_filesize(filesize ?u64) &WalkBuilder {
-	builder.max_filesize = filesize
+	if value := filesize {
+		builder.max_filesize_value = value
+		builder.has_max_filesize = true
+	} else {
+		builder.has_max_filesize = false
+	}
 	return builder
 }
 
@@ -688,7 +721,7 @@ pub fn (mut builder WalkBuilder) max_filesize(filesize ?u64) &WalkBuilder {
 /// The default setting is `0`, which chooses the number of threads
 /// automatically using heuristics.
 pub fn (mut builder WalkBuilder) threads(n usize) &WalkBuilder {
-	builder.threads = n
+	builder.threads_value = n
 	return builder
 }
 
@@ -913,7 +946,7 @@ pub fn (mut builder WalkBuilder) sort_by_file_name(cmp NameComparator) &WalkBuil
 /// option is used on an unsupported platform, then directory traversal
 /// will immediately return an error and will not yield any entries.
 pub fn (mut builder WalkBuilder) same_file_system(yes bool) &WalkBuilder {
-	builder.same_file_system = yes
+	builder.same_file_system_value = yes
 	return builder
 }
 
@@ -931,9 +964,10 @@ pub fn (mut builder WalkBuilder) same_file_system(yes bool) &WalkBuilder {
 pub fn (mut builder WalkBuilder) skip_stdout(yes bool) &WalkBuilder {
 	if yes {
 		has_handle, handle := stdout_handle()
-		builder.skip = if has_handle { handle } else { none }
+		builder.skip_value = handle.clone()
+		builder.has_skip = has_handle
 	} else {
-		builder.skip = none
+		builder.has_skip = false
 	}
 	return builder
 }
@@ -1022,7 +1056,8 @@ mut:
 	gitignore_matches []usize
 }
 
-struct WalkFrame {
+struct WalkFrame implements IClone {
+	mut:
 	parent_path     string
 	parent_depth    usize
 	ig              Ignore
@@ -1032,15 +1067,23 @@ struct WalkFrame {
 	has_root_device bool
 }
 
+fn (frame &WalkFrame) clone() WalkFrame {
+	return WalkFrame{
+		parent_path: frame.parent_path.clone()
+		parent_depth: frame.parent_depth
+		ig: frame.ig.clone()
+		children: frame.children.clone()
+		next_index: frame.next_index
+		root_device: frame.root_device
+		has_root_device: frame.has_root_device
+	}
+}
+
 fn (mut frame WalkFrame) free() {
-	for child in frame.children {
-		unsafe { child.name.free() }
-	}
-	unsafe {
-		frame.parent_path.free()
-		frame.children.free()
-	}
 	frame.ig.free_nodes()
+	// Assigning defaults auto-drops (frees) the owned path string and the
+	// children array (recursively freeing each child's `name`) exactly once.
+	// Manually freeing first would double-free.
 	frame.parent_path = ''
 	frame.children = []DirChild{}
 }
@@ -1090,12 +1133,17 @@ fn (mut walk Walk) add_root_path(path string) {
 
 fn (mut walk Walk) pop_pending() ?WalkResult {
 	if walk.pending_index >= walk.pending.len {
-		unsafe { walk.pending.free() }
+		// Assigning a fresh array auto-drops the old elements and frees the
+		// buffer exactly once under v3 ownership; a manual `.free()` first would
+		// free the buffer twice (and drop the already-freed elements).
 		walk.pending = []WalkResult{}
 		walk.pending_index = 0
 		return none
 	}
-	result := walk.pending[walk.pending_index]
+	// Clone: the returned result must own independent strings. A shallow copy
+	// would share `path`/`file_name_value` with the element still in
+	// `walk.pending`, and both would be dropped -> double-free.
+	result := walk.pending[walk.pending_index].clone()
 	walk.pending_index++
 	return result
 }
@@ -1113,7 +1161,7 @@ fn (mut walk Walk) enqueue_root_path(path string) {
 	mut dent := root
 	mut ig := walk.ig_root.clone()
 	if dent.is_dir() {
-		ig2, has_err, add_err := walk.ig_root.add_parents(dent.path())
+		ig2, has_err, add_err := walk.ig_root.add_parents(dent.path().clone())
 		ig.free_nodes()
 		ig = ig2
 		if has_err {
@@ -1122,27 +1170,27 @@ fn (mut walk Walk) enqueue_root_path(path string) {
 	}
 	mut root_device := u64(0)
 	if walk.same_file_system {
-		root_device = device_num(dent.path()) or {
-			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path())))
+		root_device = device_num(dent.path().clone()) or {
+			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path().clone())))
 			return
 		}
 	}
 	has_root_device := walk.same_file_system
-	walk.enqueue_entry(mut dent, ig, true, root_device, has_root_device)
+	walk.enqueue_entry(mut dent, mut ig, true, root_device, has_root_device)
 }
 
 fn (mut walk Walk) advance_stack() bool {
 	for walk.stack.len > 0 {
 		last := walk.stack.len - 1
-		mut frame := walk.stack[last]
+		mut frame := walk.stack[last].clone()
 		if frame.next_index >= frame.children.len {
 			walk.stack.delete(last)
 			frame.free()
 			continue
 		}
-		child_entry := frame.children[frame.next_index]
+		child_entry := frame.children[frame.next_index].clone()
 		frame.next_index++
-		walk.stack[last] = frame
+		walk.stack[last] = frame.clone()
 		walk.enqueue_child(frame, child_entry)
 		return true
 	}
@@ -1169,14 +1217,15 @@ fn (mut walk Walk) enqueue_child(frame WalkFrame, child_entry DirChild) {
 			return
 		}
 		if child_raw.ty == .directory {
-			if err := check_symlink_loop(frame.ig, child_raw.path.clone(), child_depth) {
+			if err := check_symlink_loop(&frame.ig, child_raw.path.clone(), child_depth) {
 				walk.push_result(walk_result_from_error(err))
 				return
 			}
 		}
 	}
-	mut child := DirEntry.new_raw(child_raw, none_ignore_error())
-	walk.enqueue_entry(mut child, frame.ig.clone(), false, frame.root_device, frame.has_root_device)
+	mut child := DirEntry.new_raw(child_raw.clone(), none_ignore_error())
+	mut child_ig := frame.ig.clone()
+	walk.enqueue_entry(mut child, mut child_ig, false, frame.root_device, frame.has_root_device)
 }
 
 fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool, root_device u64, has_root_device bool) {
@@ -1201,7 +1250,8 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 			}
 		}
 		if should_visit {
-			walk.push_result(walk_result_from_entry(dent))
+			walk.push_result(walk_result_from_entry(dent.clone()))
+			dent.free()
 		} else {
 			dent.free()
 		}
@@ -1222,13 +1272,13 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 
 	mut descend := true
 	if has_root_device {
-		descend = is_same_file_system(root_device, dent.path()) or {
-			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+		descend = is_same_file_system(root_device, dent.path().clone()) or {
+			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 			false
 		}
 	}
 
-	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path().clone())
 	defer {
 		child_ignore.free_nodes()
 	}
@@ -1248,8 +1298,8 @@ fn (mut walk Walk) enqueue_entry(mut dent DirEntry, mut ig Ignore, is_root bool,
 			return
 		}
 	}
-	children := walk.read_dir_children(dent.path()) or {
-		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+	children := walk.read_dir_children(dent.path().clone()) or {
+		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 		return
 	}
 	walk.stack << WalkFrame{
@@ -1280,7 +1330,7 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 	mut dent := root
 	mut ig := walk.ig_root.clone()
 	if dent.is_dir() {
-		ig2, has_err, add_err := walk.ig_root.add_parents(dent.path())
+		ig2, has_err, add_err := walk.ig_root.add_parents(dent.path().clone())
 		ig.free_nodes()
 		ig = ig2
 		if has_err {
@@ -1293,8 +1343,8 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 	}
 	mut root_device := u64(0)
 	if walk.same_file_system {
-		root_device = device_num(dent.path()) or {
-			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path())))
+		root_device = device_num(dent.path().clone()) or {
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path().clone())))
 			if state.is_quit() {
 				ig.free_nodes()
 				return .quit
@@ -1304,7 +1354,7 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 		}
 	}
 	has_root_device := walk.same_file_system
-	return walk.visit_traverse_entry(mut visitor, mut dent, ig, true, root_device, has_root_device)
+	return walk.visit_traverse_entry(mut visitor, mut dent, mut ig, true, root_device, has_root_device)
 }
 
 fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool, root_device u64, has_root_device bool) {
@@ -1327,7 +1377,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 			}
 		}
 		if should_visit {
-			walk.push_result(walk_result_from_entry(dent))
+			walk.push_result(walk_result_from_entry(dent.clone()))
 		}
 		return
 	}
@@ -1343,13 +1393,13 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 
 	mut descend := true
 	if has_root_device {
-		descend = is_same_file_system(root_device, dent.path()) or {
-			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+		descend = is_same_file_system(root_device, dent.path().clone()) or {
+			walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 			false
 		}
 	}
 
-	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path().clone())
 	defer {
 		child_ignore.free_nodes()
 	}
@@ -1359,7 +1409,7 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 		dent.err = none
 	}
 	if should_visit {
-		walk.push_result(walk_result_from_entry(dent))
+		walk.push_result(walk_result_from_entry(dent.clone()))
 	}
 	if !descend {
 		return
@@ -1369,18 +1419,18 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 			return
 		}
 	}
-	children := walk.read_dir_children(dent.path()) or {
-		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+	children := walk.read_dir_children(dent.path().clone()) or {
+		walk.push_result(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 		return
 	}
 	for child_entry in children {
 		child_depth := dent.depth() + 1
 		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
-			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty,
+			DirEntryRaw.from_child_known(child_depth, dent.path().clone(), child_entry.name, child_entry.ty,
 				child_entry.ino)
 		} else {
-			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
-				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+			DirEntryRaw.from_child(child_depth, dent.path().clone(), child_entry.name) or {
+				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path().clone(),
 					child_entry.name)).with_depth(child_depth)))
 				continue
 			}
@@ -1388,19 +1438,20 @@ fn (mut walk Walk) traverse_entry(mut dent DirEntry, mut ig Ignore, is_root bool
 		if walk.follow_links && child_raw.path_is_symlink() {
 			child_path := child_raw.path.clone()
 			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
-				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+				walk.push_result(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path().clone(),
 					child_entry.name)).with_depth(child_depth)))
 				continue
 			}
 			if child_raw.ty == .directory {
-				if err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
+				if err := check_symlink_loop(&child_ignore, child_raw.path.clone(), child_depth) {
 					walk.push_result(walk_result_from_error(err))
 					continue
 				}
 			}
 		}
-		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
-		walk.traverse_entry(mut child, child_ignore.clone(), false, root_device, has_root_device)
+		mut child := DirEntry.new_raw(child_raw.clone(), none_ignore_error())
+		mut branch_ignore := child_ignore.clone()
+		walk.traverse_entry(mut child, mut branch_ignore, false, root_device, has_root_device)
 	}
 }
 
@@ -1424,7 +1475,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 			}
 		}
 		if should_visit {
-			state := visitor.visit(walk_result_from_entry(dent))
+			state := visitor.visit(walk_result_from_entry(dent.clone()))
 			if state.is_quit() {
 				return .quit
 			}
@@ -1443,8 +1494,8 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 
 	mut descend := true
 	if has_root_device {
-		descend = is_same_file_system(root_device, dent.path()) or {
-			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+		descend = is_same_file_system(root_device, dent.path().clone()) or {
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 			if state.is_quit() {
 				return .quit
 			}
@@ -1452,7 +1503,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 		}
 	}
 
-	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path())
+	mut child_ignore, has_child_err, child_err := ig.add_child(dent.path().clone())
 	defer {
 		child_ignore.free_nodes()
 	}
@@ -1462,7 +1513,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 		dent.err = none
 	}
 	if should_visit {
-		state := visitor.visit(walk_result_from_entry(dent))
+		state := visitor.visit(walk_result_from_entry(dent.clone()))
 		if state.is_quit() {
 			return .quit
 		}
@@ -1478,8 +1529,8 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 			return .continue_
 		}
 	}
-	children := walk.read_dir_children(dent.path()) or {
-		state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+	children := walk.read_dir_children(dent.path().clone()) or {
+		state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 		if state.is_quit() {
 			return .quit
 		}
@@ -1488,11 +1539,11 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 	for child_entry in children {
 		child_depth := dent.depth() + 1
 		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
-			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty,
+			DirEntryRaw.from_child_known(child_depth, dent.path().clone(), child_entry.name, child_entry.ty,
 				child_entry.ino)
 		} else {
-			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
-				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+			DirEntryRaw.from_child(child_depth, dent.path().clone(), child_entry.name) or {
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path().clone(),
 					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
@@ -1503,7 +1554,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 		if walk.follow_links && child_raw.path_is_symlink() {
 			child_path := child_raw.path.clone()
 			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
-				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path().clone(),
 					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
@@ -1511,7 +1562,7 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 				continue
 			}
 			if child_raw.ty == .directory {
-				if err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
+				if err := check_symlink_loop(&child_ignore, child_raw.path.clone(), child_depth) {
 					state := visitor.visit(walk_result_from_error(err))
 					if state.is_quit() {
 						return .quit
@@ -1520,8 +1571,9 @@ fn (mut walk Walk) visit_traverse_entry(mut visitor ParallelVisitor, mut dent Di
 				}
 			}
 		}
-		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
-		state := walk.visit_traverse_entry(mut visitor, mut child, child_ignore.clone(), false,
+		mut child := DirEntry.new_raw(child_raw.clone(), none_ignore_error())
+		mut branch_ignore := child_ignore.clone()
+		state := walk.visit_traverse_entry(mut visitor, mut child, mut branch_ignore, false,
 			root_device, has_root_device)
 		if state.is_quit() {
 			return .quit
@@ -1592,10 +1644,10 @@ fn read_dir_children_nix(path string) ![]DirChild {
 
 fn entry_file_type_from_dirent(d_type int) (os.FileType, bool) {
 	return match d_type {
-		dirent_dt_reg { os.FileType.regular, true }
-		dirent_dt_dir { os.FileType.directory, true }
-		dirent_dt_lnk { os.FileType.symbolic_link, true }
-		else { os.FileType.unknown, false }
+		dirent_dt_reg { .regular, true }
+		dirent_dt_dir { .directory, true }
+		dirent_dt_lnk { .symbolic_link, true }
+		else { .unknown, false }
 	}
 }
 
@@ -1607,14 +1659,14 @@ fn (mut walk Walk) skip_entry(ig &Ignore, ent &DirEntry) !bool {
 		return true
 	}
 	if skip := walk.skip {
-		is_stdout := path_equals(ent, skip)!
+		is_stdout := path_equals(ent, &skip)!
 		if is_stdout {
 			return true
 		}
 	}
 	if max_filesize := walk.max_filesize {
-		if !ent.is_dir() && skip_filesize(max_filesize, ent.path(), ent.metadata() or { return false }) {
-			return true
+		if !ent.is_dir() {
+			return skip_filesize(max_filesize, ent.path().clone(), ent.metadata() or { return false })
 		}
 	}
 	if walk.has_filter && !walk.filter(ent) {
@@ -1631,7 +1683,7 @@ fn (mut walk Walk) skip_entry(ig &Ignore, ent &DirEntry) !bool {
 /// and precedence is explained in the documentation for `WalkBuilder`.
 ///
 /// Unlike `Walk`, this uses multiple threads for traversing a directory.
-pub struct WalkParallel {
+pub struct WalkParallel implements IClone {
 	paths            []string
 	ig_root          Ignore
 	max_filesize     ?u64
@@ -1644,6 +1696,38 @@ pub struct WalkParallel {
 	// V-specific: see `WalkBuilder.filter`.
 	filter           FilterFn = unsafe { nil }
 	has_filter       bool
+}
+
+pub fn (wp &WalkParallel) clone() WalkParallel {
+	mut max_filesize := ?u64(none)
+	if value := wp.max_filesize {
+		max_filesize = value
+	}
+	mut max_depth := ?usize(none)
+	if value := wp.max_depth {
+		max_depth = value
+	}
+	mut min_depth := ?usize(none)
+	if value := wp.min_depth {
+		min_depth = value
+	}
+	mut skip := ?Handle(none)
+	if value := wp.skip {
+		skip = value.clone()
+	}
+	return WalkParallel{
+		paths: wp.paths.clone()
+		ig_root: wp.ig_root.clone()
+		max_filesize: max_filesize
+		max_depth: max_depth
+		min_depth: min_depth
+		follow_links: wp.follow_links
+		same_file_system: wp.same_file_system
+		threads: wp.threads
+		skip: skip
+		filter: wp.filter
+		has_filter: wp.has_filter
+	}
 }
 
 /// Execute the parallel recursive directory iterator using a custom
@@ -1674,15 +1758,15 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 	quit_now := stdatomic.new_atomic(false)
 	active_workers := stdatomic.new_atomic(worker_count)
 	mut threads := []thread bool{}
-	threads << spawn walk_stealing_visit_worker(wp, stacks, first_visitor, quit_now,
+	threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, first_visitor, quit_now,
 		active_workers, 0)
 	for worker_index in 1 .. worker_count {
 		visitor := factory.create()
-		threads << spawn walk_stealing_visit_worker(wp, stacks, visitor, quit_now, active_workers,
+		threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, visitor, quit_now, active_workers,
 			worker_index)
 	}
-	for thread in threads {
-		thread.wait()
+	for worker_thread in threads {
+		worker_thread.wait()
 	}
 	unsafe { threads.free() }
 	stacks.free()
@@ -1705,13 +1789,13 @@ pub:
 // This is intended for callers that always continue traversal unless a shared
 // stop flag is set. It does not support `WalkState.skip`; callers needing
 // per-directory skip decisions should use `run`/`visit`.
-pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) {
+pub fn (wp WalkParallel) stream[^a](results chan WalkParallelStreamResult, stop &^a stdatomic.AtomicVal[bool]) {
 	worker_count := wp.worker_count()
 	if worker_count <= 1 {
 		wp.stream_serial(results, stop)
 		return
 	}
-	mut initial_visitor := WalkParallelStreamVisitor{
+	mut initial_visitor := WalkParallelStreamVisitor[^a]{
 		results: results
 		stop:    stop
 	}
@@ -1727,11 +1811,11 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &std
 	active_workers := stdatomic.new_atomic(worker_count)
 	mut threads := []thread bool{}
 	for worker_index in 0 .. worker_count {
-		threads << spawn walk_stealing_stream_worker(wp, stacks, results, stop, active_workers,
+		threads << spawn walk_stealing_stream_worker(wp.clone(), stacks, results, stop, active_workers,
 			worker_index)
 	}
-	for thread in threads {
-		thread.wait()
+	for worker_thread in threads {
+		worker_thread.wait()
 	}
 	unsafe { threads.free() }
 	stacks.free()
@@ -1741,9 +1825,9 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop &std
 	}
 }
 
-fn (wp WalkParallel) stream_serial(results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) {
+fn (wp &WalkParallel) stream_serial[^a](results chan WalkParallelStreamResult, stop &^a stdatomic.AtomicVal[bool]) {
 	mut walk := wp.new_walk()
-	mut visitor := WalkParallelStreamVisitor{
+	mut visitor := WalkParallelStreamVisitor[^a]{
 		results: results
 		stop:    stop
 	}
@@ -1762,7 +1846,7 @@ fn (wp WalkParallel) stream_serial(results chan WalkParallelStreamResult, stop &
 	}
 }
 
-fn (wp WalkParallel) visit_serial(mut visitor ParallelVisitor) {
+fn (wp &WalkParallel) visit_serial(mut visitor ParallelVisitor) {
 	mut walk := wp.new_walk()
 	for path in wp.paths {
 		state := walk.visit_root_path(mut visitor, path)
@@ -1772,7 +1856,7 @@ fn (wp WalkParallel) visit_serial(mut visitor ParallelVisitor) {
 	}
 }
 
-fn (wp WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWork {
+fn (wp &WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWork {
 	mut initial := []WalkStealingWork{cap: wp.paths.len}
 	for path in wp.paths {
 		if path == '-' {
@@ -1792,7 +1876,7 @@ fn (wp WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWor
 		}
 		mut ig := wp.ig_root.clone()
 		if root.is_dir() {
-			parent_ig, has_parent_err, parent_err := wp.ig_root.add_parents(root.path())
+			parent_ig, has_parent_err, parent_err := wp.ig_root.add_parents(root.path().clone())
 			ig.free_nodes()
 			ig = parent_ig
 			if has_parent_err && visitor.visit(walk_result_from_error(parent_err)).is_quit() {
@@ -1801,8 +1885,8 @@ fn (wp WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWor
 		}
 		mut root_device := u64(0)
 		if wp.same_file_system {
-			root_device = device_num(root.path()) or {
-				if visitor.visit(walk_result_from_error(io_error(err).with_path(root.path()))).is_quit() {
+			root_device = device_num(root.path().clone()) or {
+				if visitor.visit(walk_result_from_error(io_error(err).with_path(root.path().clone()))).is_quit() {
 					return initial
 				}
 				continue
@@ -1819,22 +1903,39 @@ fn (wp WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWor
 	return initial
 }
 
-fn (wp WalkParallel) new_walk() Walk {
+
+fn (wp &WalkParallel) new_walk() Walk {
+	mut max_filesize := ?u64(none)
+	if value := wp.max_filesize {
+		max_filesize = value
+	}
+	mut max_depth := ?usize(none)
+	if value := wp.max_depth {
+		max_depth = value
+	}
+	mut min_depth := ?usize(none)
+	if value := wp.min_depth {
+		min_depth = value
+	}
+	mut skip := ?Handle(none)
+	if value := wp.skip {
+		skip = value.clone()
+	}
 	return Walk{
-		ig_root:          wp.ig_root
-		ig:               wp.ig_root
-		max_filesize:     wp.max_filesize
-		skip:             wp.skip
+		ig_root:          wp.ig_root.clone()
+		ig:               wp.ig_root.clone()
+		max_filesize:     max_filesize
+		skip:             skip
 		filter:           wp.filter
 		has_filter:       wp.has_filter
-		min_depth:        wp.min_depth
-		max_depth:        wp.max_depth
+		min_depth:        min_depth
+		max_depth:        max_depth
 		follow_links:     wp.follow_links
 		same_file_system: wp.same_file_system
 	}
 }
 
-fn (wp WalkParallel) worker_count() int {
+fn (wp &WalkParallel) worker_count() int {
 	mut count := int(wp.threads)
 	if count <= 0 {
 		count = runtime.nr_cpus()
@@ -1851,17 +1952,27 @@ fn (wp WalkParallel) worker_count() int {
 	return count
 }
 
-struct WalkParallelStreamVisitor {
+struct WalkParallelStreamVisitor[^a] {
 	results chan WalkParallelStreamResult
-	stop    &stdatomic.AtomicVal[bool]
+	stop    &^a stdatomic.AtomicVal[bool]
 }
 
-struct WalkStealingWork {
+struct WalkStealingWork implements IClone {
 	entry           DirEntry
 	ig              Ignore
 	is_root         bool
 	root_device     u64
 	has_root_device bool
+}
+
+fn (work &WalkStealingWork) clone() WalkStealingWork {
+	return WalkStealingWork{
+		entry: work.entry.clone()
+		ig: work.ig.clone()
+		is_root: work.is_root
+		root_device: work.root_device
+		has_root_device: work.has_root_device
+	}
 }
 
 @[heap]
@@ -1879,7 +1990,7 @@ mut:
 
 fn WorkStealingQueue.new() &WorkStealingQueue {
 	mut items := []WalkStealingWork{}
-	unsafe { items.flags |= .noslices }
+	unsafe { items.flags.set(.noslices) }
 	return &WorkStealingQueue{
 		mutex: sync.new_mutex()
 		items: items
@@ -1910,7 +2021,7 @@ fn (mut queue WorkStealingQueue) pop_front_unlocked() ?WalkStealingWork {
 	if queue.len_unlocked() == 0 {
 		return none
 	}
-	work := queue.items[queue.head]
+	work := queue.items[queue.head].clone()
 	queue.head++
 	if queue.items.len == queue.head {
 		queue.items.clear()
@@ -2051,9 +2162,9 @@ fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visit
 	return true
 }
 
-fn walk_stealing_stream_worker(wp WalkParallel, stacks &WorkStealingStacks, results chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool], active_workers &stdatomic.AtomicVal[int], worker_index int) bool {
+fn walk_stealing_stream_worker[^a](wp WalkParallel, stacks &WorkStealingStacks, results chan WalkParallelStreamResult, stop &^a stdatomic.AtomicVal[bool], active_workers &stdatomic.AtomicVal[int], worker_index int) bool {
 	mut walk := wp.new_walk()
-	mut sender := WalkParallelStreamVisitor{
+	mut sender := WalkParallelStreamVisitor[^a]{
 		results: results
 		stop:    stop
 	}
@@ -2074,7 +2185,10 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	defer {
 		work.ig.free_nodes()
 	}
-	mut dent := work.entry
+	// Clone: a shallow `dent := work.entry` would share the entry's owned path
+	// strings with `work.entry`, and both get dropped (`dent.free()` plus
+	// `work`'s scope-exit drop) -> double-free. The clone is independent.
+	mut dent := work.entry.clone()
 	should_visit := if min_depth := walk.min_depth {
 		dent.depth() >= min_depth
 	} else {
@@ -2082,7 +2196,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	}
 	if !dent.is_dir() {
 		if should_visit {
-			return visitor.visit(walk_result_from_entry(dent))
+			return visitor.visit(walk_result_from_entry(dent.clone()))
 		}
 		dent.free()
 		return .continue_
@@ -2092,15 +2206,15 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	}
 	mut descend := true
 	if work.has_root_device {
-		descend = is_same_file_system(work.root_device, dent.path()) or {
-			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+		descend = is_same_file_system(work.root_device, dent.path().clone()) or {
+			state := visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 			if state.is_quit() {
 				return state
 			}
 			false
 		}
 	}
-	mut child_ignore, has_child_err, child_err := work.ig.add_child(dent.path())
+	mut child_ignore, has_child_err, child_err := work.ig.add_child(dent.path().clone())
 	defer {
 		child_ignore.free_nodes()
 	}
@@ -2123,8 +2237,8 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 			return .continue_
 		}
 	}
-	mut children := walk.read_dir_children(dent.path()) or {
-		return visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path()).with_depth(dent.depth())))
+	mut children := walk.read_dir_children(dent.path().clone()) or {
+		return visitor.visit(walk_result_from_error(io_error(err).with_path(dent.path().clone()).with_depth(dent.depth())))
 	}
 	defer {
 		for child_entry in children {
@@ -2135,11 +2249,11 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	for child_entry in children {
 		child_depth := dent.depth() + 1
 		mut child_raw := if child_entry.has_type && walk.can_trust_dirent_type() {
-			DirEntryRaw.from_child_known(child_depth, dent.path(), child_entry.name, child_entry.ty,
+			DirEntryRaw.from_child_known(child_depth, dent.path().clone(), child_entry.name, child_entry.ty,
 				child_entry.ino)
 		} else {
-			DirEntryRaw.from_child(child_depth, dent.path(), child_entry.name) or {
-				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+			DirEntryRaw.from_child(child_depth, dent.path().clone(), child_entry.name) or {
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path().clone(),
 					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
@@ -2150,7 +2264,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 		if walk.follow_links && child_raw.path_is_symlink() {
 			child_path := child_raw.path.clone()
 			child_raw = DirEntryRaw.from_path(child_depth, child_path, true) or {
-				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path(),
+				state := visitor.visit(walk_result_from_error(io_error(err).with_path(os.join_path(dent.path().clone(),
 					child_entry.name)).with_depth(child_depth)))
 				if state.is_quit() {
 					return .quit
@@ -2158,7 +2272,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 				continue
 			}
 			if child_raw.ty == .directory {
-				if loop_err := check_symlink_loop(child_ignore, child_raw.path.clone(), child_depth) {
+				if loop_err := check_symlink_loop(&child_ignore, child_raw.path.clone(), child_depth) {
 					state := visitor.visit(walk_result_from_error(loop_err))
 					if state.is_quit() {
 						return .quit
@@ -2167,7 +2281,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 				}
 			}
 		}
-		mut child := DirEntry.new_raw(child_raw, none_ignore_error())
+		mut child := DirEntry.new_raw(child_raw.clone(), none_ignore_error())
 		should_skip := walk.skip_entry(&child_ignore, &child) or {
 			state := visitor.visit(walk_result_from_error(ignore_error_from_ierror(err)))
 			if state.is_quit() {
@@ -2190,7 +2304,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	return .continue_
 }
 
-fn (mut visitor WalkParallelStreamVisitor) visit(result WalkResult) WalkState {
+fn (mut visitor WalkParallelStreamVisitor[^a]) visit[^a](result WalkResult) WalkState {
 	if visitor.stop.load() {
 		return .quit
 	}
@@ -2203,16 +2317,16 @@ fn (mut visitor WalkParallelStreamVisitor) visit(result WalkResult) WalkState {
 	return .continue_
 }
 
-fn (mut visitor WalkParallelStreamVisitor) free() {
+fn (mut visitor WalkParallelStreamVisitor[^a]) free[^a]() {
 	_ = visitor
 }
 
 fn prepare_root_entry(path string, follow_links bool) (DirEntry, IgnoreError) {
 	_ = follow_links
-	raw := DirEntryRaw.from_path(0, path, false) or {
-		return DirEntry.new_stdin(), io_error(err).with_path(path)
+	raw := DirEntryRaw.from_path(0, path.clone(), false) or {
+		return DirEntry.new_stdin(), io_error(err).with_path(path.clone())
 	}
-	return DirEntry.new_raw(raw, none_ignore_error()), IgnoreError{}
+	return DirEntry.new_raw(raw.clone(), none_ignore_error()), IgnoreError{}
 }
 
 fn sort_children(mut children []DirChild, parent_path string, has_name_cmp bool, name_cmp NameComparator, has_path_cmp bool, path_cmp PathComparator) {
@@ -2236,22 +2350,22 @@ fn sort_children(mut children []DirChild, parent_path string, has_name_cmp bool,
 	}
 }
 
-fn check_symlink_loop(ig_parent Ignore, child_path string, child_depth usize) ?IgnoreError {
+fn check_symlink_loop(ig_parent &Ignore, child_path string, child_depth usize) ?IgnoreError {
 	hchild := Handle.from_path(child_path) or {
 		return io_error(err).with_path(child_path).with_depth(child_depth)
 	}
-	mut node := ig_parent.node
-	for !isnil(node) {
+	mut node := ig_parent.node.get()
+	for {
 		if node.is_absolute_parent {
 			break
 		}
 		h := Handle.from_path(node.dir) or {
 			return io_error(err).with_path(child_path).with_depth(child_depth)
 		}
-		if h.same_file(hchild) {
+		if h.same_file(&hchild) {
 			return loop_error(node.dir, child_path).with_depth(child_depth)
 		}
-		node = node.parent
+		node = node.parent_node() or { break }
 	}
 	return none
 }
@@ -2272,7 +2386,7 @@ fn should_skip_entry_with_scratch(ig &Ignore, dent &DirEntry, mut gitignore_matc
 	return false
 }
 
-fn never_equal(dent &DirEntry, handle Handle) bool {
+fn never_equal(dent &DirEntry, handle &Handle) bool {
 	$if linux || macos || freebsd || openbsd || netbsd || dragonfly || solaris {
 		if ino := dent.ino() {
 			return ino != handle.ino
@@ -2288,12 +2402,12 @@ fn never_equal(dent &DirEntry, handle Handle) bool {
 // Returns true if and only if the given directory entry is believed to be
 // equivalent to the given handle. If there was a problem querying the path
 // for information to determine equality, then that error is returned.
-fn path_equals(dent &DirEntry, handle Handle) !bool {
+fn path_equals(dent &DirEntry, handle &Handle) !bool {
 	if dent.is_stdin() || never_equal(dent, handle) {
 		return false
 	}
-	other := Handle.from_path(dent.path()) or {
-		return io_error(err).with_path(dent.path())
+	other := Handle.from_path(dent.path().clone()) or {
+		return io_error(err).with_path(dent.path().clone())
 	}
 	return other.same_file(handle)
 }

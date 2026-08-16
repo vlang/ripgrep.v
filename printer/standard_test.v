@@ -56,12 +56,12 @@ fn (mut rdr StandardByteSliceReader) read(mut buf []u8) !int {
 	return nread
 }
 
-fn printer_contents(mut printer Standard[cli.Buffer]) string {
-	return printer.get_mut().as_slice().bytestr()
+fn printer_contents(mut printer_ Standard[cli.Buffer]) string {
+	return printer_.get_mut().as_slice().bytestr()
 }
 
-fn printer_contents_ansi(mut printer Standard[cli.Buffer]) string {
-	return printer.get_mut().as_slice().bytestr()
+fn printer_contents_ansi(mut printer_ Standard[cli.Buffer]) string {
+	return printer_.get_mut().as_slice().bytestr()
 }
 
 fn assert_eq_printed(expected string, got string) {
@@ -72,8 +72,8 @@ fn assert_eq_printed(expected string, got string) {
 
 fn test_standard_reports_match() {
 	matcher_ := regex.RegexMatcher.new('Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
@@ -94,8 +94,8 @@ fn test_standard_reports_match() {
 
 fn test_standard_reports_binary() {
 	matcher_ := regex.RegexMatcher.new('Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
@@ -120,15 +120,15 @@ fn test_standard_reports_stats() {
 	matcher_ := regex.RegexMatcher.new('Sherlock|opposed') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.stats(true)
-	mut printer := builder.build(no_color_buffer())
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut printer_ := builder.build(no_color_buffer())
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	built.search_reader(matcher_, mut rdr, &sink)!
 	stats := sink.stats() or { panic('missing stats') }
-	buf := printer_contents(mut printer)
+	buf := printer_contents(mut printer_)
 
 	assert stats.elapsed() > time.Duration(0)
 	assert stats.searches() == u64(1)
@@ -143,8 +143,8 @@ fn test_standard_reports_stats_multiple() {
 	matcher_ := regex.RegexMatcher.new('Sherlock|opposed') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.stats(true)
-	mut printer := builder.build(no_color_buffer())
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut printer_ := builder.build(no_color_buffer())
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.line_number(false)
 	mut built1 := searcher1.build()
@@ -161,7 +161,7 @@ fn test_standard_reports_stats_multiple() {
 	mut rdr3 := StandardByteSliceReader.new(sherlock)
 	built3.search_reader(matcher_, mut rdr3, &sink)!
 	stats := sink.stats() or { panic('missing stats') }
-	buf := printer_contents(mut printer)
+	buf := printer_contents(mut printer_)
 
 	assert stats.elapsed() > time.Duration(0)
 	assert stats.searches() == u64(3)
@@ -176,17 +176,17 @@ fn test_standard_context_break() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.separator_context('--abc--'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.before_context(1)
 	searcher_.after_context(1)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --abc--
@@ -202,7 +202,7 @@ fn test_standard_context_break_multiple_no_heading() {
 	mut builder := StandardBuilder.new()
 	builder.separator_search('--xyz--'.bytes())
 	builder.separator_context('--abc--'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.line_number(false)
@@ -210,7 +210,7 @@ fn test_standard_context_break_multiple_no_heading() {
 	searcher1.after_context(1)
 	mut built1 := searcher1.build()
 	mut rdr1 := StandardByteSliceReader.new(sherlock)
-	mut sink1 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink1 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built1.search_reader(matcher_, mut rdr1, &sink1)!
 	mut searcher2 := searcher.SearcherBuilder.new()
 	searcher2.line_number(false)
@@ -218,10 +218,10 @@ fn test_standard_context_break_multiple_no_heading() {
 	searcher2.after_context(1)
 	mut built2 := searcher2.build()
 	mut rdr2 := StandardByteSliceReader.new(sherlock)
-	mut sink2 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink2 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built2.search_reader(matcher_, mut rdr2, &sink2)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --abc--
@@ -245,7 +245,7 @@ fn test_standard_context_break_multiple_heading() {
 	builder.heading(true)
 	builder.separator_search('--xyz--'.bytes())
 	builder.separator_context('--abc--'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.line_number(false)
@@ -253,7 +253,7 @@ fn test_standard_context_break_multiple_heading() {
 	searcher1.after_context(1)
 	mut built1 := searcher1.build()
 	mut rdr1 := StandardByteSliceReader.new(sherlock)
-	mut sink1 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink1 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built1.search_reader(matcher_, mut rdr1, &sink1)!
 	mut searcher2 := searcher.SearcherBuilder.new()
 	searcher2.line_number(false)
@@ -261,10 +261,10 @@ fn test_standard_context_break_multiple_heading() {
 	searcher2.after_context(1)
 	mut built2 := searcher2.build()
 	mut rdr2 := StandardByteSliceReader.new(sherlock)
-	mut sink2 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink2 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built2.search_reader(matcher_, mut rdr2, &sink2)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 --abc--
@@ -286,16 +286,16 @@ fn test_standard_path() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.path(false)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the Doctor Watsons of this world, as opposed to the Sherlock
 5:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -307,7 +307,7 @@ fn test_standard_separator_field() {
 	mut builder := StandardBuilder.new()
 	builder.separator_field_match('!!'.bytes())
 	builder.separator_field_context('^^'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.before_context(1)
@@ -315,10 +315,10 @@ fn test_standard_separator_field() {
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'sherlock!!For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock^^Holmeses, success in the province of detective work must always
 --
@@ -333,16 +333,16 @@ fn test_standard_separator_path() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.separator_path(u8(`Z`))
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	path := 'books/sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'booksZsherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 booksZsherlock:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -353,16 +353,16 @@ fn test_standard_path_terminator() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.path_terminator(u8(`Z`))
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	path := 'books/sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'books/sherlockZFor the Doctor Watsons of this world, as opposed to the Sherlock
 books/sherlockZbut Doctor Watson has to have it taken out for him and dusted,
 '
@@ -373,16 +373,16 @@ fn test_standard_heading() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.heading(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'sherlock
 For the Doctor Watsons of this world, as opposed to the Sherlock
 but Doctor Watson has to have it taken out for him and dusted,
@@ -394,16 +394,16 @@ fn test_standard_no_heading() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.heading(false)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'sherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -414,13 +414,13 @@ fn test_standard_no_heading_multiple() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.heading(false)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.line_number(false)
 	mut built1 := searcher1.build()
 	mut rdr1 := StandardByteSliceReader.new(sherlock)
 	path := 'sherlock'
-	mut sink1 := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink1 := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built1.search_reader(matcher_, mut rdr1, &sink1)!
 
 	matcher2 := regex.RegexMatcher.new('Sherlock') or { panic(err) }
@@ -428,10 +428,10 @@ fn test_standard_no_heading_multiple() {
 	searcher2.line_number(false)
 	mut built2 := searcher2.build()
 	mut rdr2 := StandardByteSliceReader.new(sherlock)
-	mut sink2 := printer.sink_with_path(PrinterMatcher.rust_regex(matcher2), &path)
+	mut sink2 := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher2), &path)
 	built2.search_reader(matcher2, mut rdr2, &sink2)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'sherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
 sherlock:but Doctor Watson has to have it taken out for him and dusted,
 sherlock:For the Doctor Watsons of this world, as opposed to the Sherlock
@@ -444,13 +444,13 @@ fn test_standard_heading_multiple() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.heading(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.line_number(false)
 	mut built1 := searcher1.build()
 	mut rdr1 := StandardByteSliceReader.new(sherlock)
 	path := 'sherlock'
-	mut sink1 := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink1 := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built1.search_reader(matcher_, mut rdr1, &sink1)!
 
 	matcher2 := regex.RegexMatcher.new('Sherlock') or { panic(err) }
@@ -458,10 +458,10 @@ fn test_standard_heading_multiple() {
 	searcher2.line_number(false)
 	mut built2 := searcher2.build()
 	mut rdr2 := StandardByteSliceReader.new(sherlock)
-	mut sink2 := printer.sink_with_path(PrinterMatcher.rust_regex(matcher2), &path)
+	mut sink2 := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher2), &path)
 	built2.search_reader(matcher2, mut rdr2, &sink2)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'sherlock
 For the Doctor Watsons of this world, as opposed to the Sherlock
 but Doctor Watson has to have it taken out for him and dusted,
@@ -476,15 +476,15 @@ fn test_standard_trim_ascii() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.trim_ascii(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('   Watson')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'Watson
 '
 	assert_eq_printed(expected, got)
@@ -495,16 +495,16 @@ fn test_standard_trim_ascii_multi_line() {
 	mut builder := StandardBuilder.new()
 	builder.trim_ascii(true)
 	builder.stats(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('   Watson')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'Watson
 '
 	assert_eq_printed(expected, got)
@@ -514,16 +514,16 @@ fn test_standard_trim_ascii_with_line_term() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.trim_ascii(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.before_context(1)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('\n   Watson')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1-
 2:Watson
 '
@@ -532,15 +532,15 @@ fn test_standard_trim_ascii_with_line_term() {
 
 fn test_standard_line_number() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the Doctor Watsons of this world, as opposed to the Sherlock
 5:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -549,16 +549,16 @@ fn test_standard_line_number() {
 
 fn test_standard_line_number_multi_line() {
 	matcher_ := regex.RegexMatcher.new('(?s)Watson.+Watson') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:Holmeses, success in the province of detective work must always
 3:be, to a very large extent, the result of luck. Sherlock Holmes
@@ -572,15 +572,15 @@ fn test_standard_column_number() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '16:For the Doctor Watsons of this world, as opposed to the Sherlock
 12:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -591,16 +591,16 @@ fn test_standard_column_number_multi_line() {
 	matcher_ := regex.RegexMatcher.new('(?s)Watson.+Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '16:For the Doctor Watsons of this world, as opposed to the Sherlock
 16:Holmeses, success in the province of detective work must always
 16:be, to a very large extent, the result of luck. Sherlock Holmes
@@ -614,15 +614,15 @@ fn test_standard_byte_offset() {
 	matcher_ := regex.RegexMatcher.new('Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.byte_offset(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '0:For the Doctor Watsons of this world, as opposed to the Sherlock
 258:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -633,16 +633,16 @@ fn test_standard_byte_offset_multi_line() {
 	matcher_ := regex.RegexMatcher.new('(?s)Watson.+Watson') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.byte_offset(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '0:For the Doctor Watsons of this world, as opposed to the Sherlock
 65:Holmeses, success in the province of detective work must always
 129:be, to a very large extent, the result of luck. Sherlock Holmes
@@ -656,15 +656,15 @@ fn test_standard_max_columns() {
 	matcher_ := regex.RegexMatcher.new('ash|dusted') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.max_columns(u64(63))
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '[Omitted long matching line]
 but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -676,15 +676,15 @@ fn test_standard_max_columns_preview() {
 	mut builder := StandardBuilder.new()
 	builder.max_columns(u64(46))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'but Doctor Watson has to have it taken out for [... omitted end of long line]
 and exhibited clearly, with a label attached.
 '
@@ -697,15 +697,15 @@ fn test_standard_max_columns_preview_uses_grapheme_clusters() {
 	builder.stats(true)
 	builder.max_columns(u64(1))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('e\u0301x\n')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'e\u0301 [... 1 more match]\n'
 	assert_eq_printed(expected, got)
 }
@@ -717,15 +717,15 @@ fn test_standard_max_columns_preview_preserves_invalid_utf8_widths() {
 	builder.stats(true)
 	builder.max_columns(u64(1))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new_bytes(bytes)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer).bytes()
+	got := printer_contents(mut printer_).bytes()
 	mut expected := [u8(0xe2), 0x98]
 	expected << ' [... 1 more match]\n'.bytes()
 	assert got == expected
@@ -736,15 +736,15 @@ fn test_standard_max_columns_with_count() {
 	mut builder := StandardBuilder.new()
 	builder.stats(true)
 	builder.max_columns(u64(63))
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '[Omitted long line with 2 matches]
 but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -757,15 +757,15 @@ fn test_standard_max_columns_with_count_preview_no_match() {
 	builder.stats(true)
 	builder.max_columns(u64(46))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'but Doctor Watson has to have it taken out for [... 0 more matches]
 and exhibited clearly, with a label attached.
 '
@@ -778,15 +778,15 @@ fn test_standard_max_columns_with_count_preview_one_match() {
 	builder.stats(true)
 	builder.max_columns(u64(46))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'but Doctor Watson has to have it taken out for [... 1 more match]
 and exhibited clearly, with a label attached.
 '
@@ -799,15 +799,15 @@ fn test_standard_max_columns_with_count_preview_two_matches() {
 	builder.stats(true)
 	builder.max_columns(u64(46))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'but Doctor Watson has to have it taken out for [... 1 more match]
 and exhibited clearly, with a label attached.
 '
@@ -818,16 +818,16 @@ fn test_standard_max_columns_multi_line() {
 	matcher_ := regex.RegexMatcher.new('(?s)ash.+dusted') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.max_columns(u64(63))
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '[Omitted long matching line]
 but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -842,16 +842,16 @@ fn test_standard_max_columns_multi_line_preview() {
 	builder.stats(true)
 	builder.max_columns(u64(46))
 	builder.max_columns_preview(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'can extract a clew from a wisp of straw or a f [... 1 more match]
 but Doctor Watson has to have it taken out for [... 0 more matches]
 and exhibited clearly, with a label attached.
@@ -861,16 +861,16 @@ and exhibited clearly, with a label attached.
 
 fn test_standard_max_matches() {
 	matcher_ := regex.RegexMatcher.new('Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.max_matches(u64(1))
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 '
 	assert_eq_printed(expected, got)
@@ -879,17 +879,17 @@ fn test_standard_max_matches() {
 fn test_standard_max_matches_context() {
 	// after context: 1
 	matcher_ := regex.RegexMatcher.new('Doctor Watsons') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.max_matches(u64(1))
 	searcher1.line_number(false)
 	searcher1.after_context(1)
 	mut built1 := searcher1.build()
 	mut rdr1 := StandardByteSliceReader.new(sherlock)
-	mut sink1 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink1 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built1.search_reader(matcher_, mut rdr1, &sink1)!
 
-	got1 := printer_contents(mut printer)
+	got1 := printer_contents(mut printer_)
 	expected1 := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 '
@@ -961,7 +961,7 @@ and exhibited clearly, with a label attached.
 fn test_standard_max_matches_context_invert() {
 	// after context: 1
 	matcher_ := regex.RegexMatcher.new('success|extent|clew|dusted|exhibited') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher1 := searcher.SearcherBuilder.new()
 	searcher1.invert_match(true)
 	searcher1.max_matches(u64(1))
@@ -969,10 +969,10 @@ fn test_standard_max_matches_context_invert() {
 	searcher1.after_context(1)
 	mut built1 := searcher1.build()
 	mut rdr1 := StandardByteSliceReader.new(sherlock)
-	mut sink1 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink1 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built1.search_reader(matcher_, mut rdr1, &sink1)!
 
-	got1 := printer_contents(mut printer)
+	got1 := printer_contents(mut printer_)
 	expected1 := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 '
@@ -1046,17 +1046,17 @@ and exhibited clearly, with a label attached.
 
 fn test_standard_max_matches_multi_line1() {
 	matcher_ := regex.RegexMatcher.new('(?s:.{0})Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	searcher_.max_matches(u64(1))
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 '
 	assert_eq_printed(expected, got)
@@ -1064,17 +1064,17 @@ fn test_standard_max_matches_multi_line1() {
 
 fn test_standard_max_matches_multi_line2() {
 	matcher_ := regex.RegexMatcher.new(r'(?s)Watson.+?(Holmeses|clearly)') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	searcher_.max_matches(u64(1))
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'For the Doctor Watsons of this world, as opposed to the Sherlock
 Holmeses, success in the province of detective work must always
 '
@@ -1083,17 +1083,17 @@ Holmeses, success in the province of detective work must always
 
 fn test_standard_max_matches_multi_line3() {
 	matcher_ := regex.RegexMatcher.new(r'line 2\nline 3') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	searcher_.max_matches(u64(1))
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('line 2\nline 3 x\nline 2\nline 3\n')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'line 2
 line 3 x
 '
@@ -1102,17 +1102,17 @@ line 3 x
 
 fn test_standard_max_matches_multi_line4() {
 	matcher_ := regex.RegexMatcher.new(r'line 2\nline 3|x\nline 2\n') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	searcher_.multi_line(true)
 	searcher_.max_matches(u64(1))
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('line 2\nline 3 x\nline 2\nline 3 x\n')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'line 2
 line 3 x
 '
@@ -1124,15 +1124,15 @@ fn test_standard_only_matching() {
 	mut builder := StandardBuilder.new()
 	builder.only_matching(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:Doctor Watsons
 1:57:Sherlock
 3:49:Sherlock
@@ -1147,16 +1147,16 @@ fn test_standard_only_matching_multi_line1() {
 	mut builder := StandardBuilder.new()
 	builder.only_matching(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:Doctor Watsons
 1:57:Sherlock
 3:49:Sherlock
@@ -1169,16 +1169,16 @@ fn test_standard_only_matching_multi_line2() {
 	mut builder := StandardBuilder.new()
 	builder.only_matching(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:Watsons of this world, as opposed to the Sherlock
 2:16:Holmeses
 5:12:Watson has to have it taken out for him and dusted,
@@ -1193,15 +1193,15 @@ fn test_standard_only_matching_max_columns() {
 	builder.only_matching(true)
 	builder.max_columns(u64(10))
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:[Omitted long matching line]
 1:57:Sherlock
 3:49:Sherlock
@@ -1216,15 +1216,15 @@ fn test_standard_only_matching_max_columns_preview() {
 	builder.max_columns(u64(10))
 	builder.max_columns_preview(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:Doctor Wat [... 0 more matches]
 1:57:Sherlock
 3:49:Sherlock
@@ -1244,16 +1244,16 @@ fn test_standard_only_matching_max_columns_multi_line1() {
 	builder.only_matching(true)
 	builder.max_columns(u64(10))
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:[Omitted long matching line]
 1:57:Sherlock
 3:49:Sherlock
@@ -1274,16 +1274,16 @@ fn test_standard_only_matching_max_columns_preview_multi_line1() {
 	builder.max_columns(u64(10))
 	builder.max_columns_preview(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:Doctor Wat [... 0 more matches]
 1:57:Sherlock
 3:49:Sherlock
@@ -1297,16 +1297,16 @@ fn test_standard_only_matching_max_columns_multi_line2() {
 	builder.only_matching(true)
 	builder.max_columns(u64(50))
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:Watsons of this world, as opposed to the Sherlock
 2:16:Holmeses
 5:12:[Omitted long matching line]
@@ -1322,16 +1322,16 @@ fn test_standard_only_matching_max_columns_preview_multi_line2() {
 	builder.max_columns(u64(50))
 	builder.max_columns_preview(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:Watsons of this world, as opposed to the Sherlock
 2:16:Holmeses
 5:12:Watson has to have it taken out for him and dusted [... 0 more matches]
@@ -1345,15 +1345,15 @@ fn test_standard_per_match() {
 	mut builder := StandardBuilder.new()
 	builder.per_match(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:For the Doctor Watsons of this world, as opposed to the Sherlock
 1:57:For the Doctor Watsons of this world, as opposed to the Sherlock
 3:49:be, to a very large extent, the result of luck. Sherlock Holmes
@@ -1368,16 +1368,16 @@ fn test_standard_per_match_multi_line1() {
 	mut builder := StandardBuilder.new()
 	builder.per_match(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:For the Doctor Watsons of this world, as opposed to the Sherlock
 1:57:For the Doctor Watsons of this world, as opposed to the Sherlock
 3:49:be, to a very large extent, the result of luck. Sherlock Holmes
@@ -1390,16 +1390,16 @@ fn test_standard_per_match_multi_line2() {
 	mut builder := StandardBuilder.new()
 	builder.per_match(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:1:Holmeses, success in the province of detective work must always
 5:12:but Doctor Watson has to have it taken out for him and dusted,
@@ -1413,16 +1413,16 @@ fn test_standard_per_match_multi_line3() {
 	mut builder := StandardBuilder.new()
 	builder.per_match(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:1:Holmeses, success in the province of detective work must always
 2:58:Holmeses, success in the province of detective work must always
@@ -1439,16 +1439,16 @@ fn test_standard_per_match_multi_line1_only_first_line() {
 	builder.per_match(true)
 	builder.per_match_one_line(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:9:For the Doctor Watsons of this world, as opposed to the Sherlock
 1:57:For the Doctor Watsons of this world, as opposed to the Sherlock
 3:49:be, to a very large extent, the result of luck. Sherlock Holmes
@@ -1462,16 +1462,16 @@ fn test_standard_per_match_multi_line2_only_first_line() {
 	builder.per_match(true)
 	builder.per_match_one_line(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 5:12:but Doctor Watson has to have it taken out for him and dusted,
 '
@@ -1484,16 +1484,16 @@ fn test_standard_per_match_multi_line3_only_first_line() {
 	builder.per_match(true)
 	builder.per_match_one_line(true)
 	builder.column(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:16:For the Doctor Watsons of this world, as opposed to the Sherlock
 2:58:Holmeses, success in the province of detective work must always
 '
@@ -1504,16 +1504,16 @@ fn test_standard_replacement_passthru() {
 	matcher_ := regex.RegexMatcher.new(r'Sherlock|Doctor (\w+)') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.replacement(r'doctah $1 MD'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.passthru(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 2-Holmeses, success in the province of detective work must always
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
@@ -1528,15 +1528,15 @@ fn test_standard_replacement() {
 	matcher_ := regex.RegexMatcher.new(r'Sherlock|Doctor (\w+)') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.replacement(r'doctah $1 MD'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
@@ -1552,16 +1552,16 @@ fn test_standard_replacement_multi_line() {
 	matcher_ := regex.RegexMatcher.new(r'\n') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.replacement('?'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('hello\nworld\n')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:hello?world?\n'
 	assert_eq_printed(expected, got)
 }
@@ -1572,17 +1572,17 @@ fn test_standard_replacement_multi_line_diff_line_term() {
 	matcher_ := matcher_builder.build(r'\n') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.replacement('?'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_terminator(matcher.LineTerminator.byte(u8(0)))
 	searcher_.line_number(true)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('hello\nworld\n')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:hello?world?\x00'
 	assert_eq_printed(expected, got)
 }
@@ -1591,16 +1591,16 @@ fn test_standard_replacement_multi_line_combine_lines() {
 	matcher_ := regex.RegexMatcher.new(r'\n(.)?') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.replacement(r'?$1'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.multi_line(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new('hello\nworld\n')
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:hello?world?\n'
 	assert_eq_printed(expected, got)
 }
@@ -1610,15 +1610,15 @@ fn test_standard_replacement_max_columns() {
 	mut builder := StandardBuilder.new()
 	builder.max_columns(u64(67))
 	builder.replacement(r'doctah $1 MD'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:[Omitted long line with 2 matches]
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
@@ -1632,15 +1632,15 @@ fn test_standard_replacement_max_columns_preview1() {
 	builder.max_columns(u64(67))
 	builder.max_columns_preview(true)
 	builder.replacement(r'doctah $1 MD'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the doctah Watsons MD of this world, as opposed to the doctah   [... 0 more matches]
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
 5:but doctah Watson MD has to have it taken out for him and dusted,
@@ -1654,15 +1654,15 @@ fn test_standard_replacement_max_columns_preview2() {
 	builder.max_columns(u64(43))
 	builder.max_columns_preview(true)
 	builder.replacement('xxx'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(false)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := 'but Doctor Watson xxx taken out for him and [... 1 more match]
 and xxx clearly, with a label attached.
 '
@@ -1674,15 +1674,15 @@ fn test_standard_replacement_only_matching() {
 	mut builder := StandardBuilder.new()
 	builder.only_matching(true)
 	builder.replacement(r'doctah $1 MD'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:doctah Watsons MD
 1:doctah  MD
 3:doctah  MD
@@ -1696,15 +1696,15 @@ fn test_standard_replacement_per_match() {
 	mut builder := StandardBuilder.new()
 	builder.per_match(true)
 	builder.replacement(r'doctah $1 MD'.bytes())
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 1:For the doctah Watsons MD of this world, as opposed to the doctah  MD
 3:be, to a very large extent, the result of luck. doctah  MD Holmes
@@ -1715,16 +1715,16 @@ fn test_standard_replacement_per_match() {
 
 fn test_standard_invert() {
 	matcher_ := regex.RegexMatcher.new(r'Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.invert_match(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '2:Holmeses, success in the province of detective work must always
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
@@ -1735,17 +1735,17 @@ fn test_standard_invert() {
 
 fn test_standard_invert_multi_line() {
 	matcher_ := regex.RegexMatcher.new(r'(?s:.{0})Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
 	searcher_.invert_match(true)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '2:Holmeses, success in the province of detective work must always
 4:can extract a clew from a wisp of straw or a flake of cigar ash;
 5:but Doctor Watson has to have it taken out for him and dusted,
@@ -1756,7 +1756,7 @@ fn test_standard_invert_multi_line() {
 
 fn test_standard_invert_context() {
 	matcher_ := regex.RegexMatcher.new(r'Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.invert_match(true)
@@ -1764,10 +1764,10 @@ fn test_standard_invert_context() {
 	searcher_.after_context(1)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1-For the Doctor Watsons of this world, as opposed to the Sherlock
 2:Holmeses, success in the province of detective work must always
 3-be, to a very large extent, the result of luck. Sherlock Holmes
@@ -1780,7 +1780,7 @@ fn test_standard_invert_context() {
 
 fn test_standard_invert_context_multi_line() {
 	matcher_ := regex.RegexMatcher.new(r'(?s:.{0})Sherlock') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
@@ -1789,10 +1789,10 @@ fn test_standard_invert_context_multi_line() {
 	searcher_.after_context(1)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1-For the Doctor Watsons of this world, as opposed to the Sherlock
 2:Holmeses, success in the province of detective work must always
 3-be, to a very large extent, the result of luck. Sherlock Holmes
@@ -1807,7 +1807,7 @@ fn test_standard_invert_context_only_matching() {
 	matcher_ := regex.RegexMatcher.new(r'Sherlock') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.only_matching(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_number(true)
 	searcher_.invert_match(true)
@@ -1815,10 +1815,10 @@ fn test_standard_invert_context_only_matching() {
 	searcher_.after_context(1)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1-Sherlock
 2:Holmeses, success in the province of detective work must always
 3-Sherlock
@@ -1833,7 +1833,7 @@ fn test_standard_invert_context_only_matching_multi_line() {
 	matcher_ := regex.RegexMatcher.new(r'(?s:.{0})Sherlock') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.only_matching(true)
-	mut printer := builder.build(no_color_buffer())
+	mut printer_ := builder.build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.multi_line(true)
 	searcher_.line_number(true)
@@ -1842,10 +1842,10 @@ fn test_standard_invert_context_only_matching_multi_line() {
 	searcher_.after_context(1)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '1-Sherlock
 2:Holmeses, success in the province of detective work must always
 3-Sherlock
@@ -1862,15 +1862,15 @@ fn test_standard_regression_search_empty_with_crlf() {
 	matcher_ := matcher_builder.build(r'x?') or { panic(err) }
 	mut builder := StandardBuilder.new()
 	builder.color_specs(ColorSpecs.default_with_color())
-	mut printer := builder.build(ansi_buffer())
+	mut printer_ := builder.build(ansi_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.line_terminator(matcher.LineTerminator.crlf())
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new_bytes([u8(`\n`)])
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents_ansi(mut printer)
+	got := printer_contents_ansi(mut printer_)
 	assert got.len > 0
 }
 
@@ -1889,17 +1889,17 @@ e
 '
 
 	matcher_ := regex.RegexMatcherBuilder.new().build(r'd') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_ := searcher.SearcherBuilder.new()
 	searcher_.max_matches(u64(1))
 	searcher_.line_number(true)
 	searcher_.after_context(2)
 	mut built := searcher_.build()
 	mut rdr := StandardByteSliceReader.new(haystack)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := printer_contents(mut printer)
+	got := printer_contents(mut printer_)
 	expected := '4:d\n5-e\n6:d\n'
 	assert_eq_printed(expected, got)
 }
@@ -1909,16 +1909,16 @@ fn test_standard_regression_crlf_preserve() {
 	mut matcher_builder := regex.RegexMatcherBuilder.new()
 	matcher_builder.crlf(true)
 	matcher_ := matcher_builder.build(r'.') or { panic(err) }
-	mut printer := StandardBuilder.new().build(no_color_buffer())
+	mut printer_ := StandardBuilder.new().build(no_color_buffer())
 	mut searcher_builder := searcher.SearcherBuilder.new()
 	searcher_builder.line_number(false)
 	searcher_builder.line_terminator(matcher.LineTerminator.crlf())
 	mut searcher_ := searcher_builder.build()
 
 	mut rdr1 := StandardByteSliceReader.new(haystack)
-	mut sink1 := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink1 := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	searcher_.search_reader(matcher_, mut rdr1, &sink1)!
-	got1 := printer_contents(mut printer)
+	got1 := printer_contents(mut printer_)
 	expected1 := 'hello\nworld\r\n'
 	assert_eq_printed(expected1, got1)
 

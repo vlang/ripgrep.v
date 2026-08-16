@@ -166,7 +166,11 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 		} else if low.context.kind == .limited {
 			before, after := low.context.limited.get()
 			if before > 0 || after > 0 {
-				file_separator = low.context_separator.into_bytes()
+				// Clone first: `into_bytes()` returns a borrowed view of
+				// `context_separator`'s bytes, which HiArgs also stores in its own
+				// `context_separator` field. Without the clone both fields alias
+				// the same `--` buffer and HiArgs' drop frees it twice.
+				file_separator = low.context_separator.clone().into_bytes()
 			}
 		}
 	}
@@ -1046,7 +1050,7 @@ fn Patterns.from_low_args(mut state State, mut low LowArgs) !Patterns {
 		}
 		pat := low.positional[0].clone()
 		low.positional.delete(0)
-		if !utf8.validate_str(pat) {
+		if !utf8.validate_str(pat.clone()) {
 			return error('pattern given is not valid UTF-8')
 		}
 		return Patterns{
@@ -1082,7 +1086,7 @@ fn Patterns.from_low_args(mut state State, mut low LowArgs) !Patterns {
 					}
 					state.stdin_consumed = true
 				} else {
-					file_patterns := cli.patterns_from_path(value) or {
+					file_patterns := cli.patterns_from_path(value.clone()) or {
 						return error('failed to read pattern file ${value}: ${err.msg()}')
 					}
 					for pat in file_patterns {
@@ -1223,22 +1227,22 @@ fn (binary &BinaryDetection) is_none() bool {
 fn types(low &LowArgs) !ignore.Types {
 	mut builder := ignore.TypesBuilder.new()
 	builder.add_defaults()
-	for tychange in low.type_changes {
-		match tychange.kind {
+	for i in 0 .. low.type_changes.len {
+		match low.type_changes[i].kind {
 			.clear {
-				builder.clear(tychange.name)
+				builder.clear(low.type_changes[i].name.clone())
 			}
 			.add {
-				has_err, err := builder.add_def(tychange.def)
+				has_err, err := builder.add_def(low.type_changes[i].def.clone())
 				if has_err {
 					return error(err.msg())
 				}
 			}
 			.select {
-				builder.select(tychange.name)
+				builder.select(low.type_changes[i].name.clone())
 			}
 			.negate {
-				builder.negate(tychange.name)
+				builder.negate(low.type_changes[i].name.clone())
 			}
 		}
 	}
@@ -1323,8 +1327,8 @@ fn stats(low &LowArgs) ?printer.Stats {
 fn take_color_specs(mut state State, mut low LowArgs) !printer.ColorSpecs {
 	_ = state
 	mut specs := printer.default_color_specs()
-	for spec in low.colors {
-		specs << printer.parse_user_color_spec(spec.spec)!
+	for i in 0 .. low.colors.len {
+		specs << printer.parse_user_color_spec(low.colors[i].spec.clone())!
 	}
 	low.colors = []UserColorSpec{}
 	return printer.ColorSpecs.new(specs)
@@ -1384,7 +1388,7 @@ fn hostname(bin ?string) ?string {
 		core.debug_message('rg::flags::hiargs', "failed to run command '${bin_value}' to get hostname (falling back to platform hostname): ${err.msg()}")
 		return platform_hostname()
 	}
-	mut command := cli.Command.new(resolved)
+	mut command := cli.Command.new(resolved.clone())
 	$if windows {
 		command.stdin_path('NUL')
 	} $else {
@@ -1446,7 +1450,7 @@ fn platform_hostname() ?string {
 		core.debug_message('rg::flags::hiargs', 'could not get hostname: ${err.msg()}')
 		return none
 	}
-	if !utf8.validate_str(hostname_value) {
+	if !utf8.validate_str(hostname_value.clone()) {
 		core.debug_message('rg::flags::hiargs', 'got hostname ${hostname_value}, but it is not valid UTF-8')
 		return none
 	}
@@ -1535,7 +1539,7 @@ fn name_cmp_asc(a &string, b &string) int {
 	return 0
 }
 
-struct TimestampedHaystack {
+struct TimestampedHaystack implements IClone {
 	haystack  core.Haystack
 	timestamp ?i64
 }

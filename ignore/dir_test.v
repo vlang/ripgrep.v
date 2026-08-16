@@ -475,15 +475,15 @@ fn test_parents_iterator_releases_unconsumed_matchers() {
 	assert !has_err1
 	ig2, has_err2, _ := ig1.add_child('two')
 	assert !has_err2
-	root_refs := ig0.node.refs.load()
-	first_refs := ig1.node.refs.load()
+	root_refs := ig0.node.strong_count()
+	first_refs := ig1.node.strong_count()
 	mut parents := ig2.parents()
-	assert ig0.node.refs.load() == root_refs + 1
-	assert ig1.node.refs.load() == first_refs + 1
+	assert ig0.node.strong_count() == root_refs + 1
+	assert ig1.node.strong_count() == first_refs + 1
 	mut first := parents.next() or { panic('missing first parent') }
-	parents.drop()
-	assert ig0.node.refs.load() == root_refs
-	assert ig1.node.refs.load() == first_refs
+	parents.items = []Ignore{}
+	assert ig0.node.strong_count() == root_refs
+	assert ig1.node.strong_count() == first_refs
 	first.free_nodes()
 }
 

@@ -38,6 +38,21 @@ fn test_parse_short_and_long_flags() {
 	assert parsed[3].arg or { '' } == '7'
 }
 
+fn test_parse_attached_long_value() {
+	mut fm := FlagMapper{
+		config: ParseConfig{
+			style: .short_long
+			mode:  .relaxed
+			stop:  '--'
+		}
+		input:  ['--after-context=5']
+	}
+	fm.parse_defs(schema_defs_for_test()) or { panic(err.msg()) }
+	parsed := fm.parsed_flags()
+	assert parsed.len == 1
+	assert parsed[0].arg or { '' } == '5'
+}
+
 fn test_parse_short_value_can_start_with_hyphen() {
 	mut fm := FlagMapper{
 		config: ParseConfig{

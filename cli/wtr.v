@@ -150,7 +150,7 @@ pub fn (mut wtr BufferWriter) separator(separator ?[]u8) {
 }
 
 /// Creates a new empty buffer.
-pub fn (wtr BufferWriter) buffer() Buffer {
+pub fn (wtr &BufferWriter) buffer() Buffer {
 	mut bytes := []u8{}
 	// `Buffer` has Rust `Vec<u8>` ownership: shared views cannot coexist with
 	// mutation. Let array growth release its previous backing allocation.
@@ -177,12 +177,12 @@ pub fn (mut wtr BufferWriter) print(buffer &Buffer) ! {
 }
 
 /// Returns the contents of this buffer.
-pub fn (buffer Buffer) as_slice() []u8 {
+pub fn (buffer &Buffer) as_slice() []u8 {
 	return buffer.bytes
 }
 
 /// Returns true when this buffer is empty.
-pub fn (buffer Buffer) is_empty() bool {
+pub fn (buffer &Buffer) is_empty() bool {
 	return buffer.bytes.len == 0
 }
 
@@ -229,7 +229,7 @@ pub fn (mut buffer Buffer) flush() ! {
 	_ = buffer
 }
 
-pub fn (mut buffer Buffer) set_color(spec printer.ColorSpec) ! {
+pub fn (mut buffer Buffer) set_color(spec &printer.ColorSpec) ! {
 	if !buffer.supports_color() {
 		return
 	}
@@ -259,7 +259,7 @@ pub fn (mut buffer Buffer) reset() ! {
 	buffer.bytes << '\x1b[0m'.bytes()
 }
 
-pub fn (buffer Buffer) supports_color() bool {
+pub fn (buffer &Buffer) supports_color() bool {
 	return match buffer.color_choice {
 		.never { false }
 		.auto { is_tty_stdout() }
@@ -267,11 +267,11 @@ pub fn (buffer Buffer) supports_color() bool {
 	}
 }
 
-pub fn (buffer Buffer) supports_hyperlinks() bool {
+pub fn (buffer &Buffer) supports_hyperlinks() bool {
 	return buffer.supports_color()
 }
 
-pub fn (buffer Buffer) is_synchronous() bool {
+pub fn (buffer &Buffer) is_synchronous() bool {
 	_ = buffer
 	return false
 }
@@ -376,7 +376,7 @@ pub fn (mut stream StandardStream) flush() ! {
 	flush_stdout()
 }
 
-pub fn (stream StandardStream) supports_color() bool {
+pub fn (stream &StandardStream) supports_color() bool {
 	return match stream.color_choice {
 		.never { false }
 		.auto { is_tty_stdout() }
@@ -384,11 +384,11 @@ pub fn (stream StandardStream) supports_color() bool {
 	}
 }
 
-pub fn (stream StandardStream) supports_hyperlinks() bool {
+pub fn (stream &StandardStream) supports_hyperlinks() bool {
 	return stream.supports_color()
 }
 
-pub fn (mut stream StandardStream) set_color(spec printer.ColorSpec) ! {
+pub fn (mut stream StandardStream) set_color(spec &printer.ColorSpec) ! {
 	if !stream.supports_color() {
 		return
 	}
@@ -422,7 +422,7 @@ pub fn (stream StandardStream) is_synchronous() bool {
 	return stream.kind == .line_buffered
 }
 
-fn ansi_for_color_spec(spec printer.ColorSpec) string {
+fn ansi_for_color_spec(spec &printer.ColorSpec) string {
 	mut codes := []string{}
 	if spec.bold() {
 		codes << '1'

@@ -11,7 +11,9 @@ fn must_lookup(name string) FlagId {
 
 fn must_apply(steps []UpdateStep) LowArgs {
 	mut args := default_low_args()
-	for step in steps {
+	mut remaining := steps
+	for remaining.len > 0 {
+		step := remaining.pop_left()
 		id := must_lookup(step.name)
 		mut is_negated_name := false
 		if negated := id.name_negated() {
@@ -151,7 +153,7 @@ fn test_lookup_matches_longs_aliases_and_negations() {
 }
 
 fn test_update_after_context() {
-	args := must_apply([
+	mut args := must_apply([
 		UpdateStep{'after-context', flag_value('5')},
 	])
 	assert args.context == after_context(5)
@@ -233,14 +235,10 @@ fn test_auto_hybrid_regex() {
 	args = parse_low_raw(['--auto-hybrid-regex']) or { panic(err.msg()) }
 	assert args.engine == .auto
 
-	args = parse_low_raw(['--auto-hybrid-regex', '--no-auto-hybrid-regex']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--auto-hybrid-regex', '--no-auto-hybrid-regex']) or { panic(err.msg()) }
 	assert args.engine == .default
 
-	args = parse_low_raw(['--no-auto-hybrid-regex', '--auto-hybrid-regex']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--no-auto-hybrid-regex', '--auto-hybrid-regex']) or { panic(err.msg()) }
 	assert args.engine == .auto
 
 	args = parse_low_raw(['--auto-hybrid-regex', '-P']) or { panic(err.msg()) }
@@ -404,7 +402,8 @@ fn test_colors() {
 	args = parse_low_raw(['--colors', 'match:fg:magenta', '--colors', 'line:bg:yellow']) or {
 		panic(err.msg())
 	}
-	assert args.colors == [user_color_spec('match:fg:magenta'), user_color_spec('line:bg:yellow')]
+	assert args.colors == [user_color_spec('match:fg:magenta'),
+		user_color_spec('line:bg:yellow')]
 
 	args = parse_low_raw(['--colors', 'highlight:bg:240']) or { panic(err.msg()) }
 	assert args.colors == [user_color_spec('highlight:bg:240')]
@@ -412,7 +411,8 @@ fn test_colors() {
 	args = parse_low_raw(['--colors', 'match:fg:magenta', '--colors', 'highlight:bg:blue']) or {
 		panic(err.msg())
 	}
-	assert args.colors == [user_color_spec('match:fg:magenta'), user_color_spec('highlight:bg:blue')]
+	assert args.colors == [user_color_spec('match:fg:magenta'),
+		user_color_spec('highlight:bg:blue')]
 }
 
 fn test_column() {
@@ -643,9 +643,7 @@ fn test_dfa_size_limit() {
 	args = parse_low_raw(['--dfa-size-limit=9G']) or { panic(err.msg()) }
 	assert_opt_usize(args.dfa_size_limit, usize(9) * (usize(1) << 30))
 
-	args = parse_low_raw(['--dfa-size-limit=9G', '--dfa-size-limit=0']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--dfa-size-limit=9G', '--dfa-size-limit=0']) or { panic(err.msg()) }
 	assert_opt_usize(args.dfa_size_limit, 0)
 
 	args = parse_low_raw(['--dfa-size-limit=0K']) or { panic(err.msg()) }
@@ -735,32 +733,31 @@ fn test_engine() {
 
 fn test_field_context_separator() {
 	mut args := parse_low_raw([]string{}) or { panic(err.msg()) }
-	assert args.field_context_separator.into_bytes() == '-'.bytes()
+	assert args.field_context_separator.clone().into_bytes() == '-'.bytes()
 
 	args = parse_low_raw(['--field-context-separator', 'XYZ']) or { panic(err.msg()) }
-	assert args.field_context_separator.into_bytes() == 'XYZ'.bytes()
+	assert args.field_context_separator.clone().into_bytes() == 'XYZ'.bytes()
 
 	args = parse_low_raw(['--field-context-separator=XYZ']) or { panic(err.msg()) }
-	assert args.field_context_separator.into_bytes() == 'XYZ'.bytes()
+	assert args.field_context_separator.clone().into_bytes() == 'XYZ'.bytes()
 
-	args = parse_low_raw(['--field-context-separator', 'XYZ', '--field-context-separator',
-		'ABC']) or {
+	args = parse_low_raw(['--field-context-separator', 'XYZ', '--field-context-separator', 'ABC']) or {
 		panic(err.msg())
 	}
-	assert args.field_context_separator.into_bytes() == 'ABC'.bytes()
+	assert args.field_context_separator.clone().into_bytes() == 'ABC'.bytes()
 
 	args = parse_low_raw(['--field-context-separator', r'\t']) or { panic(err.msg()) }
-	assert args.field_context_separator.into_bytes() == '\t'.bytes()
+	assert args.field_context_separator.clone().into_bytes() == '\t'.bytes()
 
 	args = parse_low_raw(['--field-context-separator', r'\x00']) or { panic(err.msg()) }
-	assert args.field_context_separator.into_bytes() == [u8(0)]
+	assert args.field_context_separator.clone().into_bytes() == [u8(0)]
 
 	// This checks that invalid UTF-8 can be used. This case isn't too tricky
 	// to handle, because it passes the invalid UTF-8 as an escape sequence
 	// that is itself valid UTF-8. It doesn't become invalid UTF-8 until after
 	// the argument is parsed and then unescaped.
 	args = parse_low_raw(['--field-context-separator', r'\xFF']) or { panic(err.msg()) }
-	assert args.field_context_separator.into_bytes() == [u8(0xff)]
+	assert args.field_context_separator.clone().into_bytes() == [u8(0xff)]
 
 	// In this case, we specifically try to pass an invalid UTF-8 argument to
 	// the flag. In theory we might be able to support this, but because we do
@@ -775,32 +772,31 @@ fn test_field_context_separator() {
 
 fn test_field_match_separator() {
 	mut args := parse_low_raw([]string{}) or { panic(err.msg()) }
-	assert args.field_match_separator.into_bytes() == ':'.bytes()
+	assert args.field_match_separator.clone().into_bytes() == ':'.bytes()
 
 	args = parse_low_raw(['--field-match-separator', 'XYZ']) or { panic(err.msg()) }
-	assert args.field_match_separator.into_bytes() == 'XYZ'.bytes()
+	assert args.field_match_separator.clone().into_bytes() == 'XYZ'.bytes()
 
 	args = parse_low_raw(['--field-match-separator=XYZ']) or { panic(err.msg()) }
-	assert args.field_match_separator.into_bytes() == 'XYZ'.bytes()
+	assert args.field_match_separator.clone().into_bytes() == 'XYZ'.bytes()
 
-	args = parse_low_raw(['--field-match-separator', 'XYZ', '--field-match-separator',
-		'ABC']) or {
+	args = parse_low_raw(['--field-match-separator', 'XYZ', '--field-match-separator', 'ABC']) or {
 		panic(err.msg())
 	}
-	assert args.field_match_separator.into_bytes() == 'ABC'.bytes()
+	assert args.field_match_separator.clone().into_bytes() == 'ABC'.bytes()
 
 	args = parse_low_raw(['--field-match-separator', r'\t']) or { panic(err.msg()) }
-	assert args.field_match_separator.into_bytes() == '\t'.bytes()
+	assert args.field_match_separator.clone().into_bytes() == '\t'.bytes()
 
 	args = parse_low_raw(['--field-match-separator', r'\x00']) or { panic(err.msg()) }
-	assert args.field_match_separator.into_bytes() == [u8(0)]
+	assert args.field_match_separator.clone().into_bytes() == [u8(0)]
 
 	// This checks that invalid UTF-8 can be used. This case isn't too tricky
 	// to handle, because it passes the invalid UTF-8 as an escape sequence
 	// that is itself valid UTF-8. It doesn't become invalid UTF-8 until after
 	// the argument is parsed and then unescaped.
 	args = parse_low_raw(['--field-match-separator', r'\xFF']) or { panic(err.msg()) }
-	assert args.field_match_separator.into_bytes() == [u8(0xff)]
+	assert args.field_match_separator.clone().into_bytes() == [u8(0xff)]
 
 	// In this case, we specifically try to pass an invalid UTF-8 argument to
 	// the flag. In theory we might be able to support this, but because we do
@@ -890,14 +886,10 @@ fn test_files_without_match() {
 	args = parse_low_raw(['--files-without-match']) or { panic(err.msg()) }
 	assert args.mode == mode_search(.files_without_match)
 
-	args = parse_low_raw(['--files-with-matches', '--files-without-match']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--files-with-matches', '--files-without-match']) or { panic(err.msg()) }
 	assert args.mode == mode_search(.files_without_match)
 
-	args = parse_low_raw(['--files-without-match', '--files-with-matches']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--files-without-match', '--files-with-matches']) or { panic(err.msg()) }
 	assert args.mode == mode_search(.files_with_matches)
 }
 
@@ -1149,9 +1141,7 @@ fn test_ignore_file() {
 	args = parse_low_raw(['--ignore-file', 'foo']) or { panic(err.msg()) }
 	assert args.ignore_file == ['foo']
 
-	args = parse_low_raw(['--ignore-file', 'foo', '--ignore-file', 'bar']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--ignore-file', 'foo', '--ignore-file', 'bar']) or { panic(err.msg()) }
 	assert args.ignore_file == ['foo', 'bar']
 }
 
@@ -1162,14 +1152,12 @@ fn test_ignore_file_case_insensitive() {
 	args = parse_low_raw(['--ignore-file-case-insensitive']) or { panic(err.msg()) }
 	assert args.ignore_file_case_insensitive
 
-	args = parse_low_raw(['--ignore-file-case-insensitive',
-		'--no-ignore-file-case-insensitive']) or {
+	args = parse_low_raw(['--ignore-file-case-insensitive', '--no-ignore-file-case-insensitive']) or {
 		panic(err.msg())
 	}
 	assert !args.ignore_file_case_insensitive
 
-	args = parse_low_raw(['--no-ignore-file-case-insensitive',
-		'--ignore-file-case-insensitive']) or {
+	args = parse_low_raw(['--no-ignore-file-case-insensitive', '--ignore-file-case-insensitive']) or {
 		panic(err.msg())
 	}
 	assert args.ignore_file_case_insensitive
@@ -1347,9 +1335,7 @@ fn test_max_filesize() {
 	args = parse_low_raw(['--max-filesize', '1K']) or { panic(err.msg()) }
 	assert_opt_u64(args.max_filesize, 1024)
 
-	args = parse_low_raw(['--max-filesize', '1K', '--max-filesize=1M']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--max-filesize', '1K', '--max-filesize=1M']) or { panic(err.msg()) }
 	assert_opt_u64(args.max_filesize, u64(1024) * 1024)
 }
 
@@ -1391,9 +1377,7 @@ fn test_multiline_dotall() {
 	args = parse_low_raw(['--multiline-dotall']) or { panic(err.msg()) }
 	assert args.multiline_dotall
 
-	args = parse_low_raw(['--multiline-dotall', '--no-multiline-dotall']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--multiline-dotall', '--no-multiline-dotall']) or { panic(err.msg()) }
 	assert !args.multiline_dotall
 }
 
@@ -1768,9 +1752,7 @@ fn test_regex_size_limit() {
 	args = parse_low_raw(['--regex-size-limit=9G']) or { panic(err.msg()) }
 	assert_opt_usize(args.regex_size_limit, usize(9) * (usize(1) << 30))
 
-	args = parse_low_raw(['--regex-size-limit=9G', '--regex-size-limit=0']) or {
-		panic(err.msg())
-	}
+	args = parse_low_raw(['--regex-size-limit=9G', '--regex-size-limit=0']) or { panic(err.msg()) }
 	assert_opt_usize(args.regex_size_limit, 0)
 
 	args = parse_low_raw(['--regex-size-limit=0K']) or { panic(err.msg()) }
@@ -2279,7 +2261,7 @@ fn test_word_regexp() {
 }
 
 fn test_update_context_separator() {
-	args := must_apply([]UpdateStep{})
+	mut args := must_apply([]UpdateStep{})
 	assert_context_separator_bytes(args.context_separator, '--'.bytes())
 
 	args = must_apply([UpdateStep{'context-separator', flag_value('XYZ')}])
@@ -2371,7 +2353,7 @@ fn test_update_hidden() {
 }
 
 fn test_update_hyperlink_format() {
-	args := must_apply([]UpdateStep{})
+	mut args := must_apply([]UpdateStep{})
 	assert args.hyperlink_format == parse_hyperlink_format('none') or { panic(err.msg()) }
 
 	args = must_apply([UpdateStep{'hyperlink-format', flag_value('file')}])
@@ -2404,8 +2386,7 @@ fn test_update_json() {
 
 fn test_update_line_number() {
 	assert must_apply([]UpdateStep{}).line_number == none
-	assert_opt_bool(must_apply([UpdateStep{'line-number', flag_switch(true)}]).line_number,
-		true)
+	assert_opt_bool(must_apply([UpdateStep{'line-number', flag_switch(true)}]).line_number, true)
 	assert_opt_bool(must_apply([UpdateStep{'no-line-number', flag_switch(true)}]).line_number,
 		false)
 	assert_opt_bool(must_apply([
@@ -2416,8 +2397,7 @@ fn test_update_line_number() {
 
 fn test_update_path_separator() {
 	assert must_apply([]UpdateStep{}).path_separator == none
-	assert_opt_u8(must_apply([UpdateStep{'path-separator', flag_value('/')}]).path_separator,
-		`/`)
+	assert_opt_u8(must_apply([UpdateStep{'path-separator', flag_value('/')}]).path_separator, `/`)
 	assert_opt_u8(must_apply([UpdateStep{'path-separator', flag_value(r'\x00')}]).path_separator,
 		u8(0))
 	assert_opt_u8(must_apply([
@@ -2447,8 +2427,7 @@ fn test_update_sort_and_sortr() {
 		kind:    .path
 	})
 	assert must_apply([UpdateStep{'sort', flag_value('none')}]).sort == none
-	assert_opt_sort_mode(must_apply([UpdateStep{'sortr', flag_value('created')}]).sort,
-		SortMode{
+	assert_opt_sort_mode(must_apply([UpdateStep{'sortr', flag_value('created')}]).sort, SortMode{
 		reverse: true
 		kind:    .created
 	})
@@ -2471,7 +2450,7 @@ fn test_update_sort_and_sortr() {
 fn test_update_stop_on_nonmatch() {
 	assert !must_apply([]UpdateStep{}).stop_on_nonmatch
 
-	args := must_apply([UpdateStep{'stop-on-nonmatch', flag_switch(true)}])
+	mut args := must_apply([UpdateStep{'stop-on-nonmatch', flag_switch(true)}])
 	assert args.stop_on_nonmatch
 
 	args = must_apply([
@@ -2535,7 +2514,7 @@ fn test_update_type_changes() {
 }
 
 fn test_update_unrestricted() {
-	args := must_apply([]UpdateStep{})
+	mut args := must_apply([]UpdateStep{})
 	assert !args.no_ignore_vcs
 	assert !args.hidden
 	assert args.binary == .auto
@@ -2577,8 +2556,7 @@ fn test_update_with_filename() {
 	assert must_apply([]UpdateStep{}).with_filename == none
 	assert_opt_bool(must_apply([UpdateStep{'with-filename', flag_switch(true)}]).with_filename,
 		true)
-	assert_opt_bool(must_apply([UpdateStep{'no-filename', flag_switch(true)}]).with_filename,
-		false)
+	assert_opt_bool(must_apply([UpdateStep{'no-filename', flag_switch(true)}]).with_filename, false)
 	assert_opt_bool(must_apply([
 		UpdateStep{'no-filename', flag_switch(true)},
 		UpdateStep{'with-filename', flag_switch(true)},
@@ -2587,8 +2565,7 @@ fn test_update_with_filename() {
 
 fn test_update_word_regexp() {
 	assert must_apply([]UpdateStep{}).boundary == none
-	assert_opt_boundary(must_apply([UpdateStep{'word-regexp', flag_switch(true)}]).boundary,
-		.word)
+	assert_opt_boundary(must_apply([UpdateStep{'word-regexp', flag_switch(true)}]).boundary, .word)
 	assert_opt_boundary(must_apply([
 		UpdateStep{'line-regexp', flag_switch(true)},
 		UpdateStep{'word-regexp', flag_switch(true)},
@@ -2613,7 +2590,7 @@ fn test_available_shorts() {
 	}
 
 	mut taken := []bool{len: 128}
-	for id in flags {
+	for id in flag_defs {
 		short := id.name_short() or { continue }
 		taken[int(short)] = true
 	}
@@ -2626,14 +2603,14 @@ fn test_available_shorts() {
 }
 
 fn test_shorts_all_ascii_alphanumeric() {
-	for id in flags {
+	for id in flag_defs {
 		short := id.name_short() or { continue }
 		assert short.is_alnum() || short == `.`
 	}
 }
 
 fn test_longs_all_ascii_alphanumeric() {
-	for id in flags {
+	for id in flag_defs {
 		long := id.name_long()
 		assert long.len >= 2
 		for ch in long.bytes() {
@@ -2655,7 +2632,7 @@ fn test_longs_all_ascii_alphanumeric() {
 
 fn test_shorts_no_duplicates() {
 	mut taken := map[u8]bool{}
-	for id in flags {
+	for id in flag_defs {
 		short := id.name_short() or { continue }
 		assert short !in taken
 		taken[short] = true
@@ -2664,7 +2641,7 @@ fn test_shorts_no_duplicates() {
 
 fn test_longs_no_duplicates() {
 	mut taken := map[string]bool{}
-	for id in flags {
+	for id in flag_defs {
 		long := id.name_long()
 		assert long !in taken
 		taken[long] = true
@@ -2679,7 +2656,7 @@ fn test_longs_no_duplicates() {
 }
 
 fn test_non_switches_have_variable_names() {
-	for id in flags {
+	for id in flag_defs {
 		if id.is_switch() {
 			continue
 		}
@@ -2688,7 +2665,7 @@ fn test_non_switches_have_variable_names() {
 }
 
 fn test_switches_have_no_choices() {
-	for id in flags {
+	for id in flag_defs {
 		if !id.is_switch() {
 			continue
 		}
@@ -2697,7 +2674,7 @@ fn test_switches_have_no_choices() {
 }
 
 fn test_choices_ascii_alphanumeric() {
-	for id in flags {
+	for id in flag_defs {
 		for choice in id.doc_choices() {
 			for ch in choice.bytes() {
 				assert ch.is_alnum() || ch in [`-`, `:`, `+`]

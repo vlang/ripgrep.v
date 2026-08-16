@@ -13,7 +13,7 @@ module matcher
 pub fn interpolate(replacement []u8, append fn (usize, mut []u8), name_to_index fn (string) ?usize, mut dst []u8) {
 	mut replacement_bytes := replacement.clone()
 	for replacement_bytes.len > 0 {
-		index := find_byte(replacement_bytes, `$`) or { break }
+		index := find_byte(&replacement_bytes, `$`) or { break }
 		dst << replacement_bytes[..index]
 		replacement_bytes = replacement_bytes[index..].clone()
 		if replacement_bytes.len > 1 && replacement_bytes[1] == `$` {
@@ -120,9 +120,9 @@ fn is_valid_cap_letter(byte u8) bool {
 	}
 }
 
-fn find_byte(bytes []u8, needle u8) ?usize {
-	for i, byte in bytes {
-		if byte == needle {
+fn find_byte(bytes &[]u8, needle u8) ?usize {
+	for i in 0 .. bytes.len {
+		if bytes[i] == needle {
 			return usize(i)
 		}
 	}
@@ -133,12 +133,18 @@ fn parse_capture_number(cap string) ?usize {
 	if cap.len == 0 {
 		return none
 	}
-	mut number := usize(0)
+	mut number := u64(0)
 	for byte in cap.bytes() {
 		if byte < `0` || byte > `9` {
 			return none
 		}
-		number = number * 10 + usize(byte - `0`)
+		number = number * 10 + u64(byte - `0`)
+		// Rust parses the capture number with `cap.parse::<u32>()`, so a
+		// digit string that overflows `u32` fails to parse and is treated
+		// as a named reference instead of a numbered one.
+		if number > u64(0xffff_ffff) {
+			return none
+		}
 	}
-	return number
+	return usize(number)
 }

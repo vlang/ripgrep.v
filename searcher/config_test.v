@@ -15,19 +15,19 @@ fn assert_no_encoding(got ?Encoding) {
 }
 
 fn test_searcher_new_defaults() {
-	searcher := Searcher.new()
-	assert searcher.line_terminator() == matcher.LineTerminator.default()
-	assert searcher.binary_detection().quit_byte() == none
-	assert !searcher.invert_match()
-	assert searcher.line_number()
-	assert !searcher.multi_line()
-	assert !searcher.stop_on_nonmatch()
-	assert searcher.after_context() == 0
-	assert searcher.before_context() == 0
-	assert !searcher.passthru()
-	assert_no_u64_config(searcher.max_matches())
-	assert_no_encoding(searcher.config.encoding)
-	assert !searcher.config.mmap.is_enabled()
+	searcher_ := Searcher.new()
+	assert searcher_.line_terminator() == matcher.LineTerminator.default()
+	assert searcher_.binary_detection().quit_byte() == none
+	assert !searcher_.invert_match()
+	assert searcher_.line_number()
+	assert !searcher_.multi_line()
+	assert !searcher_.stop_on_nonmatch()
+	assert searcher_.after_context() == 0
+	assert searcher_.before_context() == 0
+	assert !searcher_.passthru()
+	assert_no_u64_config(searcher_.max_matches())
+	assert_no_encoding(searcher_.config.encoding)
+	assert !searcher_.config.mmap.is_enabled()
 }
 
 fn test_searcher_builder_sets_config() {
@@ -43,19 +43,19 @@ fn test_searcher_builder_sets_config() {
 	builder.bom_sniffing(false)
 	builder.stop_on_nonmatch(true)
 	builder.max_matches(u64(7))
-	searcher := builder.build()
+	searcher_ := builder.build()
 
-	assert searcher.line_terminator() == matcher.LineTerminator.byte(`\x00`)
-	assert searcher.invert_match()
-	assert !searcher.line_number()
-	assert searcher.multi_line()
-	assert searcher.after_context() == 2
-	assert searcher.before_context() == 3
-	assert searcher.binary_detection().quit_byte() or { 255 } == 0
-	assert searcher.config.mmap.is_enabled()
-	assert !searcher.config.bom_sniffing
-	assert searcher.stop_on_nonmatch()
-	assert searcher.max_matches() or { 0 } == 7
+	assert searcher_.line_terminator() == matcher.LineTerminator.byte(`\x00`)
+	assert searcher_.invert_match()
+	assert !searcher_.line_number()
+	assert searcher_.multi_line()
+	assert searcher_.after_context() == 2
+	assert searcher_.before_context() == 3
+	assert searcher_.binary_detection().quit_byte() or { 255 } == 0
+	assert searcher_.config.mmap.is_enabled()
+	assert !searcher_.config.bom_sniffing
+	assert searcher_.stop_on_nonmatch()
+	assert searcher_.max_matches() or { 0 } == 7
 }
 
 fn test_searcher_builder_passthru_clears_context() {
@@ -63,25 +63,25 @@ fn test_searcher_builder_passthru_clears_context() {
 	builder.after_context(10)
 	builder.before_context(20)
 	builder.passthru(true)
-	searcher := builder.build()
+	searcher_ := builder.build()
 
-	assert searcher.passthru()
-	assert searcher.after_context() == 0
-	assert searcher.before_context() == 0
-	assert searcher.config.max_context() == 0
+	assert searcher_.passthru()
+	assert searcher_.after_context() == 0
+	assert searcher_.before_context() == 0
+	assert searcher_.config.max_context() == 0
 }
 
 fn test_searcher_builder_sets_and_clears_encoding() {
 	encoding := Encoding.new('utf-16')!
 	mut builder := SearcherBuilder.new()
 	builder.encoding(encoding)
-	searcher := builder.build()
+	searcher_ := builder.build()
 
-	got := searcher.config.encoding or { panic('missing encoding') }
+	got := searcher_.config.encoding or { panic('missing encoding') }
 	assert got.label == 'UTF-16LE'
 
 	builder.encoding(none)
-	still_owned := searcher.config.encoding or { panic('built searcher lost its encoding') }
+	still_owned := searcher_.config.encoding or { panic('built searcher lost its encoding') }
 	assert still_owned.label == 'UTF-16LE'
 	cleared := builder.build()
 	assert_no_encoding(cleared.config.encoding)
@@ -104,13 +104,13 @@ fn test_searcher_encoding_normalizes_labels() {
 
 fn test_searcher_encoding_rejects_non_encoding_rs_labels() {
 	for label in ['utf16le', 'utf16be', 'utf-32', 'utf-32le', 'utf32be', 'eucjp', 'replacement'] {
-		if _ := Encoding.new(label) {
+		if _ := Encoding.new(label.clone()) {
 			panic('encoding_rs rejects label ${label}')
 		}
 	}
 	for replacement_label in ['hz-gb-2312', 'iso-2022-cn', 'iso-2022-cn-ext', 'iso-2022-kr',
 		'csiso2022kr'] {
-		if _ := Encoding.new(replacement_label) {
+		if _ := Encoding.new(replacement_label.clone()) {
 			panic('for_label_no_replacement rejects label ${replacement_label}')
 		}
 	}
@@ -137,10 +137,10 @@ fn test_searcher_builder_heap_limit_configures_line_buffer() {
 	mut builder := SearcherBuilder.new()
 	builder.heap_limit(usize(12))
 	builder.binary_detection(BinaryDetection.convert(0))
-	searcher := builder.build()
+	searcher_ := builder.build()
 
-	assert searcher.line_buffer.config.capacity == 12
-	assert searcher.line_buffer.config.buffer_alloc.kind == .error
-	assert searcher.line_buffer.config.buffer_alloc.additional == 0
-	assert searcher.line_buffer.config.binary.convert_byte() or { 255 } == 0
+	assert searcher_.line_buffer.config.capacity == 12
+	assert searcher_.line_buffer.config.buffer_alloc.kind == .error
+	assert searcher_.line_buffer.config.buffer_alloc.additional == 0
+	assert searcher_.line_buffer.config.binary.convert_byte() or { 255 } == 0
 }

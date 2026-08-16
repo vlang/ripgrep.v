@@ -129,11 +129,11 @@ fn parse_color_number(value string) ?u8 {
 		parsed := strconv.parse_uint(value[2..], 16, 8) or { return none }
 		return u8(parsed)
 	}
-	digits := if value.starts_with('+') { value[1..] } else { value }
+	digits := if value.starts_with('+') { value[1..].clone() } else { value.clone() }
 	if digits.len == 0 {
 		return none
 	}
-	parsed := strconv.parse_uint(digits, 10, 8) or { return none }
+	parsed := strconv.parse_uint(digits.clone(), 10, 8) or { return none }
 	return u8(parsed)
 }
 
@@ -323,7 +323,7 @@ pub interface WriteColor {
 mut:
 	write(buf []u8) !int
 	flush() !
-	set_color(spec ColorSpec) !
+	set_color(spec &ColorSpec) !
 	set_hyperlink(link HyperlinkSpec) !
 	reset() !
 	supports_color() bool
@@ -355,7 +355,7 @@ pub fn (mut w NoColor[W]) flush() ! {
 	_ = w
 }
 
-pub fn (mut w NoColor[W]) set_color(spec ColorSpec) ! {
+pub fn (mut w NoColor[W]) set_color(spec &ColorSpec) ! {
 	_ = w
 	_ = spec
 }

@@ -2,6 +2,7 @@ module cli
 
 import globset
 import io
+import log
 import os
 
 /// A builder for a matcher that determines which files get decompressed.
@@ -195,8 +196,7 @@ pub fn (builder &DecompressionReaderBuilder) build(path string) !DecompressionRe
 	mut cmd := builder.matcher.command(path) or { return DecompressionReader.new_passthru(path) }
 	cmd.arg(path)
 	cmd_reader := builder.command_builder.build(cmd) or {
-		// V-specific: this standalone module has no process-global logger, so
-		// the source's debug event is omitted while preserving its fallback.
+		log.debug("${path}: error spawning command '${cmd}': ${err.msg()} (falling back to uncompressed reader)")
 		return DecompressionReader.new_passthru(path)
 	}
 	return DecompressionReader{
@@ -290,6 +290,7 @@ enum DecompressionReaderKind {
 /// rdr.read_to_end(&mut contents)?;
 /// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
+@[heap]
 pub struct DecompressionReader implements Drop {
 	// V-specific: dynamic `io.Reader` calls copy concrete reader values at the
 	// interface boundary. Keep the owned process/file state behind a shared
@@ -525,8 +526,7 @@ fn add_decompression_command(glob string, args []string, mut cmds []Decompressio
 		return
 	}
 	bin := resolve_binary(args[0]) or {
-		// V-specific: this standalone module has no process-global logger, so
-		// the source's debug event is omitted when a default is unavailable.
+		log.debug(err.msg())
 		return
 	}
 	cmds << DecompressionCommand{

@@ -9,13 +9,13 @@ mut:
 	rdr  LineBufferReader[^r, ^b]
 }
 
-fn ReadByLine.new[^s, ^r, ^b](searcher &^s Searcher, matcher_ SearchMatcher, read_from LineBufferReader[^r, ^b], write_to Sink) ReadByLine[^s, ^r, ^b] {
+fn ReadByLine.new[^s, ^r, ^b](searcher_ &^s Searcher, matcher_ SearchMatcher, read_from LineBufferReader[^r, ^b], write_to Sink) ReadByLine[^s, ^r, ^b] {
 	$if debug {
-		assert !searcher.multi_line_with_matcher(&matcher_)
+		assert !searcher_.multi_line_with_matcher(&matcher_)
 	}
 	return ReadByLine[^s, ^r, ^b]{
-		config: &searcher.config
-		core:   Core.new(searcher, matcher_, write_to, false)
+		config: &searcher_.config
+		core:   Core.new(searcher_, matcher_, write_to, false)
 		rdr:    read_from
 	}
 }
@@ -76,12 +76,12 @@ mut:
 	core Core[^s]
 }
 
-fn SliceByLine.new[^s](searcher &^s Searcher, matcher_ SearchMatcher, slice &^s []u8, write_to Sink) SliceByLine[^s] {
+fn SliceByLine.new[^s](searcher_ &^s Searcher, matcher_ SearchMatcher, slice &^s []u8, write_to Sink) SliceByLine[^s] {
 	$if debug {
-		assert !searcher.multi_line_with_matcher(&matcher_)
+		assert !searcher_.multi_line_with_matcher(&matcher_)
 	}
 	return SliceByLine[^s]{
-		core:  Core.new(searcher, matcher_, write_to, true)
+		core:  Core.new(searcher_, matcher_, write_to, true)
 		slice: slice
 	}
 }
@@ -120,13 +120,13 @@ mut:
 	last_match ?matcher.Match
 }
 
-fn MultiLine.new[^s](searcher &^s Searcher, matcher_ SearchMatcher, slice &^s []u8, write_to Sink) MultiLine[^s] {
+fn MultiLine.new[^s](searcher_ &^s Searcher, matcher_ SearchMatcher, slice &^s []u8, write_to Sink) MultiLine[^s] {
 	$if debug {
-		assert searcher.multi_line_with_matcher(&matcher_)
+		assert searcher_.multi_line_with_matcher(&matcher_)
 	}
 	return MultiLine[^s]{
-		config: &searcher.config
-		core:   Core.new(searcher, matcher_, write_to, true)
+		config: &searcher_.config
+		core:   Core.new(searcher_, matcher_, write_to, true)
 		slice:  slice
 	}
 }

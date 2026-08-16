@@ -18,19 +18,19 @@ pub struct InvalidPatternError implements IClone {
 
 /// Returns the index in the given string up to which valid UTF-8 was
 /// verified.
-pub fn (err InvalidPatternError) valid_up_to() usize {
+pub fn (err &InvalidPatternError) valid_up_to() usize {
 	return err.valid_up_to
 }
 
-pub fn (err InvalidPatternError) msg() string {
+pub fn (err &InvalidPatternError) msg() string {
 	return 'found invalid UTF-8 in pattern at byte offset ${err.valid_up_to}: ${err.original} (disable Unicode mode and use hex escape sequences to match arbitrary bytes in a pattern, e.g., \'(?-u)\\xFF\')'
 }
 
-pub fn (err InvalidPatternError) code() int {
+pub fn (err &InvalidPatternError) code() int {
 	return 0
 }
 
-pub fn (err InvalidPatternError) str() string {
+pub fn (err &InvalidPatternError) str() string {
 	return err.msg()
 }
 

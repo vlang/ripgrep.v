@@ -40,4 +40,14 @@ fn test_stats_add_methods_and_plus() {
 	assert sum.bytes_printed() == u64(44)
 	assert sum.matched_lines() == u64(55)
 	assert sum.matches() == u64(66)
+
+	mut assigned := left
+	assigned += right
+	assert assigned.elapsed() == 5 * time.second
+	assert assigned.searches() == u64(11)
+	assert assigned.searches_with_match() == u64(22)
+	assert assigned.bytes_searched() == u64(33)
+	assert assigned.bytes_printed() == u64(44)
+	assert assigned.matched_lines() == u64(55)
+	assert assigned.matches() == u64(66)
 }

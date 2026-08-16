@@ -69,7 +69,7 @@ fn assert_match_eq(actual Match, expected Match) {
 	assert actual.end() == expected.end()
 }
 
-fn assert_matches_eq(actual []Match, expected []Match) {
+fn assert_matches_eq(actual &[]Match, expected &[]Match) {
 	assert actual.len == expected.len
 	for i, mat in actual {
 		assert_match_eq(mat, expected[i])
@@ -100,7 +100,7 @@ fn is_space_byte(byte u8) bool {
 		|| byte == ` `
 }
 
-fn word_pair_at(haystack []u8, start usize) ?WordPairMatch {
+fn word_pair_at(haystack &[]u8, start usize) ?WordPairMatch {
 	mut i := start
 	if i >= usize(haystack.len) || !is_word_byte(haystack[i]) {
 		return none
@@ -131,7 +131,7 @@ fn word_pair_at(haystack []u8, start usize) ?WordPairMatch {
 	}
 }
 
-fn find_word_pair(haystack []u8, at usize) ?WordPairMatch {
+fn find_word_pair(haystack &[]u8, at usize) ?WordPairMatch {
 	mut start := at
 	for start < usize(haystack.len) {
 		if mat := word_pair_at(haystack, start) {
@@ -142,7 +142,7 @@ fn find_word_pair(haystack []u8, at usize) ?WordPairMatch {
 	return none
 }
 
-fn find_a_plus(haystack []u8, at usize) ?Match {
+fn find_a_plus(haystack &[]u8, at usize) ?Match {
 	mut start := at
 	for start < usize(haystack.len) && haystack[start] != `a` {
 		start++
@@ -157,7 +157,7 @@ fn find_a_plus(haystack []u8, at usize) ?Match {
 	return tm(start, end)
 }
 
-fn (m TestMatcher) find_at(haystack []u8, at usize) !FallibleMatch {
+fn (m TestMatcher) find_at(haystack &[]u8, at usize) !FallibleMatch {
 	match m.pattern {
 		.word_pair {
 			mat := find_word_pair(haystack, at) or { return FallibleMatch.absent() }
@@ -178,7 +178,7 @@ fn (m TestMatcher) new_captures() !TestCaptures {
 	}
 }
 
-fn (m TestMatcher) captures_at(haystack []u8, at usize, mut caps TestCaptures) !bool {
+fn (m TestMatcher) captures_at(haystack &[]u8, at usize, mut caps TestCaptures) !bool {
 	_ = m
 	mat := find_word_pair(haystack, at) or { return false }
 	caps.matches[0] = mat.overall
@@ -208,7 +208,7 @@ fn (m TestMatcher) capture_index(name string) ?usize {
 	}
 }
 
-fn (m TestMatcherNoCaps) find_at(haystack []u8, at usize) !FallibleMatch {
+fn (m TestMatcherNoCaps) find_at(haystack &[]u8, at usize) !FallibleMatch {
 	return m.inner.find_at(haystack, at)
 }
 
@@ -217,7 +217,7 @@ fn (m TestMatcherNoCaps) new_captures() !NoCaptures {
 	return NoCaptures.new()
 }
 
-fn (m TestMatcherNoCaps) captures_at(haystack []u8, at usize, mut caps NoCaptures) !bool {
+fn (m TestMatcherNoCaps) captures_at(haystack &[]u8, at usize, mut caps NoCaptures) !bool {
 	_ = m
 	return default_captures_at(haystack, at, mut caps)
 }
@@ -232,11 +232,11 @@ fn (m TestMatcherNoCaps) capture_index(name string) ?usize {
 	return default_capture_index(name)
 }
 
-fn (caps TestCaptures) len() usize {
+fn (caps &TestCaptures) len() usize {
 	return usize(caps.matches.len)
 }
 
-fn (caps TestCaptures) get(i usize) ?Match {
+fn (caps &TestCaptures) get(i usize) ?Match {
 	if i >= usize(caps.matches.len) || !caps.present[i] {
 		return none
 	}
@@ -253,16 +253,17 @@ fn test_find() {
 fn test_find_iter() {
 	matcher_ := make_test_matcher(r'(\w+)\s+(\w+)')
 	mut matches := []Match{}
-	find_iter(matcher_, 'aa bb cc dd'.bytes(), fn [mut matches] (mat Match) bool {
-		matches << mat
+	matches_ptr := &matches
+	find_iter(matcher_, 'aa bb cc dd'.bytes(), fn [matches_ptr] (mat Match) bool {
+		unsafe { (*matches_ptr) << mat }
 		return true
 	})!
 	assert_matches_eq(matches, [tm(0, 5), tm(6, 11)])
 
 	// Test that find_iter respects short circuiting.
 	matches.clear()
-	find_iter(matcher_, 'aa bb cc dd'.bytes(), fn [mut matches] (mat Match) bool {
-		matches << mat
+	find_iter(matcher_, 'aa bb cc dd'.bytes(), fn [matches_ptr] (mat Match) bool {
+		unsafe { (*matches_ptr) << mat }
 		return false
 	})!
 	assert_matches_eq(matches, [tm(0, 5)])
@@ -271,10 +272,11 @@ fn test_find_iter() {
 fn test_try_find_iter() {
 	matcher_ := make_test_matcher(r'(\w+)\s+(\w+)')
 	mut matches := []Match{}
+	matches_ptr := &matches
 	mut saw_error := false
-	try_find_iter(matcher_, 'aa bb cc dd'.bytes(), fn [mut matches] (mat Match) !bool {
-		if matches.len == 0 {
-			matches << mat
+	try_find_iter(matcher_, 'aa bb cc dd'.bytes(), fn [matches_ptr] (mat Match) !bool {
+		if unsafe { matches_ptr.len == 0 } {
+			unsafe { (*matches_ptr) << mat }
 			return true
 		}
 		return error('my error')
@@ -316,13 +318,16 @@ fn test_captures_iter() {
 	matcher_ := make_test_matcher(r'(?P<a>\w+)\s+(?P<b>\w+)')
 	mut caps := matcher_.new_captures()!
 	mut matches := []Match{}
-	captures_iter(matcher_, 'aa bb cc dd'.bytes(), mut caps, fn [mut matches] (caps &TestCaptures) bool {
+	matches_ptr := &matches
+	captures_iter(matcher_, 'aa bb cc dd'.bytes(), mut caps, fn [matches_ptr] (caps &TestCaptures) bool {
 		overall := caps.get(0) or { panic_missing_test_capture('overall') }
 		first := caps.get(1) or { panic_missing_test_capture('first') }
 		second := caps.get(2) or { panic_missing_test_capture('second') }
-		matches << overall
-		matches << first
-		matches << second
+		unsafe {
+			(*matches_ptr) << overall
+			(*matches_ptr) << first
+			(*matches_ptr) << second
+		}
 		return true
 	})!
 	assert_matches_eq(matches, [tm(0, 5), tm(0, 2), tm(3, 5),
@@ -330,13 +335,15 @@ fn test_captures_iter() {
 
 	// Test that captures_iter respects short circuiting.
 	matches.clear()
-	captures_iter(matcher_, 'aa bb cc dd'.bytes(), mut caps, fn [mut matches] (caps &TestCaptures) bool {
+	captures_iter(matcher_, 'aa bb cc dd'.bytes(), mut caps, fn [matches_ptr] (caps &TestCaptures) bool {
 		overall := caps.get(0) or { panic_missing_test_capture('overall') }
 		first := caps.get(1) or { panic_missing_test_capture('first') }
 		second := caps.get(2) or { panic_missing_test_capture('second') }
-		matches << overall
-		matches << first
-		matches << second
+		unsafe {
+			(*matches_ptr) << overall
+			(*matches_ptr) << first
+			(*matches_ptr) << second
+		}
 		return false
 	})!
 	assert_matches_eq(matches, [tm(0, 5), tm(0, 2), tm(3, 5)])
@@ -346,15 +353,18 @@ fn test_try_captures_iter() {
 	matcher_ := make_test_matcher(r'(?P<a>\w+)\s+(?P<b>\w+)')
 	mut caps := matcher_.new_captures()!
 	mut matches := []Match{}
+	matches_ptr := &matches
 	mut saw_error := false
-	try_captures_iter(matcher_, 'aa bb cc dd'.bytes(), mut caps, fn [mut matches] (caps &TestCaptures) !bool {
-		if matches.len == 0 {
+	try_captures_iter(matcher_, 'aa bb cc dd'.bytes(), mut caps, fn [matches_ptr] (caps &TestCaptures) !bool {
+		if unsafe { matches_ptr.len == 0 } {
 			overall := caps.get(0) or { panic_missing_test_capture('overall') }
 			first := caps.get(1) or { panic_missing_test_capture('first') }
 			second := caps.get(2) or { panic_missing_test_capture('second') }
-			matches << overall
-			matches << first
-			matches << second
+			unsafe {
+				(*matches_ptr) << overall
+				(*matches_ptr) << first
+				(*matches_ptr) << second
+			}
 			return true
 		}
 		return error('my error')
@@ -408,12 +418,15 @@ fn test_replace() {
 fn test_replace_with_captures() {
 	matcher_ := make_test_matcher(r'(\w+)\s+(\w+)')
 	haystack := 'aa bb cc dd'.bytes()
+	haystack_ptr := &haystack
 	mut caps := matcher_.new_captures()!
 	mut dst := []u8{}
-	replace_with_captures(matcher_, haystack, mut caps, mut dst, fn [matcher_, haystack] (caps &TestCaptures, mut dst []u8) bool {
-		interpolate('$2 $1'.bytes(), fn [caps, haystack] (i usize, mut dst []u8) {
+	replace_with_captures(matcher_, haystack, mut caps, mut dst, fn [matcher_, haystack_ptr] (caps &TestCaptures, mut dst []u8) bool {
+		interpolate('$2 $1'.bytes(), fn [caps, haystack_ptr] (i usize, mut dst []u8) {
 			cap_match := caps.get(i) or { return }
-			append_slice(mut dst, haystack[cap_match.start()..cap_match.end()])
+			unsafe {
+				append_slice(mut dst, (*haystack_ptr)[cap_match.start()..cap_match.end()])
+			}
 		}, fn [matcher_] (name string) ?usize {
 			return matcher_.capture_index(name)
 		}, mut dst)
@@ -423,10 +436,12 @@ fn test_replace_with_captures() {
 
 	// Test that replacements respect short circuiting.
 	dst.clear()
-	replace_with_captures(matcher_, haystack, mut caps, mut dst, fn [matcher_, haystack] (caps &TestCaptures, mut dst []u8) bool {
-		interpolate('$2 $1'.bytes(), fn [caps, haystack] (i usize, mut dst []u8) {
+	replace_with_captures(matcher_, haystack, mut caps, mut dst, fn [matcher_, haystack_ptr] (caps &TestCaptures, mut dst []u8) bool {
+		interpolate('$2 $1'.bytes(), fn [caps, haystack_ptr] (i usize, mut dst []u8) {
 			cap_match := caps.get(i) or { return }
-			append_slice(mut dst, haystack[cap_match.start()..cap_match.end()])
+			unsafe {
+				append_slice(mut dst, (*haystack_ptr)[cap_match.start()..cap_match.end()])
+			}
 		}, fn [matcher_] (name string) ?usize {
 			return matcher_.capture_index(name)
 		}, mut dst)

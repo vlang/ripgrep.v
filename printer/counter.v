@@ -56,7 +56,7 @@ pub fn (mut w CounterWriter[W]) flush() ! {
 	}
 }
 
-pub fn (mut w CounterWriter[W]) set_color(spec ColorSpec) ! {
+pub fn (mut w CounterWriter[W]) set_color(spec &ColorSpec) ! {
 	$if W is WriteColor {
 		w.wtr.set_color(spec)!
 	} $else {

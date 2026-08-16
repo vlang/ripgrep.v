@@ -164,7 +164,7 @@ fn (props HirProperties) clone() HirProperties {
 	}
 }
 
-fn clone_hir_children(children []Hir) []Hir {
+fn clone_hir_children(children &[]Hir) []Hir {
 	mut cloned := []Hir{cap: children.len}
 	for child in children {
 		cloned << child.clone()
@@ -172,7 +172,7 @@ fn clone_hir_children(children []Hir) []Hir {
 	return cloned
 }
 
-fn combine_hir_properties(children []Hir, alternation bool) HirProperties {
+fn combine_hir_properties(children &[]Hir, alternation bool) HirProperties {
 	mut set := matcher.ByteSet.full()
 	mut has_anchor := false
 	mut all_literals := children.len > 0

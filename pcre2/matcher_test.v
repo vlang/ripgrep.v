@@ -2,7 +2,7 @@ module pcre2
 
 import matcher
 
-fn pcre2_is_match(re &RegexMatcher, haystack []u8) !bool {
+fn pcre2_is_match(re &RegexMatcher, haystack &[]u8) !bool {
 	return re.find_at(haystack, 0)!.has_value
 }
 
@@ -82,7 +82,8 @@ fn exercise_automatic_matcher_drop() {
 	matcher_ := RegexMatcherBuilder.new().build(r'(Sherlock)\s+(Holmes)') or { panic(err) }
 	cloned1 := matcher_.clone()
 	cloned2 := cloned1.clone()
-	assert cloned2.find_at('Sherlock Holmes'.bytes(), 0)!.has_value
+	found := cloned2.find_at('Sherlock Holmes'.bytes(), 0) or { panic(err) }
+	assert found.has_value
 }
 
 // Test that enabling CRLF permits `$` to match at the end of a line.

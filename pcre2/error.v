@@ -50,15 +50,15 @@ pub fn ErrorKind.regex(message string) ErrorKind {
 	}
 }
 
-pub fn (kind ErrorKind) is_regex() bool {
+pub fn (kind &ErrorKind) is_regex() bool {
 	return kind.tag == .regex
 }
 
-pub fn (kind ErrorKind) text() string {
+pub fn (kind &ErrorKind) text() string {
 	return kind.text
 }
 
-pub fn (err Error) msg() string {
+pub fn (err &Error) msg() string {
 	return match err.kind.tag {
 		.regex {
 			err.kind.text
@@ -66,11 +66,11 @@ pub fn (err Error) msg() string {
 	}
 }
 
-pub fn (err Error) code() int {
+pub fn (err &Error) code() int {
 	_ = err
 	return 0
 }
 
-pub fn (err Error) str() string {
+pub fn (err &Error) str() string {
 	return err.msg()
 }

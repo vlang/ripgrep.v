@@ -178,7 +178,7 @@ fn find_similar_names(unrecognized &string) []string {
 
 	mut similar := []string{}
 	bow_given := ngrams(unrecognized)
-	for flag in flags {
+	for flag in flag_defs {
 		name := flag.name_long()
 		bow := ngrams(&name)
 		if jaccard_index(bow_given, bow) >= threshold {

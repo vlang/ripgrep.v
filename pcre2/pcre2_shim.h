@@ -22,7 +22,11 @@ void free(void *);
 
 #if RIPGREP_V_PCRE2_ENABLED
 #define PCRE2_CODE_UNIT_WIDTH 8
+#if defined(__has_include) && __has_include(<pcre2.h>)
 #include <pcre2.h>
+#else
+#include "pcre2_8_minimal.h"
+#endif
 
 static inline uint32_t rg_pcre2_opt_caseless(void) { return PCRE2_CASELESS; }
 static inline int rg_pcre2_enabled(void) { return 1; }

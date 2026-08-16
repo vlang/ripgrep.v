@@ -65,3 +65,16 @@ fn test_ast_analysis_various() {
 	assert !x.any_uppercase()
 	assert x.any_literal()
 }
+
+fn test_ast_analysis_unicode_uppercase_literals() {
+	for pattern in ['Δ', 'Я', r'\u0394', r'\x{042F}'] {
+		x := analysis(pattern.clone())
+		assert x.any_uppercase(), pattern
+		assert x.any_literal(), pattern
+	}
+	for pattern in ['δ', 'я', 'ǅ', r'\u03B4', r'\x{044F}'] {
+		x := analysis(pattern.clone())
+		assert !x.any_uppercase(), pattern
+		assert x.any_literal(), pattern
+	}
+}

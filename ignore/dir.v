@@ -2,7 +2,7 @@ module ignore
 
 import encoding.utf8
 import os
-import sync.stdatomic
+import sync.arc
 
 // This module provides a data structure, `Ignore`, that connects "directory
 // traversal" with "ignore matchers." Specifically, it knows about gitignore
@@ -86,6 +86,7 @@ fn ignore_match_none() Match[IgnoreMatch] {
 /// Options for the ignore matcher, shared between the matcher itself and the
 /// builder.
 struct IgnoreOptions implements IClone {
+mut:
 	/// Whether to ignore hidden file paths or not.
 	hidden bool = true
 	/// Whether to read .ignore files.
@@ -105,12 +106,15 @@ struct IgnoreOptions implements IClone {
 	require_git bool = true
 }
 
-struct IgnoreNode implements IClone {
+// IgnoreNode holds the immutable per-directory matcher data. Rust nests this in
+// `IgnoreInner` behind `Arc<IgnoreInner>`; here it is shared via
+// `arc.Arc[IgnoreNode]`, and each node owns a shared reference to its parent.
+// Cleanup (freeing `dir` and the matchers, and cascading into the parent Arc)
+// happens automatically when the last owning Arc is dropped.
+struct IgnoreNode {
 mut:
-	// V-specific equivalent of Rust's `Arc<IgnoreInner>` ownership count.
-	refs &stdatomic.AtomicVal[int]
-	/// The parent directory to match next.
-	parent &IgnoreNode = unsafe { nil }
+	/// The parent directory to match next (`none` at the root).
+	parent ?arc.Arc[IgnoreNode]
 	/// The path to the directory that this matcher was built from.
 	dir string
 	/// The matcher for custom ignore files
@@ -127,28 +131,46 @@ mut:
 	is_absolute_parent bool
 }
 
-fn (mut node IgnoreNode) free() {
-	unsafe { node.dir.free() }
-	node.custom_ignore_matcher.free_empty()
-	node.ignore_matcher.free_empty()
-	node.git_ignore_matcher.free_empty()
-	node.git_exclude_matcher.free_empty()
-	node.dir = ''
+// parent_node returns a shared borrow of the parent node, or none at the root.
+// The borrow is tied to the caller's lifetime because the whole node chain is
+// kept alive by the originating `Ignore`.
+fn (node &^a IgnoreNode) parent_node[^a]() ?&^a IgnoreNode {
+	if p := node.parent {
+		return p.get()
+	}
+	return none
+}
+
+// clone_parent_arc returns an owned Arc handle to the parent node, if any.
+fn clone_parent_arc(node &IgnoreNode) ?arc.Arc[IgnoreNode] {
+	if p := node.parent {
+		return p.clone()
+	}
+	return none
 }
 
 /// Ignore is a matcher useful for recursively walking one or more directories.
 pub struct Ignore implements IClone {
 mut:
-	// V-specific equivalent of Rust's `Arc<IgnoreInner>`.
-	node &IgnoreNode
-	/// An override matcher (default is empty).
-	overrides Override
-	/// A file type matcher.
-	types Types
+	// V-specific: Rust models this as `Ignore(Arc<IgnoreInner>)`; the shared,
+	// immutable per-directory matcher data lives in `arc.Arc[IgnoreNode]`.
+	node arc.Arc[IgnoreNode]
+	/// An override matcher (default is empty). Rust: `Arc<Override>`.
+	overrides arc.Arc[Override]
+	/// A file type matcher. Rust: `Arc<Types>`.
+	types arc.Arc[Types]
 	/// The absolute base path of this matcher. Populated only if parent
-	/// directories are added.
-	absolute_base_value string
-	has_absolute_base  bool
+	/// directories are added. Rust: `Option<Arc<PathBuf>>`.
+	//
+	// V-specific: stored as a non-optional `Arc[string]` with an empty-string
+	// sentinel meaning "none" (an absent absolute base already resolves to the
+	// empty path — see `Ignore` construction). This lets every `Ignore.clone()`
+	// share it via the ordinary `Arc.clone()` (strong-count++) path used by the
+	// other `Arc` fields. Cloning it through an `?Arc` helper instead tripped a
+	// v3 ownership bug: unwrapping the optional to clone the inner produced a
+	// shallow alias that the generated code then dropped, so each clone was a net
+	// -1 to the shared strong count and prematurely freed the path (UAF).
+	absolute_base_value arc.Arc[string]
 	/// The directory that gitignores should be interpreted relative to.
 	///
 	/// Usually this is the directory containing the gitignore file. But in
@@ -162,63 +184,65 @@ mut:
 	/// cannot be matched correctly.
 	global_gitignores_relative_to ?string
 	/// Explicit global ignore matchers specified by the caller.
-	explicit_ignores []Gitignore
-	/// Ignore files used in addition to `.ignore`
-	custom_ignore_filenames []string
+	/// Rust: `Arc<Vec<Gitignore>>`.
+	explicit_ignores arc.Arc[[]Gitignore]
+	/// Ignore files used in addition to `.ignore`. Rust: `Arc<Vec<OsString>>`.
+	custom_ignore_filenames arc.Arc[[]string]
 	/// A global gitignore matcher, usually from $XDG_CONFIG_HOME/git/ignore.
-	git_global_matcher Gitignore
+	/// Rust: `Arc<Gitignore>`.
+	git_global_matcher arc.Arc[Gitignore]
 	/// Ignore config.
 	opts IgnoreOptions
 }
 
 pub fn (ig &Ignore) clone() Ignore {
-	ig.node.refs.add(1)
 	return Ignore{
-		node:                         ig.node
-		overrides:                    ig.overrides.clone()
-		types:                        ig.types.clone()
-		absolute_base_value:          ig.absolute_base_value.clone()
-		has_absolute_base:            ig.has_absolute_base
+		node:                          ig.node.clone()
+		overrides:                     ig.overrides.clone()
+		types:                         ig.types.clone()
+		absolute_base_value:           ig.absolute_base_value.clone()
 		global_gitignores_relative_to: clone_optional_string(ig.global_gitignores_relative_to)
-		explicit_ignores:             ig.explicit_ignores.clone()
-		custom_ignore_filenames:      ig.custom_ignore_filenames.clone()
-		git_global_matcher:           ig.git_global_matcher.clone()
-		opts:                         ig.opts
+		explicit_ignores:              ig.explicit_ignores.clone()
+		custom_ignore_filenames:       ig.custom_ignore_filenames.clone()
+		git_global_matcher:            ig.git_global_matcher.clone()
+		opts:                          ig.opts
 	}
 }
 
 pub fn (ig &^a Ignore) path[^a]() &^a string {
-	return &ig.node.dir
+	node := ig.node.get()
+	return &node.dir
 }
 
 pub fn (ig &Ignore) is_root() bool {
-	return isnil(ig.node.parent)
+	if _ := ig.node.get().parent {
+		return false
+	}
+	return true
 }
 
 pub fn (ig &Ignore) is_absolute_parent() bool {
-	return ig.node.is_absolute_parent
+	return ig.node.get().is_absolute_parent
 }
 
 pub fn (ig &Ignore) parent() ?Ignore {
-	if isnil(ig.node.parent) {
-		return none
+	if p := ig.node.get().parent {
+		return ig.with_node(p.clone())
 	}
-	ig.node.parent.refs.add(1)
-	return ig.with_node(ig.node.parent)
+	return none
 }
 
-fn (ig &Ignore) with_node(node &IgnoreNode) Ignore {
+fn (ig &Ignore) with_node(node arc.Arc[IgnoreNode]) Ignore {
 	return Ignore{
-		node:                         node
-		overrides:                    ig.overrides.clone()
-		types:                        ig.types.clone()
-		absolute_base_value:          ig.absolute_base_value.clone()
-		has_absolute_base:            ig.has_absolute_base
+		node:                          node
+		overrides:                     ig.overrides.clone()
+		types:                         ig.types.clone()
+		absolute_base_value:           ig.absolute_base_value.clone()
 		global_gitignores_relative_to: clone_optional_string(ig.global_gitignores_relative_to)
-		explicit_ignores:             ig.explicit_ignores.clone()
-		custom_ignore_filenames:      ig.custom_ignore_filenames.clone()
-		git_global_matcher:           ig.git_global_matcher.clone()
-		opts:                         ig.opts
+		explicit_ignores:              ig.explicit_ignores.clone()
+		custom_ignore_filenames:       ig.custom_ignore_filenames.clone()
+		git_global_matcher:            ig.git_global_matcher.clone()
+		opts:                          ig.opts
 	}
 }
 
@@ -240,23 +264,25 @@ pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 	if absolute_base == '' {
 		return ig.clone(), false, IgnoreError{}
 	}
+	absolute_base_arc := arc.new(absolute_base.to_owned())
 	mut errs := PartialErrorBuilder{}
 	mut built := ig.clone()
 	for parent in ancestor_dirs(absolute_base) {
-		node, has_err, err := built.add_child_path(parent)
+		mut node, has_err, err := built.add_child_path(parent.clone())
 		errs.maybe_push(has_err, err)
-		mut absolute_node := node
-		absolute_node.is_absolute_parent = true
-		absolute_node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
-			os.exists(os.join_path(parent, '.git')) || os.exists(os.join_path(parent, '.jj'))
+		// Mutate the freshly-built, still-owned node before sharing it, exactly
+		// like Rust mutates the owned `IgnoreInner` prior to `Arc::new`.
+		node.is_absolute_parent = true
+		node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
+			os.exists(os.join_path(parent.clone(), '.git'))
+				|| os.exists(os.join_path(parent.clone(), '.jj'))
 		} else {
 			false
 		}
-		mut next := built.with_node(absolute_node)
-		next.absolute_base_value = absolute_base.to_owned()
-		next.has_absolute_base = true
-		built.free_nodes()
-		built = next
+		node_arc := arc.new(node)
+		mut next := built.with_node(node_arc)
+		next.absolute_base_value = absolute_base_arc.clone()
+		built = next.clone()
 	}
 	final_has_err, final_err := errs.into_error_option()
 	return built, final_has_err, final_err
@@ -272,44 +298,39 @@ pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 /// Note that all I/O errors are completely ignored.
 pub fn (ig &Ignore) add_child(dir string) (Ignore, bool, IgnoreError) {
 	node, has_err, err := ig.add_child_path(dir)
-	return ig.with_node(node), has_err, err
+	node_arc := arc.new(node)
+	return ig.with_node(node_arc), has_err, err
 }
 
-// V-specific: each matcher owns one counted reference to the immutable tail
-// node. Each node in turn owns one counted reference to its parent.
+// free_nodes eagerly releases this matcher's shared node chain.
+//
+// With `arc.Arc` this is optional: dropping an `Ignore` already releases one
+// strong reference to the tail node and cascades up the parent chain, freeing
+// each node once its last owner is gone. Callers that finish with a matcher
+// early may still invoke this to release the chain sooner. `arc.drop` is
+// idempotent (it nils the handle), so the later automatic drop is a safe no-op.
 fn (mut ig Ignore) free_nodes() {
-	if !isnil(ig.node) {
-		release_ignore_node(ig.node)
-		ig.node = unsafe { nil }
-	}
+	ig.node.drop()
 }
 
-fn release_ignore_node(node &IgnoreNode) {
-	mut current := node
-	for !isnil(current) && current.refs.sub(1) == 1 {
-		parent := current.parent
-		mut owned := current
-		owned.free()
-		unsafe {
-			free(current.refs)
-			free(current)
-		}
-		current = parent
-	}
-}
-
-/// Like add_child, but takes a full path and returns an IgnoreInner.
-fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
+/// Like add_child, but takes a full path and returns an owned IgnoreNode.
+///
+/// The node is returned by value (not yet shared) so the caller can finish
+/// initializing it before wrapping it in an `arc.Arc`, mirroring how Rust
+/// builds an owned `IgnoreInner` and then calls `Arc::new`.
+fn (ig &Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
 	check_vcs_dir := ig.opts.require_git && (ig.opts.git_ignore || ig.opts.git_exclude)
-	git_path := os.join_path(dir, '.git')
+	git_path := os.join_path(dir.clone(), '.git')
 	git_is_file := check_vcs_dir && os.is_file(git_path)
-	has_git := check_vcs_dir && (os.exists(git_path) || os.exists(os.join_path(dir, '.jj')))
+	has_git := check_vcs_dir
+		&& (os.exists(git_path.clone()) || os.exists(os.join_path(dir.clone(), '.jj')))
 
 	mut errs := PartialErrorBuilder{}
-	custom_ig_matcher := if ig.custom_ignore_filenames.len == 0 {
+	custom_ig_matcher := if ig.custom_ignore_filenames.get().len == 0 {
 		Gitignore.empty()
 	} else {
-		matcher, has_err, err := create_gitignore(dir, dir, ig.custom_ignore_filenames,
+		matcher, has_err, err := create_gitignore(dir.clone(), dir.clone(),
+			ig.custom_ignore_filenames.get().clone(),
 			ig.opts.ignore_case_insensitive)
 		errs.maybe_push(has_err, err)
 		matcher
@@ -317,7 +338,7 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 	ig_matcher := if !ig.opts.ignore {
 		Gitignore.empty()
 	} else {
-		matcher, has_err, err := create_gitignore(dir, dir, ['.ignore'],
+		matcher, has_err, err := create_gitignore(dir.clone(), dir.clone(), ['.ignore'],
 			ig.opts.ignore_case_insensitive)
 		errs.maybe_push(has_err, err)
 		matcher
@@ -325,7 +346,7 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 	gi_matcher := if !ig.opts.git_ignore {
 		Gitignore.empty()
 	} else {
-		matcher, has_err, err := create_gitignore(dir, dir, ['.gitignore'],
+		matcher, has_err, err := create_gitignore(dir.clone(), dir.clone(), ['.gitignore'],
 			ig.opts.ignore_case_insensitive)
 		errs.maybe_push(has_err, err)
 		matcher
@@ -333,9 +354,9 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 	gi_exclude_matcher := if !ig.opts.git_exclude || (check_vcs_dir && !has_git) {
 		Gitignore.empty()
 	} else {
-		git_dir, resolve_has_err, resolve_err := resolve_git_commondir(dir, git_is_file)
+		git_dir, resolve_has_err, resolve_err := resolve_git_commondir(dir.clone(), git_is_file)
 		if git_dir != '' {
-			matcher, has_err, err := create_gitignore(dir, git_dir, ['info/exclude'],
+			matcher, has_err, err := create_gitignore(dir.clone(), git_dir, ['info/exclude'],
 				ig.opts.ignore_case_insensitive)
 			errs.maybe_push(resolve_has_err, resolve_err)
 			errs.maybe_push(has_err, err)
@@ -346,10 +367,8 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 		}
 	}
 	final_has_err, final_err := errs.into_error_option()
-	ig.node.refs.add(1)
-	return &IgnoreNode{
-		refs:                  stdatomic.new_atomic(1)
-		parent:                ig.node
+	return IgnoreNode{
+		parent:                ig.node.clone()
 		dir:                   normalize_path(dir).to_owned()
 		custom_ignore_matcher: custom_ig_matcher
 		ignore_matcher:        ig_matcher
@@ -362,16 +381,16 @@ fn (ig &Ignore) add_child_path(dir string) (&IgnoreNode, bool, IgnoreError) {
 
 /// Returns true if at least one type of ignore rule should be matched.
 fn (ig &Ignore) has_any_ignore_rules() bool {
-	has_custom_ignore_files := ig.custom_ignore_filenames.len > 0
-	has_explicit_ignores := ig.explicit_ignores.len > 0
+	has_custom_ignore_files := ig.custom_ignore_filenames.get().len > 0
+	has_explicit_ignores := ig.explicit_ignores.get().len > 0
 	return ig.opts.ignore || ig.opts.git_global || ig.opts.git_ignore || ig.opts.git_exclude
 		|| has_custom_ignore_files || has_explicit_ignores
 }
 
 /// Like `matched`, but works with a directory entry instead.
 pub fn (ig &^a Ignore) matched_dir_entry[^a](dent &DirEntry) Match[IgnoreMatch[^a]] {
-	m := ig.matched(dent.path(), dent.is_dir())
-	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name()) {
+	m := ig.matched(dent.path().clone(), dent.is_dir())
+	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name().clone()) {
 		return Match[IgnoreMatch[^a]]{
 			kind:      .ignore
 			value:     IgnoreMatch.hidden()
@@ -382,8 +401,8 @@ pub fn (ig &^a Ignore) matched_dir_entry[^a](dent &DirEntry) Match[IgnoreMatch[^
 }
 
 fn (ig &^a Ignore) matched_dir_entry_with_scratch[^a](dent &DirEntry, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
-	m := ig.matched_with_scratch(dent.path(), dent.is_dir(), mut gitignore_matches)
-	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name()) {
+	m := ig.matched_with_scratch(dent.path().clone(), dent.is_dir(), mut gitignore_matches)
+	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name().clone()) {
 		return Match[IgnoreMatch[^a]]{
 			kind:      .ignore
 			value:     IgnoreMatch.hidden()
@@ -407,23 +426,23 @@ fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitign
 	if path_value.starts_with('./') {
 		path_value = unsafe { path_value.substr_unsafe(2, path_value.len) }
 	}
-	if !ig.overrides.is_empty() {
-		mat := match_from_override(ig.overrides.matched(path_value, is_dir))
+	if !ig.overrides.get().is_empty() {
+		mat := match_from_override(ig.overrides.get().matched(path_value, is_dir))
 		if !mat.is_none() {
 			return mat
 		}
 	}
 	mut whitelisted := ignore_match_none()
 	if ig.has_any_ignore_rules() {
-		mat := ig.matched_ignore_with_scratch(path_value, is_dir, mut gitignore_matches)
+		mat := ig.matched_ignore_with_scratch(&path_value, is_dir, mut gitignore_matches)
 		if mat.is_ignore() {
 			return mat
 		} else if mat.is_whitelist() {
 			whitelisted = mat
 		}
 	}
-	if !ig.types.is_empty() {
-		mat := match_from_types(ig.types.matched(path_value, is_dir))
+	if !ig.types.get().is_empty() {
+		mat := match_from_types(ig.types.get().matched(path_value, is_dir))
 		if mat.is_ignore() {
 			return mat
 		} else if mat.is_whitelist() {
@@ -437,10 +456,10 @@ fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitign
 /// all parent directories.
 fn (ig &^a Ignore) matched_ignore[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] {
 	mut gitignore_matches := []usize{}
-	return ig.matched_ignore_with_scratch(path, is_dir, mut gitignore_matches)
+	return ig.matched_ignore_with_scratch(&path, is_dir, mut gitignore_matches)
 }
 
-fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
+fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
 	mut m_custom_ignore := ignore_match_none()
 	mut m_ignore := ignore_match_none()
 	mut m_gi := ignore_match_none()
@@ -449,8 +468,8 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 
 	any_git := !ig.opts.require_git || ig.any_git_parent()
 	mut saw_git := false
-	mut node := ig.node
-	for !isnil(node) {
+	mut node := ig.node.get()
+	for {
 		if node.is_absolute_parent {
 			break
 		}
@@ -471,54 +490,52 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 					is_dir, mut gitignore_matches))
 			}
 		saw_git = saw_git || node.has_git
-		node = node.parent
+		node = node.parent_node() or { break }
 	}
 	if ig.opts.parents {
 		if absolute_base := ig.absolute_base() {
 			mut absolute_path := parent_absolute_match_path(*absolute_base,
-				ig.first_relative_dir_after_absolute_path(), path)
-			defer {
-				unsafe { absolute_path.free() }
-			}
-			node = ig.node
-			for !isnil(node) {
+				ig.first_relative_dir_after_absolute_path(), (*path).clone())
+			node = ig.node.get()
+			for {
 				if !node.is_absolute_parent {
-					node = node.parent
+					node = node.parent_node() or { break }
 					continue
 				}
 					if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
-						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(absolute_path,
+						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(&absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 					if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
-						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(absolute_path,
+						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(&absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 					if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
-						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(absolute_path,
+						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(&absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 					if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
-						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(absolute_path,
+						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(&absolute_path,
 							is_dir, mut gitignore_matches))
 					}
 				saw_git = saw_git || node.has_git
-				node = node.parent
+				node = node.parent_node() or { break }
 			}
 		}
 	}
-	for i := ig.explicit_ignores.len - 1; i >= 0; i-- {
+	for i := ig.explicit_ignores.get().len - 1; i >= 0; i-- {
 		if !m_explicit.is_none() {
 			break
 		}
-			explicit_ignore := &ig.explicit_ignores[i]
+			explicit_ignores := ig.explicit_ignores.get()
+			explicit_ignore := unsafe { &(*explicit_ignores)[i] }
 			if !explicit_ignore.is_empty() {
 				m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
 					mut gitignore_matches))
 			}
 		}
-		m_global := if any_git && !ig.git_global_matcher.is_empty() {
-			match_from_gitignore(ig.git_global_matcher.matched_with_scratch(path, is_dir,
+		m_global := if any_git && !ig.git_global_matcher.get().is_empty() {
+			match_from_gitignore(ig.git_global_matcher.get().matched_with_scratch(path, is_dir,
 				mut gitignore_matches))
 		} else {
 			Match[IgnoreMatch[^a]]{}
@@ -547,11 +564,11 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path string, is_dir bool, mut
 /// Returns an iterator over parent ignore matchers, including this one.
 pub fn (ig &Ignore) parents() Parents {
 	mut items := []Ignore{}
-	mut node := ig.node
-	for !isnil(node) {
-		node.refs.add(1)
-		items << ig.with_node(node)
-		node = node.parent
+	mut cur := ?arc.Arc[IgnoreNode](ig.node.clone())
+	for {
+		node_arc := cur or { break }
+		items << ig.with_node(node_arc.clone())
+		cur = clone_parent_arc(node_arc.get())
 	}
 	return Parents{
 		items: items
@@ -562,17 +579,19 @@ pub fn (ig &Ignore) parents() Parents {
 /// Returns the first absolute path of the first absolute parent, if
 /// one exists.
 fn (ig &^a Ignore) absolute_base[^a]() ?&^a string {
-	if ig.has_absolute_base {
-		return &ig.absolute_base_value
+	// The empty-string sentinel means "no absolute base".
+	if ig.absolute_base_value.get().len == 0 {
+		return none
 	}
-	return none
+	return ig.absolute_base_value.get()
 }
 
 /// An iterator over all parents of an ignore matcher, including itself.
 ///
-/// V-specific: this iterator yields owned references to the shared persistent
-/// matcher nodes.
-pub struct Parents implements Drop {
+/// V-specific: this iterator holds owned `Ignore` handles that each share the
+/// underlying matcher nodes via `arc.Arc`; they are released automatically when
+/// the iterator (and each yielded handle) goes out of scope.
+pub struct Parents {
 mut:
 	items []Ignore
 	index int
@@ -582,21 +601,9 @@ pub fn (mut p Parents) next() ?Ignore {
 	if p.index >= p.items.len {
 		return none
 	}
-	mut item := p.items[p.index]
-	// Transfer the counted node reference out of the iterator. Clearing the
-	// slot keeps Parents.drop from releasing the reference now owned by item.
-	p.items[p.index].node = unsafe { nil }
+	item := p.items[p.index].clone()
 	p.index++
 	return item
-}
-
-fn (mut p Parents) drop() {
-	for mut item in p.items {
-		item.free_nodes()
-	}
-	unsafe { p.items.free() }
-	p.items = []Ignore{}
-	p.index = 0
 }
 
 /// A builder for creating an Ignore matcher.
@@ -604,10 +611,10 @@ pub struct IgnoreBuilder implements IClone {
 mut:
 	/// The root directory path for this ignore matcher.
 	dir string
-	/// An override matcher (default is empty).
-	overrides Override
-	/// A type matcher (default is empty).
-	types Types
+	/// An override matcher (default is empty). Rust: `Arc<Override>`.
+	overrides_value arc.Arc[Override]
+	/// A type matcher (default is empty). Rust: `Arc<Types>`.
+	types_value arc.Arc[Types]
 	/// Explicit global ignore matchers.
 	explicit_ignores []Gitignore
 	/// Ignore files in addition to .ignore.
@@ -634,8 +641,8 @@ mut:
 pub fn IgnoreBuilder.new() IgnoreBuilder {
 	return IgnoreBuilder{
 		dir:                         ''.to_owned()
-		overrides:                   Override.empty()
-		types:                       Types.empty()
+		overrides_value:             arc.new(Override.empty())
+		types_value:                 arc.new(Types.empty())
 		explicit_ignores:            []Gitignore{}
 		custom_ignore_filenames:     []string{}
 		global_gitignores_relative_to: none
@@ -657,24 +664,26 @@ pub fn (builder &IgnoreBuilder) build() Ignore {
 /// directories are added to it.
 pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 	mut global_gitignores_relative_to := none_string()
+	mut matcher_gitignores_relative_to := none_string()
 	if cwd_value := cwd {
 		global_gitignores_relative_to = ?string(cwd_value.clone())
+		matcher_gitignores_relative_to = ?string(cwd_value.clone())
 	} else if configured := builder.global_gitignores_relative_to {
 		global_gitignores_relative_to = ?string(configured.clone())
+		matcher_gitignores_relative_to = ?string(configured.clone())
 	}
-	mut git_global_matcher := Gitignore.empty()
+	mut git_global_matcher_arc := arc.new(Gitignore.empty())
 	if builder.opts.git_global {
-		if relative_to := global_gitignores_relative_to {
+		if relative_to := matcher_gitignores_relative_to {
 			mut gitignore_builder := GitignoreBuilder.new(relative_to)
 			_, _ = gitignore_builder.case_insensitive(builder.opts.ignore_case_insensitive)
 			gi, _, _ := gitignore_builder.build_global()
-			git_global_matcher = gi
+			git_global_matcher_arc = arc.new(gi)
 		}
 	}
 	return Ignore{
-		node: &IgnoreNode{
-			refs:                  stdatomic.new_atomic(1)
-			parent:                unsafe { nil }
+		node: arc.new(IgnoreNode{
+			parent:                none
 			dir:                   builder.dir.clone()
 			custom_ignore_matcher: Gitignore.empty()
 			ignore_matcher:        Gitignore.empty()
@@ -682,16 +691,15 @@ pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 			git_exclude_matcher:   Gitignore.empty()
 			has_git:               false
 			is_absolute_parent:    true
-		}
-		overrides:                 builder.overrides.clone()
-		types:                     builder.types.clone()
-		absolute_base_value:       ''.to_owned()
-		has_absolute_base:         false
+		})
+		overrides:                     builder.overrides_value.clone()
+		types:                         builder.types_value.clone()
+		absolute_base_value:           none_absolute_base()
 		global_gitignores_relative_to: global_gitignores_relative_to
-		explicit_ignores:          builder.explicit_ignores.clone()
-		custom_ignore_filenames:   builder.custom_ignore_filenames.clone()
-		git_global_matcher:        git_global_matcher
-		opts:                      builder.opts
+		explicit_ignores:              arc.new(clone_gitignores(builder.explicit_ignores))
+		custom_ignore_filenames:       arc.new(builder.custom_ignore_filenames.clone())
+		git_global_matcher:            git_global_matcher_arc
+		opts:                          builder.opts
 	}
 }
 
@@ -707,7 +715,7 @@ pub fn (mut builder IgnoreBuilder) current_dir(cwd string) &IgnoreBuilder {
 ///
 /// This overrides any previous setting.
 pub fn (mut builder IgnoreBuilder) overrides(overrides Override) &IgnoreBuilder {
-	builder.overrides = overrides
+	builder.overrides_value = arc.new(overrides)
 	return builder
 }
 
@@ -717,7 +725,7 @@ pub fn (mut builder IgnoreBuilder) overrides(overrides Override) &IgnoreBuilder 
 ///
 /// This overrides any previous setting.
 pub fn (mut builder IgnoreBuilder) types(types Types) &IgnoreBuilder {
-	builder.types = types
+	builder.types_value = arc.new(types)
 	return builder
 }
 
@@ -926,35 +934,37 @@ fn read_first_line(path string) (string, bool, IgnoreError) {
 	return line.to_owned(), false, IgnoreError{}
 }
 
+// V-specific: return independent owned storage because V string slices do not
+// carry the borrow lifetime of `path` in their type.
 /// Strips `prefix` from `path` if it's a prefix, otherwise returns `path`
 /// unchanged.
 fn strip_if_is_prefix[^a](prefix string, path &^a string) string {
 	value := *path
 	$if unix {
+		prefix_len := prefix.len
 		if value.starts_with(prefix) {
-			return unsafe { value.substr_unsafe(prefix.len, value.len) }
+			return value[prefix_len..].to_owned()
 		}
-		return value
+		return value.to_owned()
 	} $else {
 		return strip_prefix(value, prefix)
 	}
 }
 
 fn parent_absolute_match_path(absolute_base string, relative_base string, path string) string {
-	mut path_to_join := path
+	mut path_to_join := path.to_owned()
 	if relative_base != '' && relative_base != '.' {
-		without_dot_slash := if relative_base.starts_with('./') {
-			unsafe { relative_base.substr_unsafe(2, relative_base.len) }
-		} else {
-			relative_base
+		mut without_dot_slash := relative_base.clone()
+		if relative_base.starts_with('./') {
+			without_dot_slash = relative_base[2..].to_owned()
 		}
-		if path == without_dot_slash {
+		if path == without_dot_slash.clone() {
 			path_to_join = ''
-		} else if path.len > without_dot_slash.len && path.starts_with(without_dot_slash)
+		} else if path.len > without_dot_slash.len && path.starts_with(without_dot_slash.clone())
 			&& path[without_dot_slash.len] == os.path_separator[0] {
-			path_to_join = unsafe { path.substr_unsafe(without_dot_slash.len + 1, path.len) }
+			path_to_join = path[without_dot_slash.len + 1..].to_owned()
 		} else {
-			relative_path := strip_if_is_prefix(without_dot_slash, &path)
+			relative_path := strip_if_is_prefix(without_dot_slash.clone(), &path)
 			path_to_join = strip_if_is_prefix('/', &relative_path)
 		}
 	} else if relative_base == '' {
@@ -967,29 +977,52 @@ fn parent_absolute_match_path(absolute_base string, relative_base string, path s
 }
 
 fn (ig &Ignore) any_git_parent() bool {
-	mut node := ig.node
-	for !isnil(node) {
+	mut node := ig.node.get()
+	for {
 		if node.has_git {
 			return true
 		}
-		node = node.parent
+		node = node.parent_node() or { break }
 	}
 	return false
 }
 
 fn (ig &Ignore) first_relative_dir_after_absolute_path() string {
-	mut node := ig.node
-	for !isnil(node) {
-		if !node.is_absolute_parent && !isnil(node.parent) && node.parent.is_absolute_parent {
-			return node.dir
+	mut node := ig.node.get()
+	for {
+		if !node.is_absolute_parent {
+			if p := node.parent {
+				if p.get().is_absolute_parent {
+					return node.dir
+				}
+			}
 		}
-		node = node.parent
+		node = node.parent_node() or { break }
 	}
 	return ''
 }
 
 fn none_string() ?string {
 	return none
+}
+
+// clone_optional_absolute_base shares the absolute-base path Arc, if present.
+// Rust: `Option<Arc<PathBuf>>::clone`.
+// none_absolute_base returns the empty-string sentinel `Arc` used when an
+// `Ignore` has no absolute base (no parent directories were added).
+fn none_absolute_base() arc.Arc[string] {
+	return arc.new('')
+}
+
+// V-specific: V3 cannot yet synthesize cloning for the private glob-set sum
+// type nested inside `Gitignore`, so clone each matcher through its public
+// `IClone` implementation until generated nested sum-type cloning is available.
+fn clone_gitignores(values []Gitignore) []Gitignore {
+	mut cloned := []Gitignore{cap: values.len}
+	for value in values {
+		cloned << value.clone()
+	}
+	return cloned
 }
 
 fn clone_optional_string(value ?string) ?string {

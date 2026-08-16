@@ -3,7 +3,7 @@ module ownflag
 // This module provides the ownership-safe subset of V's flag mapping API that
 // translated code uses when `vlib/flag` must remain ownership-free.
 
-pub struct ParsedFlag {
+pub struct ParsedFlag implements IClone {
 pub:
 	raw        string
 	field_name string
@@ -109,7 +109,7 @@ fn (mut fm FlagMapper) register_flag(def FlagDef) ! {
 		if existing := fm.long_defs[def.long_name] {
 			return error('flag name "${def.long_name}" is already registered to ${existing.field_name}')
 		}
-		fm.long_defs[def.long_name] = def
+		fm.long_defs[def.long_name] = def.clone()
 	}
 	if def.short_name != '' {
 		if existing := fm.short_defs[def.short_name] {
@@ -168,8 +168,9 @@ fn (mut fm FlagMapper) build_schema[T]() ! {
 }
 
 fn (mut fm FlagMapper) record(parsed ParsedFlag, extra_positions []int) {
+	parsed_pos := parsed.pos
 	fm.all_flags << parsed
-	fm.handled_pos << parsed.pos
+	fm.handled_pos << parsed_pos
 	for pos in extra_positions {
 		fm.handled_pos << pos
 	}
@@ -183,7 +184,7 @@ fn (mut fm FlagMapper) parse_long_arg(arg string, pos int) !bool {
 	if body.len == 0 {
 		return false
 	}
-	mut name := body
+	mut name := body.to_owned()
 	mut value := ''
 	mut has_value := false
 	if eq := body.index('=') {
@@ -191,13 +192,14 @@ fn (mut fm FlagMapper) parse_long_arg(arg string, pos int) !bool {
 		value = body[eq + 1..].to_owned()
 		has_value = true
 	}
-	def := fm.long_defs[name] or {
+	if name !in fm.long_defs {
 		if fm.config.mode == .relaxed {
 			fm.no_match_pos << pos
 			return false
 		}
 		return error('unknown flag --${name}')
 	}
+	def := fm.long_defs[name].clone()
 	if def.takes_arg {
 		mut parsed_arg := value.clone()
 		mut extra_positions := []int{}
@@ -247,12 +249,13 @@ fn (mut fm FlagMapper) parse_short_arg(arg string, pos int) !bool {
 	mut i := 0
 	for i < body.len {
 		name := body[i].ascii_str()
-		def := fm.short_defs[name] or {
+		if name !in fm.short_defs {
 			if fm.config.mode == .relaxed {
 				return false
 			}
 			return error('unknown flag -${name}')
 		}
+		def := fm.short_defs[name].clone()
 		if def.takes_arg {
 			mut parsed_arg := ''
 			if i + 1 < body.len {
@@ -291,7 +294,7 @@ fn (mut fm FlagMapper) parse_short_arg(arg string, pos int) !bool {
 		return false
 	}
 	for index, parsed in parsed_flags {
-		fm.record(parsed, if index == 0 { extra_positions.clone() } else { []int{} })
+		fm.record(parsed.clone(), if index == 0 { extra_positions.clone() } else { []int{} })
 	}
 	return true
 }

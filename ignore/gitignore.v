@@ -19,12 +19,13 @@ the `git` command line tool.
 /// This is used to report information about the highest precedent glob that
 /// matched in one or more gitignore files.
 pub struct Glob implements IClone {
+mut:
 	/// The file path that this glob was extracted from.
-	from_ ?string
+	source ?string
 	/// The original glob string.
-	original string
+	original_ string
 	/// The actual glob string used to convert to a regex.
-	actual string
+	actual_ string
 	/// Whether this is a whitelisted glob or not.
 	is_whitelist_ bool
 	/// Whether this glob should only match directories or not.
@@ -39,21 +40,21 @@ pub:
 
 /// Returns the file path that defined this glob.
 pub fn (g &^a Glob) from[^a]() ?&^a string {
-	if g.from_ != none {
-		return unsafe { &g.from_? }
+	if g.source != none {
+		return unsafe { &g.source? }
 	}
 	return none
 }
 
 /// The original glob as it was defined in a gitignore file.
 pub fn (g &^a Glob) original[^a]() &^a string {
-	return &g.original
+	return &g.original_
 }
 
 /// The actual glob that was compiled to respect gitignore
 /// semantics.
 pub fn (g &^a Glob) actual[^a]() &^a string {
-	return &g.actual
+	return &g.actual_
 }
 
 /// Whether this was a whitelisted glob or not.
@@ -68,12 +69,13 @@ pub fn (g &Glob) is_only_dir() bool {
 
 /// Returns true if and only if this glob has a `**/` prefix.
 fn (g &Glob) has_doublestar_prefix() bool {
-	return g.actual.starts_with('**/') || g.actual == '**'
+	return g.actual_.starts_with('**/') || g.actual_ == '**'
 }
 
 /// Gitignore is a matcher for the globs in one or more gitignore files
 /// in the same directory.
 pub struct Gitignore implements IClone {
+mut:
 	root string
 	globs []Glob
 	set globset.GlobSet
@@ -204,10 +206,10 @@ pub fn (gi &^a Gitignore) matched[^a](path string, is_dir bool) Match[GitignoreG
 		return Match[GitignoreGlobRef[^a]]{}
 	}
 	mut matches := []usize{}
-	return gi.matched_with_scratch(path, is_dir, mut matches)
+	return gi.matched_with_scratch(&path, is_dir, mut matches)
 }
 
-fn (gi &^a Gitignore) matched_with_scratch[^a](path string, is_dir bool, mut matches []usize) Match[GitignoreGlobRef[^a]] {
+fn (gi &^a Gitignore) matched_with_scratch[^a](path &string, is_dir bool, mut matches []usize) Match[GitignoreGlobRef[^a]] {
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
@@ -239,19 +241,19 @@ pub fn (gi &^a Gitignore) matched_path_or_any_parents[^a](path string, is_dir bo
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
-	mut stripped := gi.strip(path)
+	mut stripped := gi.strip(&path)
 	assert !stripped.starts_with('/'), 'path is expected to be under the root'
-	matched := gi.matched_stripped(stripped, is_dir)
+	matched := gi.matched_stripped(stripped.clone(), is_dir)
 	if !matched.is_none() {
 		return matched
 	}
 	// walk up
 	for {
-		parent := os.dir(stripped)
+		parent := os.dir(stripped.clone())
 		if parent == '' || parent == '.' || parent == stripped {
 			break
 		}
-		matched := gi.matched_stripped(parent, true)
+		matched := gi.matched_stripped(parent.clone(), true)
 		if !matched.is_none() {
 			return matched
 		}
@@ -304,16 +306,16 @@ fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool
 }
 
 // V-specific: string substrings do not carry a distinct borrow lifetime, so
-// this returns V's string view/value while the caller keeps `path` alive.
+// this returns independent owned storage while borrowing `path`.
 /// Strips the given path such that it's suitable for matching with this
 /// gitignore matcher.
-fn (gi &Gitignore) strip(path string) string {
-	mut stripped := path
+fn (gi &Gitignore) strip(path &string) string {
+	mut stripped := (*path).to_owned()
 	// A leading ./ is completely superfluous. We also strip it from
 	// our gitignore root path, so we need to strip it from our candidate
 	// path too.
 	if stripped.starts_with('./') {
-		stripped = unsafe { stripped.substr_unsafe(2, stripped.len) }
+		stripped = stripped[2..].to_owned()
 	}
 	// Strip any common prefix between the candidate path and the root
 	// of the gitignore, to make sure we get relative matching right.
@@ -323,12 +325,12 @@ fn (gi &Gitignore) strip(path string) string {
 	//
 	// As an additional special case, if the root is just `.`, then we
 	// shouldn't try to strip anything, e.g., when path begins with a `.`.
-	if gi.root != '.' && !gitignore_is_file_name(stripped) {
-		if relative := gitignore_strip_prefix_opt(gi.root, stripped) {
+	if gi.root != '.' && !gitignore_is_file_name(stripped.clone()) {
+		if relative := gitignore_strip_prefix_opt(gi.root.clone(), stripped.clone()) {
 			stripped = relative
 			// If we're left with a leading slash, get rid of it.
 			if stripped.starts_with('/') {
-				stripped = unsafe { stripped.substr_unsafe(1, stripped.len) }
+				stripped = stripped[1..].to_owned()
 			}
 		}
 	}
@@ -345,7 +347,7 @@ pub struct GitignoreBuilder implements IClone {
 mut:
 	globs                []Glob
 	case_insensitive_    bool
-	allow_unclosed_class bool
+	allow_unclosed_class_ bool
 }
 
 /// Create a new builder for a gitignore file.
@@ -364,7 +366,7 @@ pub fn GitignoreBuilder.new(root string) GitignoreBuilder {
 		root:                 path.to_owned()
 		globs:                []Glob{}
 		case_insensitive_:    false
-		allow_unclosed_class: true
+		allow_unclosed_class_: true
 	}
 }
 
@@ -403,7 +405,7 @@ pub fn (builder &GitignoreBuilder) build() (Gitignore, bool, IgnoreError) {
 pub fn (builder GitignoreBuilder) build_global() (Gitignore, bool, IgnoreError) {
 	mut owned := builder
 	path := gitconfig_excludes_path() or { return Gitignore.empty(), false, IgnoreError{} }
-	if !os.is_file(path) {
+	if !os.is_file(path.clone()) {
 		return Gitignore.empty(), false, IgnoreError{}
 	}
 	mut errs := PartialErrorBuilder{}
@@ -427,8 +429,8 @@ pub fn (builder GitignoreBuilder) build_global() (Gitignore, bool, IgnoreError) 
 /// a problem adding one glob, an error for that will be returned, but
 /// all other valid globs will still be added.
 pub fn (mut builder GitignoreBuilder) add(path string) (bool, IgnoreError) {
-	contents := os.read_file(path) or {
-		return true, io_error(err).with_path(path)
+	contents := os.read_file(path.clone()) or {
+		return true, io_error(err).with_path(path.clone())
 	}
 	mut errs := PartialErrorBuilder{}
 	lines := contents.split('\n')
@@ -442,9 +444,9 @@ pub fn (mut builder GitignoreBuilder) add(path string) (bool, IgnoreError) {
 				line = line[3..]
 			}
 		}
-		add_has_err, add_err := builder.add_line(path, line)
+		add_has_err, add_err := builder.add_line(path.clone(), line)
 		if add_has_err {
-			errs.push(add_err.tagged(path, lineno))
+			errs.push(add_err.tagged(path.clone(), lineno))
 		}
 	}
 	return errs.into_error_option()
@@ -493,9 +495,9 @@ pub fn (mut builder GitignoreBuilder) add_line(from ?string, line string) (bool,
 		owned_from = source.to_owned()
 	}
 	mut glob := Glob{
-		from_:            owned_from
-		original:         current.to_owned()
-		actual:           ''
+		source:           owned_from
+		original_:        current.to_owned()
+		actual_:          ''.to_owned()
 		is_whitelist_:    false
 		is_only_dir_:     false
 	}
@@ -528,33 +530,35 @@ pub fn (mut builder GitignoreBuilder) add_line(from ?string, line string) (bool,
 			current = current[..current.len - 1]
 		}
 	}
-	glob.actual = current.to_owned()
+	glob.actual_ = current.to_owned()
 	// If there is a literal slash, then this is a glob that must match the
 	// entire path name. Otherwise, we should let it match anywhere, so use
 	// a **/ prefix.
 	if !is_absolute && !current.contains('/') {
 		// ... but only if we don't already have a **/ prefix.
 		if !glob.has_doublestar_prefix() {
-			glob.actual = '**/${glob.actual}'
+			glob.actual_ = '**/${glob.actual_}'
 		}
 	}
 	// If the glob ends with `/**`, then we should only match everything
 	// inside a directory, but not the directory itself. Standard globs
 	// will match the directory. So we add `/*` to force the issue.
-	if glob.actual.ends_with('/**') {
-		glob.actual += '/*'
+	if glob.actual_.ends_with('/**') {
+		glob.actual_ += '/*'
 	}
-	parse_glob := glob.actual.clone()
+	parse_glob := glob.actual_.clone()
 	mut glob_builder := globset.GlobBuilder.new(&parse_glob)
 	glob_builder.literal_separator(true)
 	glob_builder.case_insensitive(builder.case_insensitive_)
 	glob_builder.backslash_escape(true)
-	glob_builder.allow_unclosed_class(builder.allow_unclosed_class)
+	glob_builder.allow_unclosed_class(builder.allow_unclosed_class_)
 	parsed := glob_builder.build() or {
-		glob_err := err as globset.GlobError
-		return true, glob_error(glob.original, (*glob_err.kind()).str())
+		if err is globset.GlobError {
+			return true, glob_error(glob.original_.clone(), (*err.kind()).str())
+		}
+		return true, glob_error(glob.original_.clone(), err.msg())
 	}
-	builder.builder.add(parsed)
+	builder.builder.add(parsed.clone())
 	builder.globs << glob
 	return false, IgnoreError{}
 }
@@ -585,7 +589,7 @@ pub fn (mut builder GitignoreBuilder) case_insensitive(yes bool) (bool, IgnoreEr
 /// enable this when compatibility (e.g., with POSIX glob implementations)
 /// is more important than good error messages.
 pub fn (mut builder GitignoreBuilder) allow_unclosed_class(yes bool) &GitignoreBuilder {
-	builder.allow_unclosed_class = yes
+	builder.allow_unclosed_class_ = yes
 	return builder
 }
 
@@ -626,8 +630,7 @@ fn gitconfig_home_contents() ?[]u8 {
 fn gitconfig_xdg_contents() ?[]u8 {
 	mut base := os.getenv('XDG_CONFIG_HOME')
 	if base == '' {
-		home := home_dir() or { return none }
-		base = os.join_path(home, '.config')
+		base = os.join_path(home_dir() or { return none }, '.config')
 	}
 	path := os.join_path(base, 'git', 'config')
 	if !os.is_file(path) {
@@ -642,8 +645,7 @@ fn gitconfig_xdg_contents() ?[]u8 {
 fn excludes_file_default() ?string {
 	mut base := os.getenv('XDG_CONFIG_HOME')
 	if base == '' {
-		home := home_dir() or { return none }
-		base = os.join_path(home, '.config')
+		base = os.join_path(home_dir() or { return none }, '.config')
 	}
 	return os.join_path(base, 'git', 'ignore')
 }
@@ -661,7 +663,7 @@ fn parse_excludes_file(data []u8) ?string {
 	// be called ~once per traversal or so? (Although it's not guaranteed...)
 	matched := re.find(data.bytestr()) or { return none }
 	candidate := matched.get(1) or { return none }
-	if !validate.utf8_string(candidate) {
+	if !validate.utf8_string(candidate.clone()) {
 		return none
 	}
 	return expand_tilde(candidate)
@@ -686,7 +688,7 @@ fn home_dir() ?string {
 
 fn gitignore_strip_prefix_opt(prefix string, path string) ?string {
 	if prefix == '' {
-		return path
+		return path.to_owned()
 	}
 	if prefix.len > path.len || !path.starts_with(prefix) {
 		return none
@@ -694,11 +696,14 @@ fn gitignore_strip_prefix_opt(prefix string, path string) ?string {
 	if prefix.len < path.len && !prefix.ends_with('/') && path[prefix.len] != `/` {
 		return none
 	}
-	return path[prefix.len..]
+	// V-specific: Rust returns a borrowed `&Path` here. V strings carry their
+	// slice descriptor by value, so keep the returned descriptor alive with
+	// owned storage after this helper's by-value `path` parameter is dropped.
+	return path[prefix.len..].to_owned()
 }
 
 fn gitignore_is_file_name(path string) bool {
-	return !gitignore_path_for_matching(path).contains('/')
+	return !gitignore_path_for_matching(path.clone()).contains('/')
 }
 
 fn gitignore_path_for_matching(path string) string {
@@ -714,7 +719,7 @@ fn gitignore_path_for_matching(path string) string {
 
 fn gitignore_path_for_matching_if_needed(path string) string {
 	$if !windows {
-		if !gitignore_path_needs_normalization(path) {
+		if !gitignore_path_needs_normalization(path.clone()) {
 			return path
 		}
 	}

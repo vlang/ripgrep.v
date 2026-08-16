@@ -95,6 +95,17 @@ fn test_case_smart() {
 	assert !matcher.is_match(upper_matcher, 'ABC'.bytes())!
 }
 
+// The fast line candidate matcher must preserve the configured smart-case
+// folding represented explicitly in Rust's HIR.
+fn test_case_smart_fast_line_candidate() {
+	mut builder := RegexMatcherBuilder.new()
+	builder.case_smart(true)
+	builder.line_terminator(`\n`)
+	matcher_ := builder.build(r'sherlock') or { panic(err) }
+	found := matcher_.find_candidate_line('Sherlock\n'.bytes()) or { panic(err) }
+	assert found.has_value
+}
+
 fn test_case_insensitive_unicode_literal() {
 	mut builder := RegexMatcherBuilder.new()
 	builder.case_insensitive(true)
@@ -500,7 +511,7 @@ fn test_rust_regex_broad_unicode_properties() {
 		r'\p{General_Category=Mark}+': '\u0301'
 	}
 	for pattern, text in cases {
-		matcher_ := RegexMatcherBuilder.new().build(pattern) or {
+		matcher_ := RegexMatcherBuilder.new().build(pattern.clone()) or {
 			panic('${pattern}: ${err.msg()}')
 		}
 		assert matcher.is_match(matcher_, text.bytes())!
@@ -591,7 +602,7 @@ fn test_rust_regex_ascii_control_escapes() {
 	controls := [[u8(0x07)], [u8(0x0c)], [u8(0x0b)], [u8(0x07)],
 		[u8(0x0c)], [u8(0x0b)]]
 	for i, pattern in patterns {
-		matcher_ := RegexMatcherBuilder.new().build(pattern)!
+		matcher_ := RegexMatcherBuilder.new().build(pattern.clone())!
 		assert matcher.is_match(matcher_, controls[i])!
 		assert !matcher.is_match(matcher_, pattern[1..2].bytes())!
 	}
@@ -615,7 +626,7 @@ fn test_rust_regex_character_class_escapes() {
 		}
 	}
 	for pattern in [r'[\b]', r'[\B]', r'[\A]', r'[\z]'] {
-		if _ := RegexMatcherBuilder.new().build(pattern) {
+		if _ := RegexMatcherBuilder.new().build(pattern.clone()) {
 			panic('expected character class escape rejection for ${pattern}')
 		} else {
 			assert err.msg().contains('invalid escape sequence found in character class')
@@ -731,7 +742,7 @@ fn test_rust_regex_parse_errors_reject_invalid_captures_ranges_and_properties() 
 		r'(?q:a)':             'unrecognized flag'
 	}
 	for pattern, expected in invalid {
-		if _ := RegexMatcherBuilder.new().build(pattern) {
+		if _ := RegexMatcherBuilder.new().build(pattern.clone()) {
 			panic('expected parse error for ${pattern}')
 		} else {
 			assert err.msg().starts_with('regex parse error:\n    (?:${pattern})\n')
@@ -747,7 +758,7 @@ fn test_build_wrapper_parentheses_match_ripgrep_issue_2480() {
 
 fn test_rust_regex_empty_alternatives_and_byte_offset_empty_matches() {
 	for pattern in ['', r'a|', r'|a', r'()'] {
-		empty := RegexMatcherBuilder.new().build(pattern) or { panic(err.msg()) }
+		empty := RegexMatcherBuilder.new().build(pattern.clone()) or { panic(err.msg()) }
 		found := empty.find_at('Δ'.bytes(), 1)!
 		mat := found.get() or { panic('expected empty match for ${pattern}') }
 		assert mat.start() == 1

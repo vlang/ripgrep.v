@@ -44,7 +44,7 @@ pub mut:
 	/// The file path.
 	path       string
 	/// The directory depth.
-	depth      ?usize
+	depth_value ?usize
 	/// The original glob that caused this error. This glob, when
 	/// available, always corresponds to the glob provided by an end user.
 	/// e.g., It is the glob as written in a `.gitignore` file.
@@ -72,7 +72,7 @@ pub fn (err IgnoreError) clone() IgnoreError {
 		message:    err.message.clone()
 		line:       err.line
 		path:       err.path.clone()
-		depth:      err.depth
+		depth_value: err.depth_value
 		error_code: err.error_code
 		ancestor:   err.ancestor.clone()
 		child:      err.child.clone()
@@ -86,21 +86,9 @@ pub fn (err IgnoreError) clone() IgnoreError {
 
 // V-specific: releases storage owned by this translated error value.
 pub fn (mut err IgnoreError) free() {
-	for mut nested in err.nested {
-		nested.free()
-	}
-	if glob := err.glob {
-		unsafe {
-			glob.free()
-		}
-	}
-	unsafe {
-		err.message.free()
-		err.path.free()
-		err.ancestor.free()
-		err.child.free()
-		err.nested.free()
-	}
+	// Assigning defaults makes v3 ownership auto-drop (free) each owned field
+	// exactly once (recursively for `nested`). Manually calling `.free()` first
+	// would double-free, because the assignment already drops the old value.
 	err.message = ''
 	err.path = ''
 	err.glob = none
@@ -172,7 +160,7 @@ fn (err IgnoreError) with_path(path string) IgnoreError {
 fn (err IgnoreError) with_depth(depth usize) IgnoreError {
 	return IgnoreError{
 		kind:   .with_depth
-		depth:  depth
+		depth_value: depth
 		nested: [err]
 	}
 }
@@ -260,7 +248,7 @@ pub fn (err IgnoreError) into_io_error() ?IgnoreError {
 	match err.kind {
 		.partial, .with_line_number, .with_path, .with_depth {
 			if err.nested.len == 1 {
-				mut nested := err.nested
+				mut nested := err.nested.clone()
 				return nested.pop().into_io_error()
 			}
 		}
@@ -282,7 +270,7 @@ pub fn (err &IgnoreError) depth() ?usize {
 			}
 		}
 		.with_depth {
-			return err.depth
+			return err.depth_value
 		}
 		else {}
 	}
@@ -368,12 +356,12 @@ pub fn ignore_error_str(err &IgnoreError) string {
 }
 
 // V-specific: exposes the translated error through V's IError interface.
-pub fn (err IgnoreError) msg() string {
+pub fn (err &IgnoreError) msg() string {
 	return err.str()
 }
 
 // V-specific: exposes the translated error through V's IError interface.
-pub fn (err IgnoreError) code() int {
+pub fn (err &IgnoreError) code() int {
 	if err.kind == .io {
 		return err.error_code
 	}
@@ -415,7 +403,7 @@ fn (builder PartialErrorBuilder) into_error_option() (bool, IgnoreError) {
 	if builder.errs.len == 0 {
 		return false, IgnoreError{}
 	}
-	mut errs := builder.errs
+	mut errs := builder.errs.clone()
 	if errs.len == 1 {
 		return true, errs.pop()
 	}

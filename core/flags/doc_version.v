@@ -1,6 +1,16 @@
 module flags
 
-import os
+const upstream_ripgrep_version = '15.1.0'
+const cargo_package_version = $env('CARGO_PKG_VERSION')
+const ripgrep_build_git_hash = $env('RIPGREP_BUILD_GIT_HASH')
+
+#include "@VMODROOT/core/flags/cpu_features_shim.h"
+fn C.rg_runtime_sse2() int
+fn C.rg_runtime_ssse3() int
+fn C.rg_runtime_avx2() int
+fn C.rg_compile_sse2() int
+fn C.rg_compile_ssse3() int
+fn C.rg_compile_avx2() int
 
 $if pcre2 ? {
 	$if $pkgconfig('libpcre2-8') {
@@ -14,6 +24,7 @@ $if pcre2 ? {
 	}
 	#include "@VMODROOT/pcre2/pcre2_shim.h"
 	fn C.rg_pcre2_version(buf &char, len usize) &char
+	fn C.rg_pcre2_jit_available() int
 }
 
 /*
@@ -27,8 +38,12 @@ or something more verbose that includes things like CPU target feature support.
 ///
 /// This includes the git revision hash.
 pub fn generate_version_digits() string {
-	semver := os.getenv_opt('CARGO_PKG_VERSION') or { 'N/A' }
-	hash := os.getenv_opt('RIPGREP_BUILD_GIT_HASH') or { return semver.to_owned() }
+	semver := if cargo_package_version.len == 0 {
+		upstream_ripgrep_version
+	} else {
+		cargo_package_version
+	}
+	hash := ripgrep_build_git_hash
 	if hash == '' {
 		return semver.to_owned()
 	}
@@ -70,9 +85,27 @@ pub fn generate_version_long() string {
 /// ripgrep.
 pub fn generate_version_pcre2() (string, bool) {
 	$if pcre2 ? {
-		return 'PCRE2 ${pcre2_version()} is available\n', true
+		mut out := 'PCRE2 ${pcre2_major_minor()} is available'
+		if sizeof(voidptr) == 8 && C.rg_pcre2_jit_available() != 0 {
+			out += ' (JIT is available)\n'
+		} else {
+			out += ' (JIT is unavailable)\n'
+		}
+		return out, true
 	} $else {
 		return 'PCRE2 is not available in this build of ripgrep.\n', false
+	}
+}
+
+// pcre2_major_minor returns just the `major.minor` portion of the PCRE2
+// version. The Rust port formats `"{major}.{minor}"` from `pcre2::version()`;
+// the shim's `PCRE2_CONFIG_VERSION` string starts with `major.minor` followed
+// by the release date, so the leading token matches.
+fn pcre2_major_minor() string {
+	$if pcre2 ? {
+		return pcre2_version().all_before(' ')
+	} $else {
+		return 'unavailable'
 	}
 }
 
@@ -95,14 +128,15 @@ fn pcre2_version() string {
 /// This is kind of a dirty violation of abstraction, since it assumes
 /// knowledge about what specific SIMD features are being used by various
 /// components.
+///
 fn runtime_cpu_features() []string {
-	$if x64 {
-		return ['+SSE2', '-SSSE3', '-AVX2']
-	} $else $if amd64 {
-		return ['+SSE2', '-SSSE3', '-AVX2']
+	$if amd64 {
+		return [
+			'${sign(C.rg_runtime_sse2() != 0)}SSE2',
+			'${sign(C.rg_runtime_ssse3() != 0)}SSSE3',
+			'${sign(C.rg_runtime_avx2() != 0)}AVX2',
+		]
 	} $else $if arm64 {
-		return ['+NEON']
-	} $else $if aarch64 {
 		return ['+NEON']
 	} $else {
 		return []string{}
@@ -121,13 +155,13 @@ fn runtime_cpu_features() []string {
 /// compile ripgrep with `RUSTFLAGS="-C target-cpu=native"`. But note that
 /// the binary produced by this will not be portable.
 fn compile_cpu_features() []string {
-	$if x64 {
-		return ['+SSE2', '-SSSE3', '-AVX2']
-	} $else $if amd64 {
-		return ['+SSE2', '-SSSE3', '-AVX2']
+	$if amd64 {
+		return [
+			'${sign(C.rg_compile_sse2() != 0)}SSE2',
+			'${sign(C.rg_compile_ssse3() != 0)}SSSE3',
+			'${sign(C.rg_compile_avx2() != 0)}AVX2',
+		]
 	} $else $if arm64 {
-		return ['+NEON']
-	} $else $if aarch64 {
 		return ['+NEON']
 	} $else {
 		return []string{}

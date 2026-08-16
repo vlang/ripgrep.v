@@ -4,10 +4,10 @@ import matcher
 import regex.meta
 
 $if !windows {
-	#include <string.h>
-	fn C.memmem(haystack voidptr, haystacklen usize, needle voidptr, needlelen usize) voidptr
-	fn C.memchr(s voidptr, c int, n usize) voidptr
-	fn C.memcmp(s1 voidptr, s2 voidptr, n usize) int
+	#include "@VMODROOT/regex/memory_shim.h"
+	fn C.rg_memmem(haystack voidptr, haystacklen usize, needle voidptr, needlelen usize) voidptr
+	fn C.rg_memchr(s voidptr, c int, n usize) voidptr
+	fn C.rg_memcmp(s1 voidptr, s2 voidptr, n usize) int
 }
 
 /// A builder for constructing a `Matcher` using regular expressions.
@@ -66,9 +66,9 @@ pub fn (builder &RegexMatcherBuilder) build_many(patterns &[]string) !RegexMatch
 	} else if chir.config().word {
 		chir = chir.into_word()
 	}
-	regex := chir.to_regex()!
+	re := chir.to_regex()!
 	allow_exact_shortcuts := !builder.config.word && !builder.config.whole_line
-		&& regex.total_groups == 0
+		&& re.total_groups == 0
 	byte_literal := if needs_backend_normalization || !allow_exact_shortcuts {
 		?[]u8(none)
 	} else {
@@ -97,7 +97,7 @@ pub fn (builder &RegexMatcherBuilder) build_many(patterns &[]string) !RegexMatch
 	//
 	mut fast_line_regex := ?meta.Regex(none)
 	if !needs_backend_normalization && allow_fast_line_regex {
-		fast := InnerLiterals.new(&chir, &regex).one_regex()!
+		fast := InnerLiterals.new(&chir, &re).one_regex()!
 		if fast.has_value {
 			fast_line_regex = ?meta.Regex(fast.value)
 		}
@@ -108,7 +108,7 @@ pub fn (builder &RegexMatcherBuilder) build_many(patterns &[]string) !RegexMatch
 	config.line_terminator = chir.line_terminator()
 	return RegexMatcher{
 		config:               config
-		regex:                regex
+		regex:                re
 		byte_literal:         byte_literal
 		unicode_case_literal: unicode_case_literal
 		simple_ascii:         simple_ascii
@@ -423,7 +423,9 @@ pub fn (mut builder RegexMatcherBuilder) whole_line(yes bool) &RegexMatcherBuild
 
 /// An implementation of the `Matcher` trait using Rust's standard regex
 /// library.
+@[heap]
 pub struct RegexMatcher implements IClone, Drop {
+mut:
 	/// The configuration specified by the caller.
 	config Config
 	/// The regular expression compiled from the pattern provided by the
@@ -447,28 +449,52 @@ pub struct RegexMatcher implements IClone, Drop {
 	reject_invalid_empty bool
 }
 
-fn (mut re RegexMatcher) drop() {
-	re.regex.drop()
+// clone produces an independent copy of the matcher. `RegexMatcher` owns a
+// `drop()` (it releases the reference-counted engine and its optional literal
+// buffers), so it must supply an explicit clone rather than the compiler default
+// one: cloning through a borrowed `&RegexMatcher` (as in `PatternMatcher`/
+// `PrinterMatcher`) would otherwise deep-copy in place and drop the borrowed
+// source's shared fields. Each owned field is duplicated via its own clone; the
+// engine clone (`meta.Regex.clone`) bumps its refcount, balanced by `drop`.
+pub fn (re &RegexMatcher) clone() RegexMatcher {
+	mut cloned_byte_literal := ?[]u8(none)
 	if bytes := re.byte_literal {
-		unsafe { bytes.free() }
-		re.byte_literal = none
+		cloned_byte_literal = bytes.clone()
 	}
+	mut cloned_unicode_case_literal := ?string(none)
 	if literal := re.unicode_case_literal {
-		unsafe { literal.free() }
-		re.unicode_case_literal = none
+		cloned_unicode_case_literal = literal.clone()
 	}
+	mut cloned_simple_ascii := ?SimpleAsciiPattern(none)
 	if simple := re.simple_ascii {
-		unsafe {
-			simple.prefix.free()
-			simple.class.free()
-		}
-		re.simple_ascii = none
+		cloned_simple_ascii = simple.clone()
 	}
+	mut cloned_fast_line_regex := ?meta.Regex(none)
 	if fast := re.fast_line_regex {
-		mut owned := fast
-		owned.drop()
-		re.fast_line_regex = none
+		cloned_fast_line_regex = fast.clone()
 	}
+	return RegexMatcher{
+		config:               re.config.clone()
+		regex:                re.regex.clone()
+		byte_literal:         cloned_byte_literal
+		unicode_case_literal: cloned_unicode_case_literal
+		simple_ascii:         cloned_simple_ascii
+		fast_line_regex:      cloned_fast_line_regex
+		non_matching_bytes:   re.non_matching_bytes.clone()
+		reject_invalid_empty: re.reject_invalid_empty
+	}
+}
+
+pub fn (mut re RegexMatcher) drop() {
+	// `re.regex` is a non-optional refcounted field, so drop it explicitly.
+	re.regex.drop()
+	// The optional fields own arrays/strings/structs; assigning `none` makes v3
+	// ownership auto-drop (free) the current value exactly once. Do NOT also free
+	// them manually — the Rust manual-free idiom would double-free here.
+	re.byte_literal = none
+	re.unicode_case_literal = none
+	re.simple_ascii = none
+	re.fast_line_regex = none
 }
 
 /// Create a new matcher from the given pattern using the default
@@ -498,12 +524,12 @@ pub fn RegexMatcher.new_line_matcher(pattern string) !RegexMatcher {
 // This implementation just dispatches on the internal matcher impl except
 // for the line terminator optimization, which is possibly executed via
 // `fast_line_regex`.
-pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+pub fn (re &RegexMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	found, _ := re.capture_groups_at(haystack, at)!
 	return found
 }
 
-pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+pub fn (re &RegexMatcher) capture_groups_at(haystack &[]u8, at usize) !(matcher.FallibleMatch, []string) {
 	if at > haystack.len {
 		return matcher.FallibleMatch.absent(), []string{}
 	}
@@ -582,11 +608,11 @@ pub fn (re &RegexMatcher) capture_index(name string) ?usize {
 	return none
 }
 
-pub fn (re &RegexMatcher) try_find_iter(haystack []u8, matched fn (matcher.Match) !bool) ! {
+pub fn (re &RegexMatcher) try_find_iter(haystack &[]u8, matched fn (matcher.Match) !bool) ! {
 	matcher.try_find_iter(re, haystack, matched)!
 }
 
-pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCaptures) !bool {
+pub fn (re &RegexMatcher) captures_at(haystack &[]u8, at usize, mut caps RegexCaptures) !bool {
 	caps.clear()
 	if at > haystack.len {
 		return false
@@ -622,7 +648,7 @@ pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCap
 	return false
 }
 
-pub fn (re &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+pub fn (re &RegexMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
 	maybe_mat := re.find_at(haystack, at)!
 	if !maybe_mat.has_value {
 		return matcher.FallibleUsize.absent()
@@ -638,7 +664,7 @@ pub fn (re &RegexMatcher) line_terminator() ?matcher.LineTerminator {
 	return re.config.line_terminator
 }
 
-pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+pub fn (re &RegexMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind {
 	if literal := re.byte_literal {
 		found := find_byte_literal_at(haystack, literal, 0)!
 		if found.has_value {
@@ -690,6 +716,7 @@ pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLi
 /// index of the group using the corresponding matcher's `capture_index`
 /// method, and then use that index with `RegexCaptures.get`.
 pub struct RegexCaptures implements IClone {
+mut:
 	groups []?matcher.Match
 }
 
@@ -742,11 +769,11 @@ pub fn RegexMatcherRef.new[^a](re &^a RegexMatcher) RegexMatcherRef[^a] {
 	}
 }
 
-pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.FallibleMatch {
+pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack &[]u8, at usize) !matcher.FallibleMatch {
 	return re.re.find_at(haystack, at)
 }
 
-pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack []u8, at usize) !matcher.FallibleUsize {
+pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack &[]u8, at usize) !matcher.FallibleUsize {
 	return re.re.shortest_match_at(haystack, at)
 }
 
@@ -762,7 +789,7 @@ pub fn (re RegexMatcherRef[^a]) capture_index[^a](name string) ?usize {
 	return matcher.default_capture_index(name)
 }
 
-pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
@@ -774,7 +801,7 @@ pub fn (re RegexMatcherRef[^a]) line_terminator[^a]() ?matcher.LineTerminator {
 	return re.re.line_terminator()
 }
 
-pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack []u8) !matcher.FallibleLineMatchKind {
+pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack &[]u8) !matcher.FallibleLineMatchKind {
 	return re.re.find_candidate_line(haystack)
 }
 
@@ -791,7 +818,7 @@ fn (re &RegexMatcher) needs_accept_match_confirmation() bool {
 	return re.reject_invalid_empty || re.config.whole_line || re.config.word
 }
 
-fn (re &RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
+fn (re &RegexMatcher) accept_match(haystack &[]u8, mat matcher.Match) bool {
 	if re.reject_invalid_empty && mat.start() == mat.end()
 		&& is_invalid_utf8_at(haystack, mat.start()) {
 		return false
@@ -805,7 +832,7 @@ fn (re &RegexMatcher) accept_match(haystack []u8, mat matcher.Match) bool {
 	return true
 }
 
-fn is_invalid_utf8_at(haystack []u8, offset usize) bool {
+fn is_invalid_utf8_at(haystack &[]u8, offset usize) bool {
 	if offset >= haystack.len {
 		return false
 	}
@@ -854,7 +881,7 @@ fn is_utf8_continuation(byte u8) bool {
 	return byte >= 0x80 && byte <= 0xbf
 }
 
-fn is_whole_line_match(config Config, haystack []u8, mat matcher.Match) bool {
+fn is_whole_line_match(config Config, haystack &[]u8, mat matcher.Match) bool {
 	start := mat.start()
 	end := mat.end()
 	if start > 0 && haystack[start - 1] != config_line_byte(config) {
@@ -876,7 +903,7 @@ fn config_line_byte(config Config) u8 {
 	return `\n`
 }
 
-fn is_word_match(config Config, haystack []u8, mat matcher.Match) bool {
+fn is_word_match(config Config, haystack &[]u8, mat matcher.Match) bool {
 	start := mat.start()
 	end := mat.end()
 	if !config.unicode {
@@ -894,7 +921,7 @@ fn is_word_byte(byte u8) bool {
 		|| (byte >= `0` && byte <= `9`) || byte == `_`
 }
 
-fn unicode_word_before(haystack []u8, offset usize) (bool, bool) {
+fn unicode_word_before(haystack &[]u8, offset usize) (bool, bool) {
 	if offset == 0 {
 		return false, true
 	}
@@ -914,7 +941,7 @@ fn unicode_word_before(haystack []u8, offset usize) (bool, bool) {
 	return meta.is_unicode_word_char(r), true
 }
 
-fn unicode_word_at(haystack []u8, offset usize) (bool, bool) {
+fn unicode_word_at(haystack &[]u8, offset usize) (bool, bool) {
 	if offset == haystack.len {
 		return false, true
 	}
@@ -928,7 +955,7 @@ fn unicode_word_at(haystack []u8, offset usize) (bool, bool) {
 	return meta.is_unicode_word_char(r), true
 }
 
-fn strict_utf8_rune_at(haystack []u8, offset usize) (rune, int) {
+fn strict_utf8_rune_at(haystack &[]u8, offset usize) (rune, int) {
 	if offset >= haystack.len {
 		return rune(0), 0
 	}
@@ -942,10 +969,10 @@ fn strict_utf8_rune_at(haystack []u8, offset usize) (rune, int) {
 	}
 	if offset + 2 < haystack.len && is_utf8_continuation(haystack[offset + 1])
 		&& is_utf8_continuation(haystack[offset + 2]) {
-		if b0 == 0xe0 && haystack[offset + 1] >= 0xa0
-			|| b0 >= 0xe1 && b0 <= 0xec
-			|| b0 == 0xed && haystack[offset + 1] <= 0x9f
-			|| b0 >= 0xee && b0 <= 0xef {
+		if (b0 == 0xe0 && haystack[offset + 1] >= 0xa0)
+			|| (b0 >= 0xe1 && b0 <= 0xec)
+			|| (b0 == 0xed && haystack[offset + 1] <= 0x9f)
+			|| (b0 >= 0xee && b0 <= 0xef) {
 			return rune((u32(b0 & 0x0f) << 12) | (u32(haystack[offset + 1] & 0x3f) << 6)
 				| u32(haystack[offset + 2] & 0x3f)), 3
 		}
@@ -953,9 +980,9 @@ fn strict_utf8_rune_at(haystack []u8, offset usize) (rune, int) {
 	if offset + 3 < haystack.len && is_utf8_continuation(haystack[offset + 1])
 		&& is_utf8_continuation(haystack[offset + 2])
 		&& is_utf8_continuation(haystack[offset + 3]) {
-		if b0 == 0xf0 && haystack[offset + 1] >= 0x90
-			|| b0 >= 0xf1 && b0 <= 0xf3
-			|| b0 == 0xf4 && haystack[offset + 1] <= 0x8f {
+		if (b0 == 0xf0 && haystack[offset + 1] >= 0x90)
+			|| (b0 >= 0xf1 && b0 <= 0xf3)
+			|| (b0 == 0xf4 && haystack[offset + 1] <= 0x8f) {
 			return rune((u32(b0 & 0x07) << 18) | (u32(haystack[offset + 1] & 0x3f) << 12)
 				| (u32(haystack[offset + 2] & 0x3f) << 6) | u32(haystack[offset + 3] & 0x3f)), 4
 		}
@@ -1045,7 +1072,7 @@ fn byte_literal_from_non_unicode_pattern(pattern string) ?[]u8 {
 	return bytes
 }
 
-fn find_byte_literal_at(haystack []u8, literal []u8, at usize) !matcher.FallibleMatch {
+fn find_byte_literal_at(haystack &[]u8, literal &[]u8, at usize) !matcher.FallibleMatch {
 	if literal.len == 0 || at > haystack.len || literal.len > haystack.len {
 		return matcher.FallibleMatch.absent()
 	}
@@ -1055,7 +1082,7 @@ fn find_byte_literal_at(haystack []u8, literal []u8, at usize) !matcher.Fallible
 	return matcher.FallibleMatch.some(matcher.Match.new(i, i + literal.len))
 }
 
-fn find_unicode_case_literal_at(haystack []u8, literal string, at usize) !matcher.FallibleMatch {
+fn find_unicode_case_literal_at(haystack &[]u8, literal string, at usize) !matcher.FallibleMatch {
 	if literal.len == 0 || at > haystack.len {
 		return matcher.FallibleMatch.absent()
 	}
@@ -1068,7 +1095,7 @@ fn find_unicode_case_literal_at(haystack []u8, literal string, at usize) !matche
 	return matcher.FallibleMatch.some(matcher.Match.new(usize(index), usize(index + lower_literal.len)))
 }
 
-fn find_byte_literal_index(haystack []u8, literal []u8, at usize) ?usize {
+fn find_byte_literal_index(haystack &[]u8, literal &[]u8, at usize) ?usize {
 	if literal.len == 0 || at > usize(haystack.len)
 		|| usize(literal.len) > usize(haystack.len) - at {
 		return none
@@ -1110,13 +1137,13 @@ fn find_byte_literal_index(haystack []u8, literal []u8, at usize) ?usize {
 	}
 }
 
-fn find_byte_literal_memmem(haystack []u8, literal []u8, at usize) ?usize {
+fn find_byte_literal_memmem(haystack &[]u8, literal &[]u8, at usize) ?usize {
 	$if windows {
 		return find_byte_literal_bmh(haystack, literal, at)
 	} $else {
 		unsafe {
 			base := voidptr(&haystack[at])
-			found := C.memmem(base, usize(haystack.len) - at, voidptr(&literal[0]),
+			found := C.rg_memmem(base, usize(haystack.len) - at, voidptr(&literal[0]),
 				usize(literal.len))
 			if isnil(found) {
 				return none
@@ -1126,7 +1153,7 @@ fn find_byte_literal_memmem(haystack []u8, literal []u8, at usize) ?usize {
 	}
 }
 
-fn find_byte_literal_memchr(haystack []u8, literal []u8, at usize) ?usize {
+fn find_byte_literal_memchr(haystack &[]u8, literal &[]u8, at usize) ?usize {
 	n := usize(haystack.len)
 	m := usize(literal.len)
 	if m == 0 {
@@ -1143,12 +1170,12 @@ fn find_byte_literal_memchr(haystack []u8, literal []u8, at usize) ?usize {
 		first := int(literal[0])
 		base := unsafe { usize(haystack.data) }
 		for pos < limit {
-			found := unsafe { C.memchr(&haystack[pos], first, limit - pos) }
+			found := unsafe { C.rg_memchr(&haystack[pos], first, limit - pos) }
 			if found == C.NULL {
 				return none
 			}
 			idx := unsafe { usize(found) - base }
-			if unsafe { C.memcmp(found, literal.data, m) } == 0 {
+			if unsafe { C.rg_memcmp(found, literal.data, m) } == 0 {
 				return idx
 			}
 			pos = idx + 1
@@ -1157,7 +1184,7 @@ fn find_byte_literal_memchr(haystack []u8, literal []u8, at usize) ?usize {
 	}
 }
 
-fn find_byte_literal_bmh(haystack []u8, literal []u8, at usize) ?usize {
+fn find_byte_literal_bmh(haystack &[]u8, literal &[]u8, at usize) ?usize {
 	n := usize(haystack.len)
 	m := usize(literal.len)
 	mut skip := []usize{len: 256, init: m}
@@ -1216,7 +1243,7 @@ fn simple_ascii_from_patterns(patterns &[]string, config Config) ?SimpleAsciiPat
 	}
 }
 
-fn find_simple_ascii_at(haystack []u8, simple SimpleAsciiPattern, at usize) !matcher.FallibleMatch {
+fn find_simple_ascii_at(haystack &[]u8, simple SimpleAsciiPattern, at usize) !matcher.FallibleMatch {
 	if simple.prefix.len == 0 || at > haystack.len || simple.match_len > usize(haystack.len) {
 		return matcher.FallibleMatch.absent()
 	}

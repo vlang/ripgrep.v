@@ -189,7 +189,7 @@ pub:
 	end         usize
 }
 
-pub fn (sm SubMatch) to_json() string {
+pub fn (sm &SubMatch) to_json() string {
 	mut fields := '"match":${data_from_bytes_json(sm.m)}'
 	if replacement := sm.replacement {
 		fields += ',"replacement":${data_from_bytes_json(replacement)}'
@@ -200,7 +200,8 @@ pub fn (sm SubMatch) to_json() string {
 
 fn submatches_to_json(submatches []SubMatch) string {
 	mut out := '['
-	for i, sm in submatches {
+	for i in 0 .. submatches.len {
+		sm := &submatches[i]
 		if i > 0 {
 			out += ','
 		}

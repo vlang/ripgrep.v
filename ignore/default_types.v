@@ -91,7 +91,7 @@ fn default_types() []DefaultTypeDef {
 		},
 		DefaultTypeDef{
 			names: ['c']
-			globs: []
+			globs: ['*.[chH]', '*.[chH].in', '*.cats']
 		},
 		DefaultTypeDef{
 			names: ['cabal']
@@ -151,7 +151,8 @@ fn default_types() []DefaultTypeDef {
 		},
 		DefaultTypeDef{
 			names: ['cpp']
-			globs: []
+			globs: ['*.[ChH]', '*.cc', '*.[ch]pp', '*.[ch]xx', '*.hh', '*.inl', '*.[ChH].in',
+				'*.cc.in', '*.[ch]pp.in', '*.[ch]xx.in', '*.hh.in']
 		},
 		DefaultTypeDef{
 			names: ['creole']
@@ -423,7 +424,42 @@ fn default_types() []DefaultTypeDef {
 		},
 		DefaultTypeDef{
 			names: ['license']
-			globs: ['COPYING']
+			globs: [
+				// General
+				'COPYING',
+				'COPYING[.-]*',
+				'COPYRIGHT',
+				'COPYRIGHT[.-]*',
+				'EULA',
+				'EULA[.-]*',
+				'licen[cs]e',
+				'licen[cs]e.*',
+				'LICEN[CS]E',
+				'LICEN[CS]E[.-]*',
+				'*[.-]LICEN[CS]E*',
+				'NOTICE',
+				'NOTICE[.-]*',
+				'PATENTS',
+				'PATENTS[.-]*',
+				'UNLICEN[CS]E',
+				'UNLICEN[CS]E[.-]*',
+				// GPL (gpl.txt, etc.)
+				'agpl[.-]*',
+				'gpl[.-]*',
+				'lgpl[.-]*',
+				// Other license-specific (APACHE-2.0.txt, etc.)
+				'AGPL-*[0-9]*',
+				'APACHE-*[0-9]*',
+				'BSD-*[0-9]*',
+				'CC-BY-*',
+				'GFDL-*[0-9]*',
+				'GNU-*[0-9]*',
+				'GPL-*[0-9]*',
+				'LGPL-*[0-9]*',
+				'MIT-*[0-9]*',
+				'MPL-*[0-9]*',
+				'OFL-*[0-9]*',
+			]
 		},
 		DefaultTypeDef{
 			names: ['lilypond']
@@ -463,7 +499,9 @@ fn default_types() []DefaultTypeDef {
 		},
 		DefaultTypeDef{
 			names: ['make']
-			globs: []
+			globs: ['[Gg][Nn][Uu]makefile', '[Mm]akefile', '[Gg][Nn][Uu]makefile.am',
+				'[Mm]akefile.am', '[Gg][Nn][Uu]makefile.in', '[Mm]akefile.in', 'Makefile.*',
+				'*.mk', '*.mak']
 		},
 		DefaultTypeDef{
 			names: ['mako']
@@ -471,7 +509,7 @@ fn default_types() []DefaultTypeDef {
 		},
 		DefaultTypeDef{
 			names: ['man']
-			globs: []
+			globs: ['*.[0-9lnpx]', '*.[0-9][cEFMmpSx]']
 		},
 		DefaultTypeDef{
 			names: ['markdown', 'md']

@@ -1,6 +1,6 @@
 module flags
 
-struct CompletionHyperlinkAlias {
+struct CompletionHyperlinkAlias implements IClone {
 	name        string
 	description string
 }

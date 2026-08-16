@@ -143,7 +143,7 @@ fn ConfiguredHIR.new(config Config, patterns &[]string) !ConfiguredHIR {
 			if config.fixed_strings {
 				alts << '(?:${escape_regex(p)})'
 			} else {
-				validate_rust_regex_syntax(p, config)!
+				validate_rust_regex_syntax(p.clone(), config)!
 				alts << '(?:${p})'
 			}
 		}
@@ -315,7 +315,7 @@ fn inline_flags_at(pattern string, start int) ?InlineFlags {
 	}
 }
 
-fn apply_inline_flags(flags InlineFlags, config Config) Config {
+fn apply_inline_flags(flags &InlineFlags, config Config) Config {
 	mut next := config
 	for flag in flags.enabled.bytes() {
 		match flag {
@@ -338,7 +338,7 @@ fn apply_inline_flags(flags InlineFlags, config Config) Config {
 	return next
 }
 
-fn backend_inline_flags(flags InlineFlags, unicode bool) string {
+fn backend_inline_flags(flags &InlineFlags, unicode bool) string {
 	mut enabled := []u8{}
 	mut disabled := []u8{}
 	for flag in flags.enabled.bytes() {
@@ -955,6 +955,7 @@ fn ascii_backend_class_body() string {
 }
 
 struct UnicodeRange {
+mut:
 	start rune
 	end   rune
 }
@@ -982,7 +983,15 @@ fn union_unicode_ranges(left []UnicodeRange, right []UnicodeRange) []UnicodeRang
 	mut all := []UnicodeRange{cap: left.len + right.len}
 	all << left
 	all << right
-	all.sort(a.start < b.start || (a.start == b.start && a.end < b.end))
+	all.sort_with_compare(fn (a &UnicodeRange, b &UnicodeRange) int {
+		if a.start != b.start {
+			return if a.start < b.start { -1 } else { 1 }
+		}
+		if a.end != b.end {
+			return if a.end < b.end { -1 } else { 1 }
+		}
+		return 0
+	})
 	mut out := []UnicodeRange{cap: all.len}
 	for current in all {
 		if out.len == 0 || current.start > out.last().end + 1 {
@@ -1074,7 +1083,7 @@ fn generated_unicode_range_body(encoded string) string {
 			out << `-`
 			append_backend_class_rune(mut out, rune(parse_generated_unicode_hex(encoded_range.all_after('-'))))
 		} else {
-			append_backend_class_rune(mut out, rune(parse_generated_unicode_hex(encoded_range)))
+			append_backend_class_rune(mut out, rune(parse_generated_unicode_hex(encoded_range.clone())))
 		}
 	}
 	return out.bytestr()
@@ -1628,7 +1637,7 @@ fn validate_rust_escape(pattern string, start int, end int, in_class bool, confi
 			end
 		}}], 'invalid hexadecimal digit')
 	}
-	if next >= `A` && next <= `Z` || next >= `a` && next <= `z` {
+	if (next >= `A` && next <= `Z`) || (next >= `a` && next <= `z`) {
 		if next !in [`A`, `B`, `D`, `S`, `W`, `a`, `b`, `d`, `f`, `n`, `r`, `s`, `t`, `v`,
 			`w`, `z`] {
 			return regex_parse_error(pattern, [RegexErrorSpan{start, start + 2}],
@@ -3090,7 +3099,7 @@ fn strip_line_terminator_from_match(pattern string, config Config) !string {
 fn normalize_property_without_line_term_at(pattern string, start int, config Config) ?PatternReplacement {
 	line_term := config.line_terminator or { return none }
 	escape := rust_property_escape_at(pattern, start) or { return none }
-	mut ranges := if normalize_property_name(escape.property) == 'any' {
+	mut ranges := if normalize_property_name(escape.property.clone()) == 'any' {
 		[UnicodeRange{rune(0), rune(0x10ffff)}]
 	} else {
 		encoded := rust_property_class_encoded(escape.property, config) or { return none }

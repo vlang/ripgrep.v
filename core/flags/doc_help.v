@@ -26,7 +26,7 @@ pub fn generate_help_short() string {
 	categories := doc_category_order()
 	mut maxcol1 := 0
 	mut maxcol2 := 0
-	for flag in flags {
+	for flag in flag_defs {
 		col1, col2 := generate_short_flag(flag)
 		if col1.len > maxcol1 {
 			maxcol1 = col1.len
@@ -40,7 +40,7 @@ pub fn generate_help_short() string {
 	for cat in categories {
 		mut col1 := []string{}
 		mut col2 := []string{}
-		for flag in flags {
+		for flag in flag_defs {
 			if flag.doc_category() != cat {
 				continue
 			}
@@ -121,7 +121,7 @@ fn format_short_columns(col1 []string, col2 []string, maxcol1 int, _maxcol2 int)
 pub fn generate_help_long() string {
 	categories := doc_category_order()
 	mut cats := []string{len: categories.len}
-	for flag in flags {
+	for flag in flag_defs {
 		idx := doc_category_index(flag.doc_category())
 		if cats[idx] != '' {
 			cats[idx] += '\n\n'
@@ -192,7 +192,7 @@ fn generate_long_flag(flag FlagId) string {
 		if i > 0 {
 			out += '\n\n'
 		}
-		mut new_paragraph := paragraph
+		mut new_paragraph := paragraph.clone()
 		if paragraph.split('\n').all(it.starts_with('    ')) {
 			// Re-indent but don't refill so as to preserve line breaks
 			// in code/shell example snippets.

@@ -22,7 +22,6 @@ same encoding state in ripgrep.
 // V-specific: Rust represents each logical flag with a unit struct that
 // implements `Flag`. This port uses `FlagId` and exhaustive methods so the
 // static flag registry remains ownership-free.
-
 import encoding.utf8
 
 pub enum FlagId {
@@ -132,7 +131,7 @@ pub enum FlagId {
 	word_regexp
 }
 
-pub const flags = [
+pub const flag_defs = [
 	FlagId.regexp,
 	FlagId.file,
 	FlagId.after_context,
@@ -1041,7 +1040,7 @@ pub fn (id FlagId) doc_short() string {
 		.heading { 'Print matches grouped by each file.' }
 		.help { 'Show help output.' }
 		.hidden { 'Search hidden files and directories.' }
-		.hostname_bin { 'Run a program to get this system\'s hostname.' }
+		.hostname_bin { "Run a program to get this system's hostname." }
 		.hyperlink_format { 'Set the format of hyperlinks.' }
 		.i_glob { 'Include/exclude paths case insensitively.' }
 		.ignore_case { 'Case insensitive search.' }
@@ -1061,16 +1060,16 @@ pub fn (id FlagId) doc_short() string {
 		.max_filesize { 'Ignore files larger than NUM in size.' }
 		.mmap { 'Search with memory maps when possible.' }
 		.multiline { 'Enable searching across multiple lines.' }
-		.multiline_dotall { 'Make \'.\' match line terminators.' }
+		.multiline_dotall { "Make '.' match line terminators." }
 		.no_config { 'Never read configuration files.' }
-		.no_ignore { 'Don\'t use ignore files.' }
-		.no_ignore_dot { 'Don\'t use .ignore or .rgignore files.' }
-		.no_ignore_exclude { 'Don\'t use local exclusion files.' }
-		.no_ignore_files { 'Don\'t use --ignore-file arguments.' }
-		.no_ignore_global { 'Don\'t use global ignore files.' }
+		.no_ignore { "Don't use ignore files." }
+		.no_ignore_dot { "Don't use .ignore or .rgignore files." }
+		.no_ignore_exclude { "Don't use local exclusion files." }
+		.no_ignore_files { "Don't use --ignore-file arguments." }
+		.no_ignore_global { "Don't use global ignore files." }
 		.no_ignore_messages { 'Suppress gitignore parse error messages.' }
-		.no_ignore_parent { 'Don\'t use ignore files in parent directories.' }
-		.no_ignore_vcs { 'Don\'t use ignore files from source control.' }
+		.no_ignore_parent { "Don't use ignore files in parent directories." }
+		.no_ignore_vcs { "Don't use ignore files from source control." }
 		.no_messages { 'Suppress some error messages.' }
 		.no_pcre_2_unicode { '(DEPRECATED) Disable Unicode mode for PCRE2.' }
 		.no_require_git { 'Use .gitignore outside of git repositories.' }
@@ -1107,7 +1106,7 @@ pub fn (id FlagId) doc_short() string {
 		.type_not { 'Do not search files matching TYPE.' }
 		.type_list { 'Show all supported file types.' }
 		.unrestricted { 'Reduce the level of "smart" filtering.' }
-		.version { 'Print ripgrep\'s version.' }
+		.version { "Print ripgrep's version." }
 		.vimgrep { 'Print results in a vim compatible format.' }
 		.with_filename { 'Print the file path with each matching line.' }
 		.with_filename_no { 'Never print the path with each matching line.' }
@@ -1117,13 +1116,16 @@ pub fn (id FlagId) doc_short() string {
 
 pub fn (id FlagId) doc_long() string {
 	return match id {
-		.after_context { '
+		.after_context {
+			'
 Show \\fINUM\\fP lines after each match.
 .sp
 This overrides the \\flag{passthru} flag and partially overrides the
 \\flag{context} flag.
-' }
-		.auto_hybrid_regex { '
+'
+		}
+		.auto_hybrid_regex {
+			"
 DEPRECATED. Use \\flag{engine} instead.
 .sp
 When this flag is used, ripgrep will dynamically choose between supported regex
@@ -1135,7 +1137,7 @@ As an example of how this flag might behave, ripgrep will attempt to use
 its default finite automata based regex engine whenever the pattern can be
 successfully compiled with that regex engine. If PCRE2 is enabled and if the
 pattern given could not be compiled with the default regex engine, then PCRE2
-will be automatically used for searching. If PCRE2 isn\'t available, then this
+will be automatically used for searching. If PCRE2 isn't available, then this
 flag has no effect because there is only one regex engine to choose from.
 .sp
 In the future, ripgrep may adjust its heuristics for how it decides which
@@ -1149,14 +1151,18 @@ profile of ripgrep may subtly and unexpectedly change. However, in many cases,
 all regex engines will agree on what constitutes a match and it can be nice
 to transparently support more advanced regex features like look-around and
 backreferences without explicitly needing to enable them.
-' }
-		.before_context { '
+"
+		}
+		.before_context {
+			'
 Show \\fINUM\\fP lines before each match.
 .sp
 This overrides the \\flag{passthru} flag and partially overrides the
 \\flag{context} flag.
-' }
-		.binary { '
+'
+		}
+		.binary {
+			"
 Enabling this flag will cause ripgrep to search binary files. By default,
 ripgrep attempts to automatically skip binary files in order to improve the
 relevance of results and make the search faster.
@@ -1179,7 +1185,7 @@ If you want ripgrep to search a file without any special \\fBNUL\\fP byte
 handling at all (and potentially print binary data to stdout), then you should
 use the \\flag{text} flag.
 .sp
-The \\flag{binary} flag is a flag for controlling ripgrep\'s automatic filtering
+The \\flag{binary} flag is a flag for controlling ripgrep's automatic filtering
 mechanism. As such, it does not need to be used when searching a file
 explicitly or when searching stdin. That is, it is only applicable when
 recursively searching a directory.
@@ -1188,18 +1194,22 @@ When the \\flag{unrestricted} flag is provided for a third time, then this flag
 is automatically enabled.
 .sp
 This flag overrides the \\flag{text} flag.
-' }
-		.block_buffered { '
+"
+		}
+		.block_buffered {
+			"
 When enabled, ripgrep will use block buffering. That is, whenever a matching
 line is found, it will be written to an in-memory buffer and will not be
 written to stdout until the buffer reaches a certain size. This is the default
-when ripgrep\'s stdout is redirected to a pipeline or a file. When ripgrep\'s
+when ripgrep's stdout is redirected to a pipeline or a file. When ripgrep's
 stdout is connected to a tty, line buffering will be used by default. Forcing
 block buffering can be useful when dumping a large amount of contents to a tty.
 .sp
 This overrides the \\flag{line-buffered} flag.
-' }
-		.byte_offset { '
+"
+		}
+		.byte_offset {
+			'
 Print the 0-based byte offset within the input file before each line of output.
 If \\flag{only-matching} is specified, print the offset of the matched text
 itself.
@@ -1207,8 +1217,10 @@ itself.
 If ripgrep does transcoding, then the byte offset is in terms of the result
 of transcoding and not the original data. This applies similarly to other
 transformations on the data, such as decompression or a \\flag{pre} filter.
-' }
-		.case_sensitive { '
+'
+		}
+		.case_sensitive {
+			'
 Execute the search case sensitively. This is the default mode.
 .sp
 This is a global option that applies to all patterns given to ripgrep.
@@ -1217,8 +1229,10 @@ regex flags. For example, \\fB(?i)abc\\fP will match \\fBabc\\fP case insensitiv
 even when this flag is used.
 .sp
 This flag overrides the \\flag{ignore-case} and \\flag{smart-case} flags.
-' }
-		.color { '
+'
+		}
+		.color {
+			"
 This flag controls when to use colors. The default setting is \\fBauto\\fP, which
 means ripgrep will try to guess when to use colors. For example, if ripgrep is
 printing to a tty, then it will use colors, but if it is redirected to a file
@@ -1250,24 +1264,26 @@ The default. ripgrep tries to be smart.
 Colors will always be used regardless of where output is sent.
 .sp
 .IP \\fBansi\\fP 10n
-Like \'always\', but emits ANSI escapes (even in a Windows console).
+Like 'always', but emits ANSI escapes (even in a Windows console).
 .
 .PP
 This flag also controls whether hyperlinks are emitted. For example, when
-a hyperlink format is specified, hyperlinks won\'t be used when color is
+a hyperlink format is specified, hyperlinks won't be used when color is
 suppressed. If one wants to emit hyperlinks but no colors, then one must use
 the \\flag{colors} flag to manually set all color styles to \\fBnone\\fP:
 .sp
 .EX
-    \\-\\-colors \'path:none\' \\\\
-    \\-\\-colors \'line:none\' \\\\
-    \\-\\-colors \'column:none\' \\\\
-    \\-\\-colors \'match:none\' \\\\
-    \\-\\-colors \'highlight:none\'
+    \\-\\-colors 'path:none' \\\\
+    \\-\\-colors 'line:none' \\\\
+    \\-\\-colors 'column:none' \\\\
+    \\-\\-colors 'match:none' \\\\
+    \\-\\-colors 'highlight:none'
 .EE
 .sp
-' }
-		.colors { '
+"
+		}
+		.colors {
+			'
 This flag specifies color settings for use in the output. This flag may be
 provided multiple times. Settings are applied iteratively. Pre-existing color
 labels are limited to one of eight choices: \\fBred\\fP, \\fBblue\\fP, \\fBgreen\\fP,
@@ -1323,16 +1339,20 @@ or, equivalently,
 .sp
 Note that the \\fBintense\\fP and \\fBnointense\\fP styles will have no effect when
 used alongside these extended color codes.
-' }
-		.column { '
+'
+		}
+		.column {
+			'
 Show column numbers (1-based). This only shows the column numbers for the first
 match on each line. This does not try to account for Unicode. One byte is equal
 to one column. This implies \\flag{line-number}.
 .sp
 When \\flag{only-matching} is used, then the column numbers written correspond
 to the start of each match.
-' }
-		.context { '
+'
+		}
+		.context {
+			'
 Show \\fINUM\\fP lines before and after each match. This is equivalent to
 providing both the \\flag{before-context} and \\flag{after-context} flags with
 the same value.
@@ -1340,8 +1360,10 @@ the same value.
 This overrides the \\flag{passthru} flag. The \\flag{after-context} and
 \\flag{before-context} flags both partially override this flag, regardless of
 the order. For example, \\fB\\-A2 \\-C1\\fP is equivalent to \\fB\\-A2 \\-B1\\fP.
-' }
-		.context_separator { '
+'
+		}
+		.context_separator {
+			'
 The string used to separate non-contiguous context lines in the output. This is
 only used when one of the context flags is used (that is, \\flag{after-context},
 \\flag{before-context} or \\flag{context}). Escape sequences like \\fB\\\\x7F\\fP or
@@ -1350,8 +1372,10 @@ only used when one of the context flags is used (that is, \\flag{after-context},
 When the context separator is set to an empty string, then a line break
 is still inserted. To completely disable context separators, use the
 \\flag-negate{context-separator} flag.
-' }
-		.count { '
+'
+		}
+		.count {
+			'
 This flag suppresses normal output and shows the number of lines that match
 the given patterns for each file searched. Each file containing a match has
 its path and count printed on each line. Note that unless \\flag{multiline} is
@@ -1376,8 +1400,10 @@ disabling binary detection, use the \\flag{binary} flag.
 This overrides the \\flag{count-matches} flag. Note that when \\flag{count}
 is combined with \\flag{only-matching}, then ripgrep behaves as if
 \\flag{count-matches} was given.
-' }
-		.count_matches { '
+'
+		}
+		.count_matches {
+			'
 This flag suppresses normal output and shows the number of individual matches
 of the given patterns for each file searched. Each file containing matches has
 its path and match count printed on each line. Note that this reports the total
@@ -1390,8 +1416,10 @@ file path in this case.
 This overrides the \\flag{count} flag. Note that when \\flag{count} is combined
 with \\flag{only-matching}, then ripgrep behaves as if \\flag{count-matches} was
 given.
-' }
-		.crlf { '
+'
+		}
+		.crlf {
+			'
 When enabled, ripgrep will treat CRLF (\\fB\\\\r\\\\n\\fP) as a line terminator
 instead of just \\fB\\\\n\\fP.
 .sp
@@ -1405,8 +1433,10 @@ the pattern with the \\fBR\\fP flag. For example, \\fB(?R:\$)\\fP will match jus
 before either CR or LF, but never between CR and LF.
 .sp
 This flag overrides \\flag{null-data}.
-' }
-		.debug { '
+'
+		}
+		.debug {
+			'
 Show debug messages. Please use this when filing a bug report.
 .sp
 The \\flag{debug} flag is generally useful for figuring out why ripgrep skipped
@@ -1415,8 +1445,10 @@ skipped and why they were skipped.
 .sp
 To get even more debug output, use the \\flag{trace} flag, which implies
 \\flag{debug} along with additional trace data.
-' }
-		.dfa_size_limit { '
+'
+		}
+		.dfa_size_limit {
+			'
 The upper size limit of the regex DFA. The default limit is something generous
 for any single pattern or for many smallish patterns. This should only be
 changed on very large regex inputs where the (slower) fallback regex engine may
@@ -1425,15 +1457,17 @@ otherwise be used if the limit is reached.
 The input format accepts suffixes of \\fBK\\fP, \\fBM\\fP or \\fBG\\fP which
 correspond to kilobytes, megabytes and gigabytes, respectively. If no suffix is
 provided the input is treated as bytes.
-' }
-		.encoding { '
+'
+		}
+		.encoding {
+			"
 Specify the text encoding that ripgrep will use on all files searched. The
 default value is \\fBauto\\fP, which will cause ripgrep to do a best effort
 automatic detection of encoding on a per-file basis. Automatic detection in
 this case only applies to files that begin with a UTF-8 or UTF-16 byte-order
 mark (BOM). No other automatic detection is performed. One can also specify
 \\fBnone\\fP which will then completely disable BOM sniffing and always result
-in searching the raw bytes, including a BOM if it\'s present, regardless of its
+in searching the raw bytes, including a BOM if it's present, regardless of its
 encoding.
 .sp
 Other supported values can be found in the list of labels here:
@@ -1443,8 +1477,10 @@ For more details on encoding and how ripgrep deals with it, see \\fBGUIDE.md\\fP
 .sp
 The encoding detection that ripgrep uses can be reverted to its automatic mode
 via the \\flag-negate{encoding} flag.
-' }
-		.engine { '
+"
+		}
+		.engine {
+			"
 Specify which regular expression engine to use. When you choose a regex engine,
 it applies that choice for every regex provided to ripgrep (e.g., via multiple
 \\flag{regexp} or \\flag{file} flags).
@@ -1458,29 +1494,35 @@ dynamically choose between supported regex engines depending on the features
 used in a pattern on a best effort basis.
 .sp
 Note that the \\fBpcre2\\fP engine is an optional ripgrep feature. If PCRE2
-wasn\'t included in your build of ripgrep, then using this flag will result in
+wasn't included in your build of ripgrep, then using this flag will result in
 ripgrep printing an error message and exiting.
 .sp
 This overrides previous uses of the \\flag{pcre2} and \\flag{auto-hybrid-regex}
 flags.
-' }
-		.field_context_separator { '
+"
+		}
+		.field_context_separator {
+			'
 Set the field context separator. This separator is only used when printing
 contextual lines. It is used to delimit file paths, line numbers, columns and
 the contextual line itself. The separator may be any number of bytes, including
 zero. Escape sequences like \\fB\\\\x7F\\fP or \\fB\\\\t\\fP may be used.
 .sp
 The \\fB-\\fP character is the default value.
-' }
-		.field_match_separator { '
+'
+		}
+		.field_match_separator {
+			'
 Set the field match separator. This separator is only used when printing
 matching lines. It is used to delimit file paths, line numbers, columns and the
 matching line itself. The separator may be any number of bytes, including zero.
 Escape sequences like \\fB\\\\x7F\\fP or \\fB\\\\t\\fP may be used.
 .sp
 The \\fB:\\fP character is the default value.
-' }
-		.file { '
+'
+		}
+		.file {
+			'
 Search for patterns from the given file, with one pattern per line. When this
 flag is used multiple times or in combination with the \\flag{regexp} flag, then
 all patterns provided are searched. Empty pattern lines will match all input
@@ -1493,14 +1535,18 @@ patterns.
 .sp
 When \\flag{file} or \\flag{regexp} is used, then ripgrep treats all positional
 arguments as files or directories to search.
-' }
-		.files { '
+'
+		}
+		.files {
+			'
 Print each file that would be searched without actually performing the search.
 This is useful to determine whether a particular file is being searched or not.
 .sp
 This overrides \\flag{type-list}.
-' }
-		.files_with_matches { '
+'
+		}
+		.files_with_matches {
+			'
 Print only the paths with at least one match and suppress match contents.
 .sp
 Note that it is possible for this flag to have results inconsistent with the
@@ -1512,25 +1558,33 @@ data that causes it to skip searching that file. To avoid this inconsistency
 without disabling binary detection, use the \\flag{binary} flag.
 .sp
 This overrides \\flag{files-without-match}.
-' }
-		.files_without_match { '
+'
+		}
+		.files_without_match {
+			'
 Print the paths that contain zero matches and suppress match contents.
 .sp
 This overrides \\flag{files-with-matches}.
-' }
-		.fixed_strings { '
+'
+		}
+		.fixed_strings {
+			'
 Treat all patterns as literals instead of as regular expressions. When this
 flag is used, special regular expression meta characters such as \\fB.(){}*+\\fP
 should not need be escaped.
-' }
-		.follow { '
+'
+		}
+		.follow {
+			'
 This flag instructs ripgrep to follow symbolic links while traversing
 directories. This behavior is disabled by default. Note that ripgrep will
 check for symbolic link loops and report errors if it finds one. ripgrep will
 also report errors for broken links. To suppress error messages, use the
 \\flag{no-messages} flag.
-' }
-		.generate { '
+'
+		}
+		.generate {
+			'
 This flag instructs ripgrep to generate some special kind of output identified
 by \\fIKIND\\fP and then quit without searching. \\fIKIND\\fP can be one of the
 following values:
@@ -1552,8 +1606,10 @@ Generates a completion script for the \\fBfish\\fP shell.
 Generates a completion script for PowerShell.
 .PP
 The output is written to \\fBstdout\\fP. The list above may expand over time.
-' }
-		.glob { '
+'
+		}
+		.glob {
+			'
 Include or exclude files and directories for searching that match the given
 glob. This always overrides any other ignore logic. Multiple glob flags may
 be used. Globbing rules match \\fB.gitignore\\fP globs. Precede a glob with a
@@ -1578,12 +1634,16 @@ a match. For example, if you only want to search in a particular directory
 is incorrect because \\fIfoo/bar\\fP does not match
 the glob \\fIfoo\\fP. Instead, you should use
 .BI "\\-g \'" foo/** \'.
-' }
-		.glob_case_insensitive { '
+'
+		}
+		.glob_case_insensitive {
+			'
 Process all glob patterns given with the \\flag{glob} flag case insensitively.
 This effectively treats \\flag{glob} as \\flag{iglob}.
-' }
-		.heading { '
+'
+		}
+		.heading {
+			'
 This flag prints the file path above clusters of matches from each file instead
 of printing the file path as a prefix for each matched line.
 .sp
@@ -1593,8 +1653,10 @@ When \\fBstdout\\fP is not a tty, then ripgrep will default to the standard
 grep-like format. One can force this format in Unix-like environments by
 piping the output of ripgrep to \\fBcat\\fP. For example, \\fBrg\\fP \\fIfoo\\fP \\fB|
 cat\\fP.
-' }
-		.help { '
+'
+		}
+		.help {
+			'
 This flag prints the help output for ripgrep.
 .sp
 Unlike most other flags, the behavior of the short flag, \\fB\\-h\\fP, and the
@@ -1602,8 +1664,10 @@ long flag, \\fB\\-\\-help\\fP, is different. The short flag will show a condense
 help output while the long flag will show a verbose help output. The verbose
 help output has complete documentation, where as the condensed help output will
 show only a single line for every flag.
-' }
-		.hidden { '
+'
+		}
+		.hidden {
+			'
 Search hidden files and directories. By default, hidden files and directories
 are skipped. Note that if a hidden file or a directory is whitelisted in
 an ignore file, then it will be searched even if this flag isn\'t provided.
@@ -1618,8 +1682,10 @@ Note that \\flag{hidden} will include files and folders like \\fB.git\\fP
 regardless of \\flag{no-ignore-vcs}. To exclude such paths when using
 \\flag{hidden}, you must explicitly ignore them using another flag or ignore
 file.
-' }
-		.hostname_bin { '
+'
+		}
+		.hostname_bin {
+			'
 This flag controls how ripgrep determines this system\'s hostname. The flag\'s
 value should correspond to an executable (either a path or something that can
 be found via your system\'s \\fBPATH\\fP environment variable). When set, ripgrep
@@ -1632,17 +1698,23 @@ to calling \\fBgethostname\\fP. On Windows, this corresponds to calling
 \\fBGetComputerNameExW\\fP to fetch the system\'s "physical DNS hostname."
 .sp
 ripgrep uses your system\'s hostname for producing hyperlinks.
-' }
-		.hyperlink_format { hyperlink_format_doc_long() }
-		.i_glob { '
+'
+		}
+		.hyperlink_format {
+			hyperlink_format_doc_long()
+		}
+		.i_glob {
+			'
 Include or exclude files and directories for searching that match the given
 glob. This always overrides any other ignore logic. Multiple glob flags may
 be used. Globbing rules match \\fB.gitignore\\fP globs. Precede a glob with a
 \\fB!\\fP to exclude it. If multiple globs match a file or directory, the glob
 given later in the command line takes precedence. Globs used via this flag are
 matched case insensitively.
-' }
-		.ignore_case { '
+'
+		}
+		.ignore_case {
+			'
 When this flag is provided, all patterns will be searched case insensitively.
 The case insensitivity rules used by ripgrep\'s default regex engine conform to
 Unicode\'s "simple" case folding rules.
@@ -1653,8 +1725,10 @@ inline regex flags. For example, \\fB(?\\-i)abc\\fP will match \\fBabc\\fP
 case sensitively even when this flag is used.
 .sp
 This flag overrides \\flag{case-sensitive} and \\flag{smart-case}.
-' }
-		.ignore_file { '
+'
+		}
+		.ignore_file {
+			'
 Specifies a path to one or more \\fBgitignore\\fP formatted rules files.
 These patterns are applied after the patterns found in \\fB.gitignore\\fP,
 \\fB.rgignore\\fP and \\fB.ignore\\fP are applied and are matched relative to the
@@ -1666,29 +1740,37 @@ later files.
 .sp
 If you are looking for a way to include or exclude files and directories
 directly on the command line, then use \\flag{glob} instead.
-' }
-		.ignore_file_case_insensitive { '
+'
+		}
+		.ignore_file_case_insensitive {
+			'
 Process ignore files (\\fB.gitignore\\fP, \\fB.ignore\\fP, etc.) case
 insensitively. Note that this comes with a performance penalty and is most
 useful on case insensitive file systems (such as Windows).
-' }
-		.include_zero { '
+'
+		}
+		.include_zero {
+			'
 When used with \\flag{count} or \\flag{count-matches}, this causes ripgrep to
 print the number of matches for each file even if there were zero matches. This
 is disabled by default but can be enabled to make ripgrep behave more like
 grep.
-' }
-		.invert_match { '
+'
+		}
+		.invert_match {
+			"
 This flag inverts matching. That is, instead of printing lines that match,
-ripgrep will print lines that don\'t match.
+ripgrep will print lines that don't match.
 .sp
 Note that this only inverts line-by-line matching. For example, combining this
 flag with \\flag{files-with-matches} will emit files that contain any lines
-that do not match the patterns given. That\'s not the same as, for example,
+that do not match the patterns given. That's not the same as, for example,
 \\flag{files-without-match}, which will emit files that do not contain any
 matching lines.
-' }
-		.json { '
+"
+		}
+		.json {
+			'
 Enable printing results in a JSON Lines format.
 .sp
 When this flag is provided, ripgrep will emit a sequence of messages, each
@@ -1734,11 +1816,13 @@ always implicitly and unconditionally enable \\flag{stats}.
 .sp
 A more complete description of the JSON format used can be found here:
 \\fIhttps://docs.rs/grep-printer/*/grep_printer/struct.JSON.html\\fP.
-' }
-		.line_buffered { '
+'
+		}
+		.line_buffered {
+			"
 When enabled, ripgrep will always use line buffering. That is, whenever a
 matching line is found, it will be flushed to stdout immediately. This is the
-default when ripgrep\'s stdout is connected to a tty, but otherwise, ripgrep
+default when ripgrep's stdout is connected to a tty, but otherwise, ripgrep
 will use block buffering, which is typically faster. This flag forces ripgrep
 to use line buffering even if it would otherwise use block buffering. This is
 typically useful in shell pipelines, for example:
@@ -1748,36 +1832,46 @@ typically useful in shell pipelines, for example:
 .EE
 .sp
 This overrides the \\flag{block-buffered} flag.
-' }
-		.line_number { '
+"
+		}
+		.line_number {
+			'
 Show line numbers (1-based).
 .sp
 This is enabled by default when stdout is connected to a tty.
 .sp
 This flag can be disabled by \\flag{no-line-number}.
-' }
-		.line_number_no { '
+'
+		}
+		.line_number_no {
+			'
 Suppress line numbers.
 .sp
 Line numbers are off by default when stdout is not connected to a tty.
 .sp
 Line numbers can be forcefully turned on by \\flag{line-number}.
-' }
-		.line_regexp { '
+'
+		}
+		.line_regexp {
+			'
 When enabled, ripgrep will only show matches surrounded by line boundaries.
 This is equivalent to surrounding every pattern with \\fB^\\fP and \\fB\$\\fP. In
 other words, this only prints lines where the entire line participates in a
 match.
 .sp
 This overrides the \\flag{word-regexp} flag.
-' }
-		.max_columns { '
+'
+		}
+		.max_columns {
+			'
 When given, ripgrep will omit lines longer than this limit in bytes. Instead of
 printing long lines, only the number of matches in that line is printed.
 .sp
 When this flag is omitted or is set to \\fB0\\fP, then it has no effect.
-' }
-		.max_columns_preview { '
+'
+		}
+		.max_columns_preview {
+			'
 Prints a preview for lines exceeding the configured max column limit.
 .sp
 When the \\flag{max-columns} flag is used, ripgrep will by default completely
@@ -1787,22 +1881,26 @@ of the line (corresponding to the limit size) is shown instead, where the part
 of the line exceeding the limit is not shown.
 .sp
 If the \\flag{max-columns} flag is not set, then this has no effect.
-' }
-		.max_count { '
+'
+		}
+		.max_count {
+			"
 Limit the number of matching lines per file searched to \\fINUM\\fP.
 .sp
 When \\flag{multiline} is used, a single match that spans multiple lines is only
 counted once for the purposes of this limit. Multiple matches in a single line
 are counted only once, as they would be in non-multiline mode.
 .sp
-When combined with \\flag{after-context} or \\flag{context}, it\'s possible for
+When combined with \\flag{after-context} or \\flag{context}, it's possible for
 more matches than the maximum to be printed if contextual lines contain a
 match.
 .sp
 Note that \\fB0\\fP is a legal value but not likely to be useful. When used,
-ripgrep won\'t search anything.
-' }
-		.max_depth { '
+ripgrep won't search anything.
+"
+		}
+		.max_depth {
+			'
 This flag limits the depth of directory traversal to \\fINUM\\fP levels beyond
 the paths given. A value of \\fB0\\fP only searches the explicitly given paths
 themselves.
@@ -1812,8 +1910,10 @@ will not be descended into. \\fBrg --max-depth 1 \\fP\\fIdir/\\fP will search on
 the direct children of \\fIdir\\fP.
 .sp
 An alternative spelling for this flag is \\fB\\-\\-maxdepth\\fP.
-' }
-		.max_filesize { '
+'
+		}
+		.max_filesize {
+			'
 Ignore files larger than \\fINUM\\fP in size. This does not apply to directories.
 .sp
 The input format accepts suffixes of \\fBK\\fP, \\fBM\\fP or \\fBG\\fP which
@@ -1821,8 +1921,10 @@ correspond to kilobytes, megabytes and gigabytes, respectively. If no suffix is
 provided the input is treated as bytes.
 .sp
 Examples: \\fB\\-\\-max-filesize 50K\\fP or \\fB\\-\\-max\\-filesize 80M\\fP.
-' }
-		.mmap { '
+'
+		}
+		.mmap {
+			'
 When enabled, ripgrep will search using memory maps when possible. This is
 enabled by default when ripgrep thinks it will be faster.
 .sp
@@ -1833,8 +1935,10 @@ maps will not be used even when this flag is enabled.
 Note that ripgrep may abort unexpectedly when memory maps are used if it
 searches a file that is simultaneously truncated. Users can opt out of this
 possibility by disabling memory maps.
-' }
-		.multiline { '
+'
+		}
+		.multiline {
+			'
 This flag enable searching across multiple lines.
 .sp
 When multiline mode is enabled, ripgrep will lift the restriction that a
@@ -1870,8 +1974,10 @@ Nevertheless, if you only care about matches spanning at most one line, then it
 is always better to disable multiline mode.
 .sp
 This overrides the \\flag{stop-on-nonmatch} flag.
-' }
-		.multiline_dotall { '
+'
+		}
+		.multiline_dotall {
+			'
 This flag enables "dot all" mode in all regex patterns. This causes \\fB.\\fP to
 match line terminators when multiline searching is enabled. This flag has no
 effect if multiline searching isn\'t enabled with the \\flag{multiline} flag.
@@ -1889,16 +1995,20 @@ inline flags in the regex pattern itself, e.g., \\fB(?s:.)\\fP always enables
 "dot all" whereas \\fB(?-s:.)\\fP always disables "dot all". Moreover, you
 can use character classes like \\fB\\\\p{any}\\fP to match any Unicode codepoint
 regardless of whether "dot all" mode is enabled or not.
-' }
-		.no_config { '
+'
+		}
+		.no_config {
+			'
 When set, ripgrep will never read configuration files. When this flag is
 present, ripgrep will not respect the \\fBRIPGREP_CONFIG_PATH\\fP environment
 variable.
 .sp
 If ripgrep ever grows a feature to automatically read configuration files in
 pre-defined locations, then this flag will also disable that behavior as well.
-' }
-		.no_ignore { '
+'
+		}
+		.no_ignore {
+			'
 When set, ignore files such as \\fB.gitignore\\fP, \\fB.ignore\\fP and
 \\fB.rgignore\\fP will not be respected. This implies \\flag{no-ignore-dot},
 \\flag{no-ignore-exclude}, \\flag{no-ignore-global}, \\flag{no-ignore-parent} and
@@ -1910,44 +2020,58 @@ specified explicitly as a command line argument.
 When given only once, the \\flag{unrestricted} flag is identical in
 behavior to this flag and can be considered an alias. However, subsequent
 \\flag{unrestricted} flags have additional effects.
-' }
-		.no_ignore_dot { '
-Don\'t respect filter rules from \\fB.ignore\\fP or \\fB.rgignore\\fP files.
+'
+		}
+		.no_ignore_dot {
+			"
+Don't respect filter rules from \\fB.ignore\\fP or \\fB.rgignore\\fP files.
 .sp
 This does not impact whether ripgrep will ignore files and directories whose
 names begin with a dot. For that, see the \\flag{hidden} flag. This flag also
 does not impact whether filter rules from \\fB.gitignore\\fP files are respected.
-' }
-		.no_ignore_exclude { '
-Don\'t respect filter rules from files that are manually configured for the repository.
-For example, this includes \\fBgit\\fP\'s \\fB.git/info/exclude\\fP.
-' }
-		.no_ignore_files { '
+"
+		}
+		.no_ignore_exclude {
+			"
+Don't respect filter rules from files that are manually configured for the repository.
+For example, this includes \\fBgit\\fP's \\fB.git/info/exclude\\fP.
+"
+		}
+		.no_ignore_files {
+			'
 When set, any \\flag{ignore-file} flags, even ones that come after this flag,
 are ignored.
-' }
-		.no_ignore_global { '
+'
+		}
+		.no_ignore_global {
+			'
 Don\'t respect filter rules from ignore files that come from "global" sources
 such as \\fBgit\\fP\'s \\fBcore.excludesFile\\fP configuration option (which
 defaults to \\fB\$HOME/.config/git/ignore\\fP).
-' }
-		.no_ignore_messages { '
+'
+		}
+		.no_ignore_messages {
+			'
 When this flag is enabled, all error messages related to parsing ignore files
 are suppressed. By default, error messages are printed to stderr. In cases
 where these errors are expected, this flag can be used to avoid seeing the
 noise produced by the messages.
-' }
-		.no_ignore_parent { '
+'
+		}
+		.no_ignore_parent {
+			'
 When this flag is set, filter rules from ignore files found in parent
 directories are not respected. By default, ripgrep will ascend the parent
 directories of the current working directory to look for any applicable ignore
 files that should be applied. In some cases this may not be desirable.
-' }
-		.no_ignore_vcs { '
+'
+		}
+		.no_ignore_vcs {
+			"
 When given, filter rules from source control ignore files (e.g.,
-\\fB.gitignore\\fP) are not respected. By default, ripgrep respects \\fBgit\\fP\'s
+\\fB.gitignore\\fP) are not respected. By default, ripgrep respects \\fBgit\\fP's
 ignore rules for automatic filtering. In some cases, it may not be desirable
-to respect the source control\'s ignore rules and instead only respect rules in
+to respect the source control's ignore rules and instead only respect rules in
 \\fB.ignore\\fP or \\fB.rgignore\\fP.
 .sp
 Note that this flag does not directly affect the filtering of source control
@@ -1956,18 +2080,24 @@ affected by \\flag{hidden} and its related flags instead.
 .sp
 This flag implies \\flag{no-ignore-parent} for source control ignore files as
 well.
-' }
-		.no_messages { '
+"
+		}
+		.no_messages {
+			'
 This flag suppresses some error messages. Specifically, messages related to
 the failed opening and reading of files. Error messages related to the syntax
 of the pattern are still shown.
-' }
-		.no_pcre_2_unicode { '
+'
+		}
+		.no_pcre_2_unicode {
+			'
 DEPRECATED. Use \\flag{no-unicode} instead.
 .sp
 Note that Unicode mode is enabled by default.
-' }
-		.no_require_git { '
+'
+		}
+		.no_require_git {
+			'
 When this flag is given, source control ignore files such as \\fB.gitignore\\fP
 are respected even if no \\fBgit\\fP repository is present.
 .sp
@@ -1978,8 +2108,10 @@ repository. For example, when a \\fB.git\\fP directory is observed.
 This flag relaxes the default restriction. For example, it might be useful when
 the contents of a \\fBgit\\fP repository are stored or copied somewhere, but
 where the repository state is absent.
-' }
-		.no_unicode { '
+'
+		}
+		.no_unicode {
+			'
 This flag disables Unicode mode for all patterns given to ripgrep.
 .sp
 By default, ripgrep will enable "Unicode mode" in all of its regexes. This has
@@ -2009,14 +2141,18 @@ exactly that. For example, Unicode mode can sometimes have a negative impact
 on performance, especially when things like \\fB\\\\w\\fP are used frequently
 (including via bounded repetitions like \\fB\\\\w{100}\\fP) when only their ASCII
 interpretation is needed.
-' }
-		.null { '
+'
+		}
+		.null {
+			'
 Whenever a file path is printed, follow it with a \\fBNUL\\fP byte. This includes
 printing file paths before matches, and when printing a list of matching files
 such as with \\flag{count}, \\flag{files-with-matches} and \\flag{files}. This
 option is useful for use with \\fBxargs\\fP.
-' }
-		.null_data { '
+'
+		}
+		.null_data {
+			"
 Enabling this flag causes ripgrep to use \\fBNUL\\fP as a line terminator instead
 of the default of \\fP\\\\n\\fP.
 .sp
@@ -2027,11 +2163,13 @@ ripgrep requires that, at a minimum, each line must fit into memory. Using
 avoid OOM (out of memory) conditions.
 .sp
 This is also useful for processing NUL delimited data, such as that emitted
-when using ripgrep\'s \\flag{null} flag or \\fBfind\\fP\'s \\fB\\-\\-print0\\fP flag.
+when using ripgrep's \\flag{null} flag or \\fBfind\\fP's \\fB\\-\\-print0\\fP flag.
 .sp
 Using this flag implies \\flag{text}. It also overrides \\flag{crlf}.
-' }
-		.one_file_system { '
+"
+		}
+		.one_file_system {
+			"
 When enabled, ripgrep will not cross file system boundaries relative to where
 the search started from.
 .sp
@@ -2044,29 +2182,35 @@ the command
 .sp
 ripgrep will search both \\fI/foo/bar\\fP and \\fI/quux/baz\\fP even if they are
 on different file systems, but will not cross a file system boundary when
-traversing each path\'s directory tree.
+traversing each path's directory tree.
 .sp
-This is similar to \\fBfind\\fP\'s \\fB\\-xdev\\fP or \\fB\\-mount\\fP flag.
-' }
-		.only_matching { '
+This is similar to \\fBfind\\fP's \\fB\\-xdev\\fP or \\fB\\-mount\\fP flag.
+"
+		}
+		.only_matching {
+			'
 Print only the matched (non-empty) parts of a matching line, with each such
 part on a separate output line.
-' }
-		.path_separator { '
+'
+		}
+		.path_separator {
+			"
 Set the path separator to use when printing file paths. This defaults to your
-platform\'s path separator, which is \\fB/\\fP on Unix and \\fB\\\\\\fP on Windows.
+platform's path separator, which is \\fB/\\fP on Unix and \\fB\\\\\\fP on Windows.
 This flag is intended for overriding the default when the environment demands
 it (e.g., cygwin). A path separator is limited to a single byte.
 .sp
 Setting this flag to an empty string reverts it to its default behavior. That
 is, the path separator is automatically chosen based on the environment.
-' }
-		.passthru { '
+"
+		}
+		.passthru {
+			"
 Print both matching and non-matching lines.
 .sp
 Another way to achieve a similar effect is by modifying your pattern to match
 the empty string. For example, if you are searching using \\fBrg\\fP \\fIfoo\\fP,
-then using \\fBrg\\fP \\fB\'^|\\fP\\fIfoo\\fP\\fB\'\\fP instead will emit every line in
+then using \\fBrg\\fP \\fB'^|\\fP\\fIfoo\\fP\\fB'\\fP instead will emit every line in
 every file searched, but only occurrences of \\fIfoo\\fP will be highlighted.
 This flag enables the same behavior without needing to modify the pattern.
 .sp
@@ -2074,8 +2218,10 @@ An alternative spelling for this flag is \\fB\\-\\-passthrough\\fP.
 .sp
 This overrides the \\flag{context}, \\flag{after-context} and
 \\flag{before-context} flags.
-' }
-		.pcre_2 { '
+"
+		}
+		.pcre_2 {
+			"
 When this flag is present, ripgrep will use the PCRE2 regex engine instead of
 its default regex engine.
 .sp
@@ -2087,21 +2233,25 @@ instead elect to use \\fB\\-\\-engine=auto\\fP to ask ripgrep to automatically
 select the right regex engine based on the patterns given. This flag and the
 \\flag{engine} flag override one another.
 .sp
-Note that PCRE2 is an optional ripgrep feature. If PCRE2 wasn\'t included in
+Note that PCRE2 is an optional ripgrep feature. If PCRE2 wasn't included in
 your build of ripgrep, then using this flag will result in ripgrep printing
 an error message and exiting. PCRE2 may also have worse user experience in
-some cases, since it has fewer introspection APIs than ripgrep\'s default
+some cases, since it has fewer introspection APIs than ripgrep's default
 regex engine. For example, if you use a \\fB\\\\n\\fP in a PCRE2 regex without
 the \\flag{multiline} flag, then ripgrep will silently fail to match anything
 instead of reporting an error immediately (like it does with the default regex
 engine).
-' }
-		.pcre_2_version { '
+"
+		}
+		.pcre_2_version {
+			'
 When this flag is present, ripgrep will print the version of PCRE2 in use,
 along with other information, and then exit. If PCRE2 is not available, then
 ripgrep will print an error message and exit with an error code.
-' }
-		.pre { '
+'
+		}
+		.pre {
+			'
 For each input \\fIPATH\\fP, this flag causes ripgrep to search the standard
 output of \\fICOMMAND\\fP \\fIPATH\\fP instead of the contents of \\fIPATH\\fP.
 This option expects the \\fICOMMAND\\fP program to either be a path or to be
@@ -2150,8 +2300,10 @@ the file based on its contents. If it is a compressed file in the Zstandard
 format, then \\fBpzstd\\fP is used to decompress the contents to stdout.
 .sp
 This overrides the \\flag{search-zip} flag.
-' }
-		.pre_glob { '
+'
+		}
+		.pre_glob {
+			'
 This flag works in conjunction with the \\flag{pre} flag. Namely, when one or
 more \\flag{pre-glob} flags are given, then only files that match the given set
 of globs will be handed to the command specified by the \\flag{pre} flag. Any
@@ -2175,22 +2327,28 @@ Multiple \\flag{pre-glob} flags may be used. Globbing rules match
 \\fBgitignore\\fP globs. Precede a glob with a \\fB!\\fP to exclude it.
 .sp
 This flag has no effect if the \\flag{pre} flag is not used.
-' }
-		.pretty { '
+'
+		}
+		.pretty {
+			"
 This is a convenience alias for \\fB\\-\\-color=always \\-\\-heading
 \\-\\-line\\-number\\fP. This flag is useful when you still want pretty output even
-if you\'re piping ripgrep to another program or file. For example: \\fBrg -p
+if you're piping ripgrep to another program or file. For example: \\fBrg -p
 \\fP\\fIfoo\\fP \\fB| less -R\\fP.
-' }
-		.quiet { '
+"
+		}
+		.quiet {
+			'
 Do not print anything to stdout. If a match is found in a file, then ripgrep
 will stop searching. This is useful when ripgrep is used only for its exit code
 (which will be an error code if no matches are found).
 .sp
 When \\flag{files} is used, ripgrep will stop finding files after finding the
 first file that does not match any ignore rules.
-' }
-		.regex_size_limit { '
+'
+		}
+		.regex_size_limit {
+			'
 The size limit of the compiled regex, where the compiled regex generally
 corresponds to a single object in memory that can match all of the patterns
 provided to ripgrep. The default limit is generous enough that most reasonable
@@ -2202,8 +2360,10 @@ much more time and/or memory building a regex matcher.
 The input format accepts suffixes of \\fBK\\fP, \\fBM\\fP or \\fBG\\fP which
 correspond to kilobytes, megabytes and gigabytes, respectively. If no suffix is
 provided the input is treated as bytes.
-' }
-		.regexp { '
+'
+		}
+		.regexp {
+			'
 A pattern to search for. This option can be provided multiple times, where
 all patterns given are searched, in addition to any patterns provided by
 \\flag{file}. Lines matching at least one of the provided patterns are printed.
@@ -2224,8 +2384,10 @@ flags will be provided. Namely, the following is equivalent to the above:
 .sp
 When \\flag{file} or \\flag{regexp} is used, then ripgrep treats all positional
 arguments as files or directories to search.
-' }
-		.replace { '
+'
+		}
+		.replace {
+			"
 Replaces every match with the text given when printing results. Neither this
 flag nor any other ripgrep flag will modify your files.
 .sp
@@ -2238,7 +2400,7 @@ corresponds to the entire match.
 The name of a group is formed by taking the longest string of letters, numbers
 and underscores (i.e. \\fB[_0-9A-Za-z]\\fP) after the \\fB\$\\fP. For example,
 \\fB\$\\fP\\fI1a\\fP will be replaced with the group named \\fI1a\\fP, not the
-group at index \\fI1\\fP. If the group\'s name contains characters that aren\'t
+group at index \\fI1\\fP. If the group's name contains characters that aren't
 letters, numbers or underscores, or you want to immediately follow the group
 with another string, the name should be put inside braces. For example,
 \\fB\${\\fP\\fI1\\fP\\fB}\\fP\\fIa\\fP will take the content of the group at index
@@ -2257,8 +2419,10 @@ Note that the replacement by default replaces each match, and not the entire
 line. To replace the entire line, you should match the entire line.
 .sp
 This flag can be used with the \\flag{only-matching} flag.
-' }
-		.search_zip { '
+"
+		}
+		.search_zip {
+			'
 This flag instructs ripgrep to search in compressed files. Currently gzip,
 bzip2, xz, LZ4, LZMA, Brotli and Zstd files are supported. This option expects
 the decompression binaries (such as \\fBgzip\\fP) to be available in your
@@ -2271,8 +2435,10 @@ trees. It only makes ripgrep detect compressed files and then decompress them
 before searching their contents as it would any other file.
 .sp
 This overrides the \\flag{pre} flag.
-' }
-		.smart_case { '
+'
+		}
+		.smart_case {
+			'
 This flag instructs ripgrep to searches case insensitively if the pattern is
 all lowercase. Otherwise, ripgrep will search case sensitively.
 .sp
@@ -2288,8 +2454,10 @@ uppercase according to Unicode. For example, \\fBfoo\\\\pL\\fP has no uppercase
 literals but \\fBFoo\\\\pL\\fP does.
 .PP
 This overrides the \\flag{case-sensitive} and \\flag{ignore-case} flags.
-' }
-		.sort_files { '
+'
+		}
+		.sort_files {
+			'
 DEPRECATED. Use \\fB\\-\\-sort=path\\fP instead.
 .sp
 This flag instructs ripgrep to sort search results by file path
@@ -2297,8 +2465,10 @@ lexicographically in ascending order. Note that this currently disables all
 parallelism and runs search in a single thread.
 .sp
 This flag overrides \\flag{sort} and \\flag{sortr}.
-' }
-		.sort { '
+'
+		}
+		.sort {
+			"
 This flag enables sorting of results in ascending order. The possible values
 for this flag are:
 .sp
@@ -2321,7 +2491,7 @@ Sort by the last accessed time on a file. Always single-threaded.
 \\fBcreated\\fP
 Sort by the creation time on a file. Always single-threaded.
 .PP
-If the chosen (manually or by-default) sorting criteria isn\'t available on your
+If the chosen (manually or by-default) sorting criteria isn't available on your
 system (for example, creation time is not available on ext4 file systems), then
 ripgrep will attempt to detect this, print an error and exit without searching.
 .sp
@@ -2330,8 +2500,10 @@ Also, this flag overrides \\flag{sortr}.
 .sp
 Note that sorting results currently always forces ripgrep to abandon
 parallelism and run in a single thread.
-' }
-		.sortr { '
+"
+		}
+		.sortr {
+			"
 This flag enables sorting of results in descending order. The possible values
 for this flag are:
 .sp
@@ -2355,7 +2527,7 @@ Sort by the last accessed time on a file. Always single-threaded.
 \\fBcreated\\fP
 Sort by the creation time on a file. Always single-threaded.
 .PP
-If the chosen (manually or by-default) sorting criteria isn\'t available on your
+If the chosen (manually or by-default) sorting criteria isn't available on your
 system (for example, creation time is not available on ext4 file systems), then
 ripgrep will attempt to detect this, print an error and exit without searching.
 .sp
@@ -2364,8 +2536,10 @@ overrides \\flag{sort}.
 .sp
 Note that sorting results currently always forces ripgrep to abandon
 parallelism and run in a single thread.
-' }
-		.stats { '
+"
+		}
+		.stats {
+			'
 When enabled, ripgrep will print aggregate statistics about the search. When
 this flag is present, ripgrep will print at least the following stats to
 stdout at the end of the search: number of matched lines, number of files with
@@ -2378,18 +2552,22 @@ This flag is always and implicitly enabled when \\flag{json} is used.
 .sp
 Note that this flag has no effect if \\flag{files}, \\flag{files-with-matches} or
 \\flag{files-without-match} is passed.
-' }
-		.stop_on_nonmatch { '
+'
+		}
+		.stop_on_nonmatch {
+			'
 Enabling this option will cause ripgrep to stop reading a file once it
 encounters a non-matching line after it has encountered a matching line.
 This is useful if it is expected that all matches in a given file will be on
 sequential lines, for example due to the lines being sorted.
 .sp
 This overrides the \\flag{multiline} flag.
-' }
-		.text { '
+'
+		}
+		.text {
+			"
 This flag instructs ripgrep to search binary files as if they were text. When
-this flag is present, ripgrep\'s binary file detection is disabled. This means
+this flag is present, ripgrep's binary file detection is disabled. This means
 that when a binary file is searched, its contents may be printed if there is
 a match. This may cause escape codes to be printed that alter the behavior of
 your terminal.
@@ -2402,22 +2580,30 @@ when it sees a \\fBNUL\\fP byte after it sees a match (or searches the entire
 file).
 .sp
 This flag overrides the \\flag{binary} flag.
-' }
-		.threads { '
+"
+		}
+		.threads {
+			'
 This flag sets the approximate number of threads to use. A value of \\fB0\\fP
 (which is the default) causes ripgrep to choose the thread count using
 heuristics.
-' }
-		.trace { '
+'
+		}
+		.trace {
+			"
 Show trace messages. This shows even more detail than the \\flag{debug}
-flag. Generally, one should only use this if \\flag{debug} doesn\'t emit the
-information you\'re looking for.
-' }
-		.trim { '
+flag. Generally, one should only use this if \\flag{debug} doesn't emit the
+information you're looking for.
+"
+		}
+		.trim {
+			'
 When set, all ASCII whitespace at the beginning of each line printed will be
 removed.
-' }
-		.type { '
+'
+		}
+		.type {
+			'
 This flag limits ripgrep to searching files matching \\fITYPE\\fP. Multiple
 \\flag{type} flags may be provided.
 .sp
@@ -2431,8 +2617,10 @@ Note that this flag has lower precedence than both the \\flag{glob} flag and
 any rules found in ignore files.
 .sp
 To see the list of available file types, use the \\flag{type-list} flag.
-' }
-		.type_add { '
+'
+		}
+		.type_add {
+			"
 This flag adds a new glob for a particular file type. Only one glob can be
 added at a time. Multiple \\flag{type-add} flags can be provided. Unless
 \\flag{type-clear} is used, globs are added to any existing globs defined inside
@@ -2444,7 +2632,7 @@ not persisted. See \\fBCONFIGURATION FILES\\fP for a workaround.
 Example:
 .sp
 .EX
-    rg \\-\\-type\\-add \'foo:*.foo\' -tfoo \\fIPATTERN\\fP
+    rg \\-\\-type\\-add 'foo:*.foo' -tfoo \\fIPATTERN\\fP
 .EE
 .sp
 This flag can also be used to include rules from other types with the special
@@ -2454,28 +2642,32 @@ automatically be imported into the type specified. For example, to create a
 type called src that matches C++, Python and Markdown files, one can use:
 .sp
 .EX
-    \\-\\-type\\-add \'src:include:cpp,py,md\'
+    \\-\\-type\\-add 'src:include:cpp,py,md'
 .EE
 .sp
 Additional glob rules can still be added to the src type by using this flag
 again:
 .sp
 .EX
-    \\-\\-type\\-add \'src:include:cpp,py,md\' \\-\\-type\\-add \'src:*.foo\'
+    \\-\\-type\\-add 'src:include:cpp,py,md' \\-\\-type\\-add 'src:*.foo'
 .EE
 .sp
 Note that type names must consist only of Unicode letters or numbers.
 Punctuation characters are not allowed.
-' }
-		.type_clear { '
+"
+		}
+		.type_clear {
+			'
 Clear the file type globs previously defined for \\fITYPE\\fP. This clears any
 previously defined globs for the \\fITYPE\\fP, but globs can be added after this
 flag.
 .sp
 Note that this must be passed to every invocation of ripgrep. Type settings are
 not persisted. See \\fBCONFIGURATION FILES\\fP for a workaround.
-' }
-		.type_not { '
+'
+		}
+		.type_not {
+			'
 Do not search files matching \\fITYPE\\fP. Multiple \\flag{type-not} flags may be
 provided. Use the \\flag{type-list} flag to list all available types.
 .sp
@@ -2486,14 +2678,18 @@ ripgrep (including any custom file types). The end result is that
 will only search files that are unrecognized by its type definitions.
 .sp
 To see the list of available file types, use the \\flag{type-list} flag.
-' }
-		.type_list { '
+'
+		}
+		.type_list {
+			'
 Show all supported file types and their corresponding globs. This takes any
 \\flag{type-add} and \\flag{type-clear} flags given into account. Each type is
 printed on its own line, followed by a \\fB:\\fP and then a comma-delimited list
 of globs for that type on the same line.
-' }
-		.unrestricted { '
+'
+		}
+		.unrestricted {
+			'
 This flag reduces the level of "smart" filtering. Repeated uses (up to 3) reduces
 the filtering even more. When repeated three times, ripgrep will search every
 file in a directory tree.
@@ -2507,13 +2703,17 @@ The only filtering ripgrep still does when \\fB-uuu\\fP is given is to skip
 symbolic links and to avoid printing matches from binary files. Symbolic links
 can be followed via the \\flag{follow} flag, and binary files can be treated as
 text files via the \\flag{text} flag.
-' }
-		.version { '
-This flag prints ripgrep\'s version. This also may print other relevant
+'
+		}
+		.version {
+			"
+This flag prints ripgrep's version. This also may print other relevant
 information, such as the presence of target specific optimizations and the
 \\fBgit\\fP revision that this build of ripgrep was compiled from.
-' }
-		.vimgrep { '
+"
+		}
+		.vimgrep {
+			'
 This flag instructs ripgrep to print results with every match on its own line,
 including line numbers and column numbers.
 .sp
@@ -2528,8 +2728,10 @@ One alternative to avoiding exorbitant memory usage is to force ripgrep into
 single threaded mode with the \\flag{threads} flag. Note though that this will
 not impact the total size of the output, just the heap memory that ripgrep will
 use.
-' }
-		.with_filename { '
+'
+		}
+		.with_filename {
+			'
 This flag instructs ripgrep to print the file path for each matching line.
 This is the default when more than one file is searched. If \\flag{heading} is
 enabled (the default when printing to a tty), the file path will be shown above
@@ -2537,25 +2739,30 @@ clusters of matches from each file; otherwise, the file name will be shown as a
 prefix for each matched line.
 .sp
 This flag overrides \\flag{no-filename}.
-' }
-		.with_filename_no { '
+'
+		}
+		.with_filename_no {
+			'
 This flag instructs ripgrep to never print the file path with each matching
 line. This is the default when ripgrep is explicitly instructed to search one
 file or stdin.
 .sp
 This flag overrides \\flag{with-filename}.
-' }
-		.word_regexp { '
+'
+		}
+		.word_regexp {
+			"
 When enabled, ripgrep will only show matches surrounded by word boundaries.
 This is equivalent to surrounding every pattern with \\fB\\\\b{start-half}\\fP and
-\\fB\\\\b{end-half}\\fP. These are a custom syntax from ripgrep\'s default regex
-engine that, unlike \\fB\\\\b\\fP, doesn\'t require matching a word character on one
+\\fB\\\\b{end-half}\\fP. These are a custom syntax from ripgrep's default regex
+engine that, unlike \\fB\\\\b\\fP, doesn't require matching a word character on one
 side. That is, \\fB\\\\b{start-half}\\fP corresponds to matching \\fB\\\\W|\\\\A\\fP on
 the left and \\fB\\\\b{end-half}\\fP corresponds to matching \\fB\\\\W|\\\\z\\fP on the
 right.
 .sp
 This overrides the \\flag{line-regexp} flag.
-' }
+"
+		}
 	}
 }
 
@@ -2782,58 +2989,58 @@ fn hyperlink_format_doc_long() string {
 	return 'Set the format of hyperlinks to use when printing results. Hyperlinks make
 certain elements of ripgrep\'s output, such as file paths, clickable. This
 generally only works in terminal emulators that support OSC-8 hyperlinks. For
-example, the format Bfile://{host}{path}P will emit an RFC 8089 hyperlink.
-To see the format that ripgrep is using, pass the lag{debug} flag.
+example, the format \\fBfile://{host}{path}\\fP will emit an RFC 8089 hyperlink.
+To see the format that ripgrep is using, pass the \\flag{debug} flag.
 .sp
 Alternatively, a format string may correspond to one of the following aliases:
-default, none, cursor, file, grep+, kitty, macvim, textmate, vscode,
-vscode-insiders, vscodium.
+\\fBdefault\\fP, \\fBnone\\fP, \\fBcursor\\fP, \\fBfile\\fP, \\fBgrep+\\fP, \\fBkitty\\fP, \\fBmacvim\\fP, \\fBtextmate\\fP, \\fBvscode\\fP,
+\\fBvscode-insiders\\fP, \\fBvscodium\\fP.
 The alias will be replaced with a format string that is intended to work for
 the corresponding application.
 .sp
 The following variables are available in the format string:
 .sp
 .TP 12
-B{path}P
+\\fB{path}\\fP
 Required. This is replaced with a path to a matching file. The path is
 guaranteed to be absolute and percent encoded such that it is valid to put into
 a URI. Note that a path is guaranteed to start with a /.
 .TP 12
-B{host}P
+\\fB{host}\\fP
 Optional. This is replaced with your system\'s hostname. On Unix, this
-corresponds to calling BgethostnameP. On Windows, this corresponds to
-calling BGetComputerNameExWP to fetch the system\'s "physical DNS hostname."
-Alternatively, if lag{hostname-bin} was provided, then the hostname returned
+corresponds to calling \\fBgethostname\\fP. On Windows, this corresponds to
+calling \\fBGetComputerNameExW\\fP to fetch the system\'s "physical DNS hostname."
+Alternatively, if \\flag{hostname-bin} was provided, then the hostname returned
 from the output of that program will be returned. If no hostname could be
 found, then this variable is replaced with the empty string.
 .TP 12
-B{line}P
+\\fB{line}\\fP
 Optional. If appropriate, this is replaced with the line number of a match. If
-no line number is available (for example, if B\\-\\-no\\-line\\-numberP was
+no line number is available (for example, if \\fB\\-\\-no\\-line\\-number\\fP was
 given), then it is automatically replaced with the value 1.
 .TP 12
-B{column}P
-Optional, but requires the presence of B{line}P. If appropriate, this is
+\\fB{column}\\fP
+Optional, but requires the presence of \\fB{line}\\fP. If appropriate, this is
 replaced with the column number of a match. If no column number is available
-(for example, if B\\-\\-no\\-columnP was given), then it is automatically
+(for example, if \\fB\\-\\-no\\-column\\fP was given), then it is automatically
 replaced with the value 1.
 .TP 12
-B{wslprefix}P
+\\fB{wslprefix}\\fP
 Optional. This is a special value that is set to
-Bwsl\$/PIWSL_DISTRO_NAMEP, where IWSL_DISTRO_NAMEP corresponds to
+\\fBwsl\$/\\fP\\fIWSL_DISTRO_NAME\\fP, where \\fIWSL_DISTRO_NAME\\fP corresponds to
 the value of the equivalent environment variable. If the system is not Unix
-or if the IWSL_DISTRO_NAMEP environment variable is not set, then this is
+or if the \\fIWSL_DISTRO_NAME\\fP environment variable is not set, then this is
 replaced with the empty string.
 .PP
 A format string may be empty. An empty format string is equivalent to the
-BnoneP alias. In this case, hyperlinks will be disabled.
+\\fBnone\\fP alias. In this case, hyperlinks will be disabled.
 .sp
 At present, ripgrep does not enable hyperlinks by default. Users must opt into
-them. If you aren\'t sure what format to use, try BdefaultP.
+them. If you aren\'t sure what format to use, try \\fBdefault\\fP.
 .sp
 Like colors, when ripgrep detects that stdout is not connected to a tty, then
 hyperlinks are automatically disabled, regardless of the value of this flag.
-Users can pass B\\-\\-color=alwaysP to forcefully emit hyperlinks.
+Users can pass \\fB\\-\\-color=always\\fP to forcefully emit hyperlinks.
 .sp
 Note that hyperlinks are only written when a path is also in the output
 and colors are enabled. To write hyperlinks without colors, you\'ll need to
@@ -2847,12 +3054,12 @@ escape codes completely:
     \\-\\-colors \'match:none\'
 .EE
 .sp
-ripgrep works this way because it treats the lag{color} flag as a proxy for
+ripgrep works this way because it treats the \\flag{color} flag as a proxy for
 whether ANSI escape codes should be used at all. This means that environment
-variables like BNO_COLOR=1P and BTERM=dumbP not only disable colors,
+variables like \\fBNO_COLOR=1\\fP and \\fBTERM=dumb\\fP not only disable colors,
 but hyperlinks as well. Similarly, colors and hyperlinks are disabled when
 ripgrep is not writing to a tty. (Unless one forces the issue by setting
-B\\-\\-color=alwaysP.)
+\\fB\\-\\-color=always\\fP.)
 .sp
 If you\'re searching a file directly, for example:
 .sp
@@ -2862,7 +3069,7 @@ If you\'re searching a file directly, for example:
 .sp
 then hyperlinks will not be emitted since the path given does not appear
 in the output. To make the path appear, and thus also a hyperlink, use the
-lag{with-filename} flag.
+\\flag{with-filename} flag.
 .sp
 For more information on hyperlinks in terminal emulators, see:
 https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda'
@@ -2895,12 +3102,12 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.color {
 			value := v.unwrap_value()
 			args.color = match value {
-						'never' { .never }
-						'auto' { .auto }
-						'always' { .always }
-						'ansi' { .ansi }
-						else { return error("choice '${value}' is unrecognized") }
-					}
+				'never' { .never }
+				'auto' { .auto }
+				'always' { .always }
+				'ansi' { .ansi }
+				else { return error("choice '${value}' is unrecognized") }
+			}
 		}
 		.colors {
 			value := v.unwrap_value()
@@ -2914,13 +3121,13 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		}
 		.context_separator {
 			if v.kind == .switch_value {
-						if v.switch_value {
-							panic('flag can only be disabled')
-						}
-						args.context_separator = disabled_context_separator()
-					} else {
-						args.context_separator = new_context_separator(v.value)!
-					}
+				if v.switch_value {
+					panic('flag can only be disabled')
+				}
+				args.context_separator = disabled_context_separator()
+			} else {
+				args.context_separator = new_context_separator(v.value)!
+			}
 		}
 		.count {
 			assert v.unwrap_switch()
@@ -2933,8 +3140,8 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.crlf {
 			args.crlf = v.unwrap_switch()
 			if args.crlf {
-						args.null_data = false
-					}
+				args.null_data = false
+			}
 		}
 		.debug {
 			assert v.unwrap_switch()
@@ -2945,25 +3152,25 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		}
 		.encoding {
 			if v.kind == .switch_value {
-						assert !v.switch_value
-						args.encoding = encoding_auto()
-						return
-					}
+				assert !v.switch_value
+				args.encoding = encoding_auto()
+				return
+			}
 			label := v.value
 			args.encoding = match label {
-						'auto' { encoding_auto() }
-						'none' { encoding_disabled() }
-						else { encoding_some(new_encoding(label)!) }
-					}
+				'auto' { encoding_auto() }
+				'none' { encoding_disabled() }
+				else { encoding_some(new_encoding(label)!) }
+			}
 		}
 		.engine {
 			value := v.unwrap_value()
 			args.engine = match value {
-						'default' { .default }
-						'pcre2' { .pcre2 }
-						'auto' { .auto }
-						else { return error("unrecognized regex engine '${value}'") }
-					}
+				'default' { .default }
+				'pcre2' { .pcre2 }
+				'auto' { .auto }
+				else { return error("unrecognized regex engine '${value}'") }
+			}
 		}
 		.field_context_separator {
 			args.field_context_separator = new_field_context_separator(v.unwrap_value())!
@@ -2996,13 +3203,13 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.generate {
 			value := v.unwrap_value()
 			genmode := match value {
-						'man' { GenerateMode.man }
-						'complete-bash' { GenerateMode.complete_bash }
-						'complete-zsh' { GenerateMode.complete_zsh }
-						'complete-fish' { GenerateMode.complete_fish }
-						'complete-powershell' { GenerateMode.complete_powershell }
-						else { return error("choice '${value}' is unrecognized") }
-					}
+				'man' { GenerateMode.man }
+				'complete-bash' { GenerateMode.complete_bash }
+				'complete-zsh' { GenerateMode.complete_zsh }
+				'complete-fish' { GenerateMode.complete_fish }
+				'complete-powershell' { GenerateMode.complete_powershell }
+				else { return error("choice '${value}' is unrecognized") }
+			}
 			args.mode.update(mode_generate(genmode))
 		}
 		.glob {
@@ -3049,10 +3256,10 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		}
 		.json {
 			if v.unwrap_switch() {
-						args.mode.update(mode_search(.json))
-					} else if args.mode.kind == .search && args.mode.search == .json {
-						args.mode.update(mode_search(.standard))
-					}
+				args.mode.update(mode_search(.json))
+			} else if args.mode.kind == .search && args.mode.search == .json {
+				args.mode.update(mode_search(.standard))
+			}
 		}
 		.line_buffered {
 			args.buffer = if v.unwrap_switch() { .line } else { .auto }
@@ -3091,8 +3298,8 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 		.multiline {
 			args.multiline = v.unwrap_switch()
 			if args.multiline {
-						args.stop_on_nonmatch = false
-					}
+				args.stop_on_nonmatch = false
+			}
 		}
 		.multiline_dotall {
 			args.multiline_dotall = v.unwrap_switch()
@@ -3162,13 +3369,13 @@ pub fn (id FlagId) update(v FlagValue, mut args LowArgs) ! {
 			s := v.unwrap_value()
 			raw := unescape_bytes(s)!
 			if raw.len == 0 {
-						args.path_separator = none
-					} else if raw.len == 1 {
-						args.path_separator = raw[0]
-					} else {
-						return error("A path separator must be exactly one byte, but the given separator is ${raw.len} bytes: ${s}
+				args.path_separator = none
+			} else if raw.len == 1 {
+				args.path_separator = raw[0]
+			} else {
+				return error("A path separator must be exactly one byte, but the given separator is ${raw.len} bytes: ${s}
 In some shells on Windows '/' is automatically expanded. Use '//' instead.")
-					}
+			}
 		}
 		.passthru {
 			assert v.unwrap_switch()
@@ -3183,15 +3390,15 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		}
 		.pre {
 			if v.kind == .switch_value {
-						assert !v.switch_value
-						args.pre = none
-						return
-					}
+				assert !v.switch_value
+				args.pre = none
+				return
+			}
 			path := v.value
 			args.pre = if path == '' { none } else { path }
 			if _ := args.pre {
-						args.search_zip = false
-					}
+				args.search_zip = false
+			}
 		}
 		.pre_glob {
 			args.pre_glob << v.unwrap_value()
@@ -3221,54 +3428,61 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		}
 		.search_zip {
 			if v.unwrap_switch() {
-						args.pre = none
-						args.search_zip = true
-					} else {
-						args.search_zip = false
-					}
+				args.pre = none
+				args.search_zip = true
+			} else {
+				args.search_zip = false
+			}
 		}
 		.smart_case {
 			assert v.unwrap_switch()
 			args.case = .smart
 		}
 		.sort_files {
-			args.sort = if v.unwrap_switch() { SortMode{ reverse: false, kind: .path } } else { none }
+			args.sort = if v.unwrap_switch() {
+				SortMode{
+					reverse: false
+					kind:    .path
+				}
+			} else {
+				none
+			}
 		}
 		.sort {
 			value := v.unwrap_value()
 			if value == 'none' {
-						args.sort = none
-						return
-					}
+				args.sort = none
+				return
+			}
 			kind := match value {
-						'path' { SortModeKind.path }
-						'modified' { SortModeKind.last_modified }
-						'accessed' { SortModeKind.last_accessed }
-						'created' { SortModeKind.created }
-						else { return error("choice '${value}' is unrecognized") }
-					}
+				'path' { SortModeKind.path }
+				'modified' { SortModeKind.last_modified }
+				'accessed' { SortModeKind.last_accessed }
+				'created' { SortModeKind.created }
+				else { return error("choice '${value}' is unrecognized") }
+			}
 			args.sort = SortMode{
-						reverse: false
-						kind: kind
-					}
+				reverse: false
+				kind:    kind
+			}
 		}
 		.sortr {
 			value := v.unwrap_value()
 			if value == 'none' {
-						args.sort = none
-						return
-					}
+				args.sort = none
+				return
+			}
 			kind := match value {
-						'path' { SortModeKind.path }
-						'modified' { SortModeKind.last_modified }
-						'accessed' { SortModeKind.last_accessed }
-						'created' { SortModeKind.created }
-						else { return error("choice '${value}' is unrecognized") }
-					}
+				'path' { SortModeKind.path }
+				'modified' { SortModeKind.last_modified }
+				'accessed' { SortModeKind.last_accessed }
+				'created' { SortModeKind.created }
+				else { return error("choice '${value}' is unrecognized") }
+			}
 			args.sort = SortMode{
-						reverse: true
-						kind: kind
-					}
+				reverse: true
+				kind:    kind
+			}
 		}
 		.stats {
 			args.stats = v.unwrap_switch()
@@ -3314,15 +3528,15 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 				args.unrestricted++
 			}
 			if args.unrestricted > 3 {
-						return error('flag can only be repeated up to 3 times')
-					}
+				return error('flag can only be repeated up to 3 times')
+			}
 			if args.unrestricted == 1 {
-						FlagId.no_ignore.update(flag_switch(true), mut args)!
-					} else if args.unrestricted == 2 {
-						FlagId.hidden.update(flag_switch(true), mut args)!
-					} else {
-						FlagId.binary.update(flag_switch(true), mut args)!
-					}
+				FlagId.no_ignore.update(flag_switch(true), mut args)!
+			} else if args.unrestricted == 2 {
+				FlagId.hidden.update(flag_switch(true), mut args)!
+			} else {
+				FlagId.binary.update(flag_switch(true), mut args)!
+			}
 		}
 		.version {
 			assert v.unwrap_switch()

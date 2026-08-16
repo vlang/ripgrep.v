@@ -156,155 +156,900 @@ struct ParseSchema {
 
 fn parse_schema_defs() []vflag.FlagDef {
 	return [
-		vflag.FlagDef{field_name: 'flag_after_context' long_name: 'after-context' short_name: 'A' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_auto_hybrid_regex' long_name: 'auto-hybrid-regex' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_auto_hybrid_regex_negated' long_name: 'no-auto-hybrid-regex' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_before_context' long_name: 'before-context' short_name: 'B' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_binary' long_name: 'binary' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_binary_negated' long_name: 'no-binary' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_block_buffered' long_name: 'block-buffered' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_block_buffered_negated' long_name: 'no-block-buffered' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_byte_offset' long_name: 'byte-offset' short_name: 'b' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_byte_offset_negated' long_name: 'no-byte-offset' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_case_sensitive' long_name: 'case-sensitive' short_name: 's' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_color' long_name: 'color' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_colors' long_name: 'colors' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_column' long_name: 'column' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_column_negated' long_name: 'no-column' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_context' long_name: 'context' short_name: 'C' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_context_separator' long_name: 'context-separator' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_no_context_separator_negated' long_name: 'no-context-separator' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_count' long_name: 'count' short_name: 'c' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_count_matches' long_name: 'count-matches' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_crlf' long_name: 'crlf' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_crlf_negated' long_name: 'no-crlf' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_debug' long_name: 'debug' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_dfa_size_limit' long_name: 'dfa-size-limit' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_encoding' long_name: 'encoding' short_name: 'E' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_no_encoding_negated' long_name: 'no-encoding' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_engine' long_name: 'engine' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_field_context_separator' long_name: 'field-context-separator' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_field_match_separator' long_name: 'field-match-separator' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_file' long_name: 'file' short_name: 'f' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_files' long_name: 'files' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_files_with_matches' long_name: 'files-with-matches' short_name: 'l' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_files_without_match' long_name: 'files-without-match' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_fixed_strings' long_name: 'fixed-strings' short_name: 'F' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_fixed_strings_negated' long_name: 'no-fixed-strings' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_follow' long_name: 'follow' short_name: 'L' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_follow_negated' long_name: 'no-follow' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_generate' long_name: 'generate' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_glob' long_name: 'glob' short_name: 'g' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_glob_case_insensitive' long_name: 'glob-case-insensitive' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_glob_case_insensitive_negated' long_name: 'no-glob-case-insensitive' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_heading' long_name: 'heading' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_heading_negated' long_name: 'no-heading' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_help' long_name: 'help' short_name: 'h' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_hidden' long_name: 'hidden' short_name: '.' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_hidden_negated' long_name: 'no-hidden' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_hostname_bin' long_name: 'hostname-bin' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_hyperlink_format' long_name: 'hyperlink-format' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_iglob' long_name: 'iglob' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_ignore_case' long_name: 'ignore-case' short_name: 'i' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_file' long_name: 'ignore-file' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_ignore_file_case_insensitive' long_name: 'ignore-file-case-insensitive' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_file_case_insensitive_negated' long_name: 'no-ignore-file-case-insensitive' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_include_zero' long_name: 'include-zero' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_include_zero_negated' long_name: 'no-include-zero' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_invert_match' long_name: 'invert-match' short_name: 'v' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_invert_match_negated' long_name: 'no-invert-match' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_json' long_name: 'json' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_json_negated' long_name: 'no-json' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_line_buffered' long_name: 'line-buffered' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_line_buffered_negated' long_name: 'no-line-buffered' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_line_number' long_name: 'line-number' short_name: 'n' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_line_number' long_name: 'no-line-number' short_name: 'N' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_line_regexp' long_name: 'line-regexp' short_name: 'x' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_max_columns' long_name: 'max-columns' short_name: 'M' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_max_columns_preview' long_name: 'max-columns-preview' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_max_columns_preview_negated' long_name: 'no-max-columns-preview' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_max_count' long_name: 'max-count' short_name: 'm' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_max_depth' long_name: 'max-depth' short_name: 'd' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_maxdepth_alias' long_name: 'maxdepth' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_max_filesize' long_name: 'max-filesize' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_mmap' long_name: 'mmap' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_mmap_negated' long_name: 'no-mmap' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_multiline' long_name: 'multiline' short_name: 'U' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_multiline_negated' long_name: 'no-multiline' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_multiline_dotall' long_name: 'multiline-dotall' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_multiline_dotall_negated' long_name: 'no-multiline-dotall' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_config' long_name: 'no-config' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore' long_name: 'no-ignore' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_negated' long_name: 'ignore' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_dot' long_name: 'no-ignore-dot' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_dot_negated' long_name: 'ignore-dot' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_exclude' long_name: 'no-ignore-exclude' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_exclude_negated' long_name: 'ignore-exclude' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_files' long_name: 'no-ignore-files' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_files_negated' long_name: 'ignore-files' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_global' long_name: 'no-ignore-global' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_global_negated' long_name: 'ignore-global' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_messages' long_name: 'no-ignore-messages' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_messages_negated' long_name: 'ignore-messages' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_parent' long_name: 'no-ignore-parent' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_parent_negated' long_name: 'ignore-parent' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_ignore_vcs' long_name: 'no-ignore-vcs' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_ignore_vcs_negated' long_name: 'ignore-vcs' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_messages' long_name: 'no-messages' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_messages_negated' long_name: 'messages' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_pcre2_unicode' long_name: 'no-pcre2-unicode' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_pcre2_unicode_negated' long_name: 'pcre2-unicode' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_require_git' long_name: 'no-require-git' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_require_git_negated' long_name: 'require-git' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_unicode' long_name: 'no-unicode' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_unicode_negated' long_name: 'unicode' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_null' long_name: 'null' short_name: '0' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_null_data' long_name: 'null-data' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_one_file_system' long_name: 'one-file-system' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_one_file_system_negated' long_name: 'no-one-file-system' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_only_matching' long_name: 'only-matching' short_name: 'o' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_path_separator' long_name: 'path-separator' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_passthru' long_name: 'passthru' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_passthrough_alias' long_name: 'passthrough' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_pcre2' long_name: 'pcre2' short_name: 'P' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_pcre2_negated' long_name: 'no-pcre2' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_pcre2_version' long_name: 'pcre2-version' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_pre' long_name: 'pre' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_no_pre_negated' long_name: 'no-pre' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_pre_glob' long_name: 'pre-glob' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_pretty' long_name: 'pretty' short_name: 'p' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_quiet' long_name: 'quiet' short_name: 'q' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_regex_size_limit' long_name: 'regex-size-limit' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_regexp' long_name: 'regexp' short_name: 'e' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_replace' long_name: 'replace' short_name: 'r' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_search_zip' long_name: 'search-zip' short_name: 'z' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_search_zip_negated' long_name: 'no-search-zip' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_smart_case' long_name: 'smart-case' short_name: 'S' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_sort_files' long_name: 'sort-files' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_sort_files_negated' long_name: 'no-sort-files' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_sort' long_name: 'sort' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_sortr' long_name: 'sortr' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_stats' long_name: 'stats' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_stats_negated' long_name: 'no-stats' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_stop_on_nonmatch' long_name: 'stop-on-nonmatch' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_text' long_name: 'text' short_name: 'a' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_text_negated' long_name: 'no-text' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_threads' long_name: 'threads' short_name: 'j' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_trace' long_name: 'trace' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_trim' long_name: 'trim' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_trim_negated' long_name: 'no-trim' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_type' long_name: 'type' short_name: 't' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_type_add' long_name: 'type-add' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_type_clear' long_name: 'type-clear' short_name: '' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_type_not' long_name: 'type-not' short_name: 'T' takes_arg: true},
-		vflag.FlagDef{field_name: 'flag_type_list' long_name: 'type-list' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_unrestricted' long_name: 'unrestricted' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_unrestricted_short' long_name: 'flag-unrestricted-short' short_name: 'u' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_version' long_name: 'version' short_name: 'V' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_vimgrep' long_name: 'vimgrep' short_name: '' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_with_filename' long_name: 'with-filename' short_name: 'H' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_no_filename' long_name: 'no-filename' short_name: 'I' takes_arg: false},
-		vflag.FlagDef{field_name: 'flag_word_regexp' long_name: 'word-regexp' short_name: 'w' takes_arg: false},
+		vflag.FlagDef{
+			field_name: 'flag_after_context'
+			long_name:  'after-context'
+			short_name: 'A'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_auto_hybrid_regex'
+			long_name:  'auto-hybrid-regex'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_auto_hybrid_regex_negated'
+			long_name:  'no-auto-hybrid-regex'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_before_context'
+			long_name:  'before-context'
+			short_name: 'B'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_binary'
+			long_name:  'binary'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_binary_negated'
+			long_name:  'no-binary'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_block_buffered'
+			long_name:  'block-buffered'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_block_buffered_negated'
+			long_name:  'no-block-buffered'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_byte_offset'
+			long_name:  'byte-offset'
+			short_name: 'b'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_byte_offset_negated'
+			long_name:  'no-byte-offset'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_case_sensitive'
+			long_name:  'case-sensitive'
+			short_name: 's'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_color'
+			long_name:  'color'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_colors'
+			long_name:  'colors'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_column'
+			long_name:  'column'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_column_negated'
+			long_name:  'no-column'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_context'
+			long_name:  'context'
+			short_name: 'C'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_context_separator'
+			long_name:  'context-separator'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_context_separator_negated'
+			long_name:  'no-context-separator'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_count'
+			long_name:  'count'
+			short_name: 'c'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_count_matches'
+			long_name:  'count-matches'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_crlf'
+			long_name:  'crlf'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_crlf_negated'
+			long_name:  'no-crlf'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_debug'
+			long_name:  'debug'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_dfa_size_limit'
+			long_name:  'dfa-size-limit'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_encoding'
+			long_name:  'encoding'
+			short_name: 'E'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_encoding_negated'
+			long_name:  'no-encoding'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_engine'
+			long_name:  'engine'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_field_context_separator'
+			long_name:  'field-context-separator'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_field_match_separator'
+			long_name:  'field-match-separator'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_file'
+			long_name:  'file'
+			short_name: 'f'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_files'
+			long_name:  'files'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_files_with_matches'
+			long_name:  'files-with-matches'
+			short_name: 'l'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_files_without_match'
+			long_name:  'files-without-match'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_fixed_strings'
+			long_name:  'fixed-strings'
+			short_name: 'F'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_fixed_strings_negated'
+			long_name:  'no-fixed-strings'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_follow'
+			long_name:  'follow'
+			short_name: 'L'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_follow_negated'
+			long_name:  'no-follow'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_generate'
+			long_name:  'generate'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_glob'
+			long_name:  'glob'
+			short_name: 'g'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_glob_case_insensitive'
+			long_name:  'glob-case-insensitive'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_glob_case_insensitive_negated'
+			long_name:  'no-glob-case-insensitive'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_heading'
+			long_name:  'heading'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_heading_negated'
+			long_name:  'no-heading'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_help'
+			long_name:  'help'
+			short_name: 'h'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_hidden'
+			long_name:  'hidden'
+			short_name: '.'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_hidden_negated'
+			long_name:  'no-hidden'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_hostname_bin'
+			long_name:  'hostname-bin'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_hyperlink_format'
+			long_name:  'hyperlink-format'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_iglob'
+			long_name:  'iglob'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_case'
+			long_name:  'ignore-case'
+			short_name: 'i'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_file'
+			long_name:  'ignore-file'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_file_case_insensitive'
+			long_name:  'ignore-file-case-insensitive'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_file_case_insensitive_negated'
+			long_name:  'no-ignore-file-case-insensitive'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_include_zero'
+			long_name:  'include-zero'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_include_zero_negated'
+			long_name:  'no-include-zero'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_invert_match'
+			long_name:  'invert-match'
+			short_name: 'v'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_invert_match_negated'
+			long_name:  'no-invert-match'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_json'
+			long_name:  'json'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_json_negated'
+			long_name:  'no-json'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_line_buffered'
+			long_name:  'line-buffered'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_line_buffered_negated'
+			long_name:  'no-line-buffered'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_line_number'
+			long_name:  'line-number'
+			short_name: 'n'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_line_number'
+			long_name:  'no-line-number'
+			short_name: 'N'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_line_regexp'
+			long_name:  'line-regexp'
+			short_name: 'x'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_max_columns'
+			long_name:  'max-columns'
+			short_name: 'M'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_max_columns_preview'
+			long_name:  'max-columns-preview'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_max_columns_preview_negated'
+			long_name:  'no-max-columns-preview'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_max_count'
+			long_name:  'max-count'
+			short_name: 'm'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_max_depth'
+			long_name:  'max-depth'
+			short_name: 'd'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_maxdepth_alias'
+			long_name:  'maxdepth'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_max_filesize'
+			long_name:  'max-filesize'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_mmap'
+			long_name:  'mmap'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_mmap_negated'
+			long_name:  'no-mmap'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_multiline'
+			long_name:  'multiline'
+			short_name: 'U'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_multiline_negated'
+			long_name:  'no-multiline'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_multiline_dotall'
+			long_name:  'multiline-dotall'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_multiline_dotall_negated'
+			long_name:  'no-multiline-dotall'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_config'
+			long_name:  'no-config'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore'
+			long_name:  'no-ignore'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_negated'
+			long_name:  'ignore'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_dot'
+			long_name:  'no-ignore-dot'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_dot_negated'
+			long_name:  'ignore-dot'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_exclude'
+			long_name:  'no-ignore-exclude'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_exclude_negated'
+			long_name:  'ignore-exclude'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_files'
+			long_name:  'no-ignore-files'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_files_negated'
+			long_name:  'ignore-files'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_global'
+			long_name:  'no-ignore-global'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_global_negated'
+			long_name:  'ignore-global'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_messages'
+			long_name:  'no-ignore-messages'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_messages_negated'
+			long_name:  'ignore-messages'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_parent'
+			long_name:  'no-ignore-parent'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_parent_negated'
+			long_name:  'ignore-parent'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_ignore_vcs'
+			long_name:  'no-ignore-vcs'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_ignore_vcs_negated'
+			long_name:  'ignore-vcs'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_messages'
+			long_name:  'no-messages'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_messages_negated'
+			long_name:  'messages'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_pcre2_unicode'
+			long_name:  'no-pcre2-unicode'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_pcre2_unicode_negated'
+			long_name:  'pcre2-unicode'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_require_git'
+			long_name:  'no-require-git'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_require_git_negated'
+			long_name:  'require-git'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_unicode'
+			long_name:  'no-unicode'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_unicode_negated'
+			long_name:  'unicode'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_null'
+			long_name:  'null'
+			short_name: '0'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_null_data'
+			long_name:  'null-data'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_one_file_system'
+			long_name:  'one-file-system'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_one_file_system_negated'
+			long_name:  'no-one-file-system'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_only_matching'
+			long_name:  'only-matching'
+			short_name: 'o'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_path_separator'
+			long_name:  'path-separator'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_passthru'
+			long_name:  'passthru'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_passthrough_alias'
+			long_name:  'passthrough'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_pcre2'
+			long_name:  'pcre2'
+			short_name: 'P'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_pcre2_negated'
+			long_name:  'no-pcre2'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_pcre2_version'
+			long_name:  'pcre2-version'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_pre'
+			long_name:  'pre'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_pre_negated'
+			long_name:  'no-pre'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_pre_glob'
+			long_name:  'pre-glob'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_pretty'
+			long_name:  'pretty'
+			short_name: 'p'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_quiet'
+			long_name:  'quiet'
+			short_name: 'q'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_regex_size_limit'
+			long_name:  'regex-size-limit'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_regexp'
+			long_name:  'regexp'
+			short_name: 'e'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_replace'
+			long_name:  'replace'
+			short_name: 'r'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_search_zip'
+			long_name:  'search-zip'
+			short_name: 'z'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_search_zip_negated'
+			long_name:  'no-search-zip'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_smart_case'
+			long_name:  'smart-case'
+			short_name: 'S'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_sort_files'
+			long_name:  'sort-files'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_sort_files_negated'
+			long_name:  'no-sort-files'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_sort'
+			long_name:  'sort'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_sortr'
+			long_name:  'sortr'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_stats'
+			long_name:  'stats'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_stats_negated'
+			long_name:  'no-stats'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_stop_on_nonmatch'
+			long_name:  'stop-on-nonmatch'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_text'
+			long_name:  'text'
+			short_name: 'a'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_text_negated'
+			long_name:  'no-text'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_threads'
+			long_name:  'threads'
+			short_name: 'j'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_trace'
+			long_name:  'trace'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_trim'
+			long_name:  'trim'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_trim_negated'
+			long_name:  'no-trim'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_type'
+			long_name:  'type'
+			short_name: 't'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_type_add'
+			long_name:  'type-add'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_type_clear'
+			long_name:  'type-clear'
+			short_name: ''
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_type_not'
+			long_name:  'type-not'
+			short_name: 'T'
+			takes_arg:  true
+		},
+		vflag.FlagDef{
+			field_name: 'flag_type_list'
+			long_name:  'type-list'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_unrestricted'
+			long_name:  'unrestricted'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_unrestricted_short'
+			long_name:  'flag-unrestricted-short'
+			short_name: 'u'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_version'
+			long_name:  'version'
+			short_name: 'V'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_vimgrep'
+			long_name:  'vimgrep'
+			short_name: ''
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_with_filename'
+			long_name:  'with-filename'
+			short_name: 'H'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_no_filename'
+			long_name:  'no-filename'
+			short_name: 'I'
+			takes_arg:  false
+		},
+		vflag.FlagDef{
+			field_name: 'flag_word_regexp'
+			long_name:  'word-regexp'
+			short_name: 'w'
+			takes_arg:  false
+		},
 	]
 }
 
@@ -1219,7 +1964,7 @@ fn occurrence_from_parsed(parsed vflag.ParsedFlag) !ParsedOccurrence {
 
 /// Return the flag ID for the flag of the given name.
 pub fn lookup(name string) ?FlagId {
-	for id in flags {
+	for id in flag_defs {
 		if id.name_long() == name {
 			return id
 		}
@@ -1239,7 +1984,7 @@ pub fn lookup(name string) ?FlagId {
 
 /// Look for a flag by its short name.
 fn lookup_short(name u8) ?FlagId {
-	for id in flags {
+	for id in flag_defs {
 		if short := id.name_short() {
 			if short == name {
 				return id
@@ -1285,19 +2030,20 @@ pub fn parse_low_raw(rawargs []string) !LowArgs {
 	fm.parse_defs(parse_schema_defs())!
 	mut args := default_low_args()
 	for parsed in fm.parsed_flags() {
+		parsed_name := parsed.name.clone()
 		occ := occurrence_from_parsed(parsed)!
 		if occ.id == .help {
-			args.special = if parsed.name == 'h' { .help_short } else { .help_long }
+			args.special = if parsed_name == 'h' { .help_short } else { .help_long }
 			continue
 		}
 		if occ.id == .version {
-			args.special = if parsed.name == 'V' { .version_short } else { .version_long }
+			args.special = if parsed_name == 'V' { .version_short } else { .version_long }
 			continue
 		}
-		mut flag_display := '--${parsed.name}'
+		mut flag_display := '--${parsed_name}'
 		if short_name := occ.id.name_short() {
-			if parsed.name.len == 1 && parsed.name[0] == short_name {
-				flag_display = '-${parsed.name}'
+			if parsed_name.len == 1 && parsed_name[0] == short_name {
+				flag_display = '-${parsed_name}'
 			}
 		}
 		for _ in 0 .. occ.repeats {
@@ -1340,7 +2086,7 @@ pub fn parse_low_raw(rawargs []string) !LowArgs {
 				}
 				return error('unrecognized flag --${name}')
 			}
-			return error('unrecognized flag -${unrecognized_short_name(arg)}')
+			return error('unrecognized flag -${unrecognized_short_name(arg.clone())}')
 		}
 		args.positional << arg.to_owned()
 	}

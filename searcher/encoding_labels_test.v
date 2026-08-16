@@ -2,7 +2,7 @@ module searcher
 
 // Generated from encoding_rs 0.8.35 by
 // build_script/generate_encoding_label_tests.rb.
-struct EncodingLabelCase {
+struct EncodingLabelCase implements IClone {
 	label     string
 	canonical string
 }

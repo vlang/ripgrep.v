@@ -11,7 +11,23 @@ const test_dir = 'ripgrep-v-integration-tests'
 /// The name given will be used to create the directory. Generally, it should
 /// correspond to the test name.
 fn setup(test_name string) (Dir, TestCommand) {
+	// V-specific: Rust's `rgtest!` macro invokes every test a second time with
+	// `setup_pcre2` when the PCRE2 feature is enabled. V tests do not have an
+	// equivalent item-generating macro, so a `-d pcre2` test build selects that
+	// second invocation here. The ordinary build still exercises the default
+	// regex engine.
+	$if pcre2 ? {
+		return setup_pcre2(test_name)
+	}
 	dir := Dir.new(test_name)
+	cmd := dir.command()
+	return dir, cmd
+}
+
+/// Like `setup`, but uses PCRE2 as the underlying regex engine.
+fn setup_pcre2(test_name string) (Dir, TestCommand) {
+	mut dir := Dir.new(test_name)
+	dir.pcre2(true)
 	cmd := dir.command()
 	return dir, cmd
 }
@@ -41,12 +57,13 @@ fn test_data_bytes(name string) []u8 {
 ///
 /// Directories are created from a process/time based suffix to avoid
 /// duplicates.
-struct Dir {
+struct Dir implements IClone {
 	/// The directory in which the test should run. If a test needs to create
 	/// files, they should go in here. This directory is also used as the CWD
 	/// for any processes created by the test.
 	dir string
 	/// Set to true when the test should use PCRE2 as the regex engine.
+mut:
 	pcre2 bool
 }
 
@@ -70,13 +87,13 @@ fn (mut dir Dir) pcre2(yes bool) {
 
 /// Returns true if and only if this test is configured to use PCRE2 as
 /// the regex engine.
-fn (dir Dir) is_pcre2() bool {
+fn (dir &Dir) is_pcre2() bool {
 	return dir.pcre2
 }
 
 /// Create a new file with the given name and contents in this directory,
 /// or panic on error.
-fn (dir Dir) create(name string, contents string) {
+fn (dir &Dir) create(name string, contents string) {
 	path := os.join_path(dir.dir, name)
 	parent := os.dir(path)
 	os.mkdir_all(parent) or { panic('${parent}: ${err.msg()}') }
@@ -85,25 +102,25 @@ fn (dir Dir) create(name string, contents string) {
 
 /// Create a new file with the given name and contents in this directory,
 /// or panic on error.
-fn (dir Dir) create_bytes(name string, contents []u8) {
+fn (dir &Dir) create_bytes(name string, contents &[]u8) {
 	path := os.join_path(dir.dir, name)
 	parent := os.dir(path)
 	os.mkdir_all(parent) or { panic('${parent}: ${err.msg()}') }
-	os.write_file_array(path, contents) or { panic('${path}: ${err.msg()}') }
+	os.write_file_array(path, contents.clone()) or { panic('${path}: ${err.msg()}') }
 }
 
 /// Try to create a new file with the given name and contents in this
 /// directory.
-fn (dir Dir) try_create_bytes(name string, contents []u8) bool {
+fn (dir &Dir) try_create_bytes(name string, contents &[]u8) bool {
 	path := os.join_path(dir.dir, name)
 	parent := os.dir(path)
 	os.mkdir_all(parent) or { return false }
-	os.write_file_array(path, contents) or { return false }
+	os.write_file_array(path, contents.clone()) or { return false }
 	return true
 }
 
 /// Create a new file with the given name and size.
-fn (dir Dir) create_size(name string, filesize u64) {
+fn (dir &Dir) create_size(name string, filesize u64) {
 	path := os.join_path(dir.dir, name)
 	parent := os.dir(path)
 	os.mkdir_all(parent) or { panic('${parent}: ${err.msg()}') }
@@ -112,21 +129,21 @@ fn (dir Dir) create_size(name string, filesize u64) {
 }
 
 /// Remove a file with the given name from this directory.
-fn (dir Dir) remove(name string) {
+fn (dir &Dir) remove(name string) {
 	path := os.join_path(dir.dir, name)
 	os.rm(path) or { panic('${path}: ${err.msg()}') }
 }
 
 /// Create a new directory with the given path (and any directories above
 /// it) inside this directory.
-fn (dir Dir) create_dir(path string) {
+fn (dir &Dir) create_dir(path string) {
 	full := os.join_path(dir.dir, path)
 	os.mkdir_all(full) or { panic('${full}: ${err.msg()}') }
 }
 
 /// Creates a directory symlink to the src with the given target name
 /// in this directory.
-fn (dir Dir) link_dir(src string, target string) {
+fn (dir &Dir) link_dir(src string, target string) {
 	src_path := os.join_path(dir.dir, src)
 	target_path := os.join_path(dir.dir, target)
 	os.rm(target_path) or {}
@@ -135,7 +152,7 @@ fn (dir Dir) link_dir(src string, target string) {
 
 /// Creates a file symlink to the src with the given target name
 /// in this directory.
-fn (dir Dir) link_file(src string, target string) {
+fn (dir &Dir) link_file(src string, target string) {
 	dir.link_dir(src, target)
 }
 
@@ -148,20 +165,20 @@ fn (dir Dir) link_file(src string, target string) {
 /// * Sets the `--path-separator` to `/` so that paths have the same output
 ///   on all systems. Tests that need to check `--path-separator` itself
 ///   can simply pass it again to override it.
-fn (dir Dir) command() TestCommand {
+fn (dir &Dir) command() TestCommand {
 	mut argv := ['--path-separator', '/']
 	if dir.is_pcre2() {
 		argv << '--pcre2'
 	}
 	return TestCommand{
-		dir:  dir
+		dir:  dir.clone()
 		argv: argv
 		env:  map[string]string{}
 	}
 }
 
 /// Returns the path to this directory.
-fn (dir Dir) path() string {
+fn (dir &Dir) path() string {
 	return dir.dir
 }
 
@@ -175,9 +192,10 @@ struct CommandOutput {
 
 /// A simple wrapper around a process command with some conveniences.
 struct TestCommand {
-	/// The dir used to launched this command.
-	dir Dir
+
 mut:
+	/// The directory in which to run the command.
+	dir Dir
 	/// The arguments passed to ripgrep.
 	argv []string
 	/// Environment variables set for this command.
@@ -191,7 +209,7 @@ fn (mut cmd TestCommand) arg(arg string) &TestCommand {
 }
 
 /// Add any number of arguments to the command.
-fn (mut cmd TestCommand) args(args []string) &TestCommand {
+fn (mut cmd TestCommand) args(args &[]string) &TestCommand {
 	cmd.argv << args
 	return &cmd
 }
@@ -302,10 +320,18 @@ fn (mut cmd TestCommand) raw_output_with_redirect(stdin_path ?string) CommandOut
 	}
 	env_prefix := if env_words.len == 0 { '' } else { '${env_words.join(' ')} ' }
 	mut line := 'cd ${sh_quote(cmd.dir.path())} && ${env_prefix}${words.join(' ')}'
-	path := stdin_path or { '' }
-	if path.len > 0 {
-		line += ' < ${sh_quote(path)}'
+	// V-specific: Rust's `Command::output` connects stdin to the null device
+	// unless the command explicitly configures it. `os.execute` inherits stdin,
+	// so redirect it here to preserve the upstream test harness semantics and
+	// avoid making ripgrep's implicit-path heuristic search an unused pipe.
+	input_path := stdin_path or {
+		$if windows {
+			'NUL'
+		} $else {
+			'/dev/null'
+		}
 	}
+	line += ' < ${sh_quote(input_path)}'
 	line += ' > ${sh_quote(stdout_path)} 2> ${sh_quote(stderr_path)}'
 	if os.getenv_opt('RGV_TRACE') != none {
 		eprintln(line)
@@ -326,14 +352,17 @@ fn (mut cmd TestCommand) raw_output_with_redirect(stdin_path ?string) CommandOut
 	}
 }
 
-fn command_failure_message(cmd TestCommand, o CommandOutput, message string) string {
+fn command_failure_message(cmd &TestCommand, o &CommandOutput, message string) string {
 	return '\n\n==========\n${message}\n\ncommand: ${cmd.argv}\n\ncwd: ${cmd.dir.path()}\n\ndir list: ${dir_list(cmd.dir.path())}\n\nstatus: ${o.code}\n\nstdout: ${o.stdout}\n\nstderr: ${o.stderr}\n\n==========\n'
 }
 
 fn dir_list(path string) []string {
 	mut paths := []string{}
-	os.walk(path, fn [mut paths] (entry string) {
-		paths << entry
+	paths_ptr := unsafe { &paths }
+	os.walk(path, fn [paths_ptr] (entry string) {
+		unsafe {
+			(*paths_ptr) << entry
+		}
 	})
 	return paths
 }
@@ -414,7 +443,7 @@ fn strip_jemalloc_nonsense(data string) string {
 	return kept.join('\n') + '\n'
 }
 
-fn utf8_lossy(data []u8) string {
+fn utf8_lossy(data &[]u8) string {
 	mut out := []u8{cap: data.len}
 	mut i := 0
 	for i < data.len {
@@ -430,7 +459,7 @@ fn utf8_lossy(data []u8) string {
 	return out.bytestr()
 }
 
-fn valid_utf8_sequence_len(data []u8, i int) int {
+fn valid_utf8_sequence_len(data &[]u8, i int) int {
 	b0 := data[i]
 	if b0 < 0x80 {
 		return 1
@@ -484,7 +513,7 @@ fn valid_utf8_sequence_len(data []u8, i int) int {
 	return 0
 }
 
-fn has_continuation(data []u8, i int, n int) bool {
+fn has_continuation(data &[]u8, i int, n int) bool {
 	if i + n >= data.len {
 		return false
 	}

@@ -435,14 +435,16 @@ pub fn (mut builder RegexMatcherBuilder) max_jit_stack_size(bytes ?usize) &Regex
 }
 
 /// An implementation of the `Matcher` trait using PCRE2.
+@[heap]
 pub struct RegexMatcher implements IClone, Drop {
 	// V-specific: PCRE2 resources are owned by the shim object. The reference
 	// count protects by-value aliases, while `clone` duplicates Rust's owned
 	// regex state.
-	inner               voidptr
-	refs                &stdatomic.AtomicVal[int]
 	capture_count_value usize
-	capture_names       &CaptureNames = unsafe { nil }
+mut:
+	inner         voidptr
+	refs          &stdatomic.AtomicVal[int] = unsafe { nil }
+	capture_names &CaptureNames = unsafe { nil }
 }
 
 @[heap]
@@ -533,7 +535,7 @@ fn (re &RegexMatcher) match_context() voidptr {
 	return voidptr(0)
 }
 
-pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+pub fn (re &RegexMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	$if pcre2 ? {
 		if at > haystack.len {
 			return matcher.FallibleMatch.absent()
@@ -550,7 +552,9 @@ pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatc
 			C.rg_pcre2_match_data_free(match_data)
 		}
 		mut empty_subject := [u8(0)]
-		subject := if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
+		subject := unsafe {
+			if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
+		}
 		rc := C.rg_pcre2_match(code, subject, usize(haystack.len), at, u32(0), match_data,
 			re.match_context())
 		if rc == C.rg_pcre2_error_nomatch() {
@@ -568,7 +572,7 @@ pub fn (re &RegexMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatc
 
 // V-specific helper used by the printer wrapper because V interfaces cannot
 // express Rust associated capture types.
-pub fn (re &RegexMatcher) capture_groups_at(haystack []u8, at usize) !(matcher.FallibleMatch, []string) {
+pub fn (re &RegexMatcher) capture_groups_at(haystack &[]u8, at usize) !(matcher.FallibleMatch, []string) {
 	mut caps := re.new_captures()!
 	if !re.captures_at(haystack, at, mut caps)! {
 		return matcher.FallibleMatch.absent(), []string{}
@@ -603,7 +607,7 @@ pub fn (re &RegexMatcher) capture_index(name string) ?usize {
 	return none
 }
 
-pub fn (re &RegexMatcher) try_find_iter(haystack []u8, matched fn (matcher.Match) !bool) ! {
+pub fn (re &RegexMatcher) try_find_iter(haystack &[]u8, matched fn (matcher.Match) !bool) ! {
 	matcher.try_find_iter(re, haystack, matched)!
 }
 
@@ -636,7 +640,9 @@ fn pcre2_capture_names(code voidptr) map[string]usize {
 fn pcre2_error_message(code int) string {
 	$if pcre2 ? {
 		mut buf := []u8{len: 256}
-		C.rg_pcre2_error_message(code, &char(buf.data), usize(buf.len))
+		unsafe {
+			C.rg_pcre2_error_message(code, &char(buf.data), usize(buf.len))
+		}
 		mut end := 0
 		for end < buf.len && buf[end] != 0 {
 			end++
@@ -646,7 +652,7 @@ fn pcre2_error_message(code int) string {
 	return 'PCRE2 error ${code}'
 }
 
-pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCaptures) !bool {
+pub fn (re &RegexMatcher) captures_at(haystack &[]u8, at usize, mut caps RegexCaptures) !bool {
 	$if pcre2 ? {
 		caps.clear()
 		if at > haystack.len {
@@ -664,7 +670,9 @@ pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCap
 			C.rg_pcre2_match_data_free(match_data)
 		}
 		mut empty_subject := [u8(0)]
-		subject := if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
+		subject := unsafe {
+			if haystack.len == 0 { &empty_subject[0] } else { &haystack[0] }
+		}
 		rc := C.rg_pcre2_match(code, subject, usize(haystack.len), at, u32(0), match_data,
 			re.match_context())
 		if rc == C.rg_pcre2_error_nomatch() {
@@ -704,6 +712,7 @@ pub fn (re &RegexMatcher) captures_at(haystack []u8, at usize, mut caps RegexCap
 /// index of the group using the corresponding matcher's `capture_index`
 /// method, and then use that index with `RegexCaptures.get`.
 pub struct RegexCaptures implements IClone {
+mut:
 	/// Where the locations are stored.
 	locs []?matcher.Match
 }
@@ -751,11 +760,11 @@ pub fn (re &RegexMatcher) line_terminator() ?matcher.LineTerminator {
 	return none
 }
 
-pub fn (re &RegexMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+pub fn (re &RegexMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind {
 	return matcher.default_find_candidate_line(re, haystack)
 }
 
-pub fn (re &RegexMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+pub fn (re &RegexMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
 	return matcher.shortest_match_at(re, haystack, at)
 }
 
@@ -775,11 +784,11 @@ pub fn RegexMatcherRef.new[^a](re &^a RegexMatcher) RegexMatcherRef[^a] {
 	}
 }
 
-pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack []u8, at usize) !matcher.FallibleMatch {
+pub fn (re RegexMatcherRef[^a]) find_at[^a](haystack &[]u8, at usize) !matcher.FallibleMatch {
 	return re.re.find_at(haystack, at)
 }
 
-pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack []u8, at usize) !matcher.FallibleUsize {
+pub fn (re RegexMatcherRef[^a]) shortest_match_at[^a](haystack &[]u8, at usize) !matcher.FallibleUsize {
 	return re.re.shortest_match_at(haystack, at)
 }
 
@@ -795,7 +804,7 @@ pub fn (re RegexMatcherRef[^a]) capture_index[^a](name string) ?usize {
 	return matcher.default_capture_index(name)
 }
 
-pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+pub fn (re RegexMatcherRef[^a]) captures_at[^a](haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
@@ -808,7 +817,7 @@ pub fn (re RegexMatcherRef[^a]) line_terminator[^a]() ?matcher.LineTerminator {
 	return re.re.line_terminator()
 }
 
-pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack []u8) !matcher.FallibleLineMatchKind {
+pub fn (re RegexMatcherRef[^a]) find_candidate_line[^a](haystack &[]u8) !matcher.FallibleLineMatchKind {
 	return re.re.find_candidate_line(haystack)
 }
 

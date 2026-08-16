@@ -2,6 +2,7 @@ module printer
 
 import log
 import os
+import sync.arc
 
 /// Hyperlink configuration.
 ///
@@ -12,27 +13,43 @@ import os
 ///
 /// A hyperlink configuration can be provided to printer builders such as
 /// `StandardBuilder.hyperlink`.
-pub struct HyperlinkConfig implements IClone {
+// V-specific: Rust models this as `HyperlinkConfig(Arc<HyperlinkConfigInner>)`.
+// The inner value holds the environment and format; cloning the config shares
+// it via the atomic refcount instead of copying it.
+struct HyperlinkConfigInner implements IClone {
 	env_    HyperlinkEnvironment
 	format_ HyperlinkFormat
+}
+
+pub struct HyperlinkConfig implements IClone {
+	inner arc.Arc[HyperlinkConfigInner]
 }
 
 /// Create a new configuration from an environment and a format.
 pub fn HyperlinkConfig.new(env HyperlinkEnvironment, format HyperlinkFormat) HyperlinkConfig {
 	return HyperlinkConfig{
-		env_:    env
-		format_: format
+		inner: arc.new(HyperlinkConfigInner{
+			env_:    env
+			format_: format
+		})
 	}
+}
+
+// default returns a configuration that emits no hyperlinks (an empty format).
+// This mirrors Rust's `impl Default for HyperlinkConfig`, and gives every
+// `HyperlinkConfig`-typed field a live Arc instead of a nil zero value.
+pub fn HyperlinkConfig.default() HyperlinkConfig {
+	return HyperlinkConfig.new(HyperlinkEnvironment{}, HyperlinkFormat{})
 }
 
 /// Returns the hyperlink environment in this configuration.
 fn (config &^a HyperlinkConfig) environment[^a]() &^a HyperlinkEnvironment {
-	return &config.env_
+	return &config.inner.get().env_
 }
 
 /// Returns the hyperlink format in this configuration.
 fn (config &^a HyperlinkConfig) format[^a]() &^a HyperlinkFormat {
-	return &config.format_
+	return &config.inner.get().format_
 }
 
 /// A hyperlink format with variables.
@@ -608,7 +625,8 @@ mut:
 
 // V-specific: explicitly releases the reusable interpolation buffer.
 fn (mut interpolator Interpolator) free() {
-	unsafe { interpolator.buf.free() }
+	// Assigning an empty array auto-drops (frees) the buffer once under v3
+	// ownership; a manual `.free()` first would double-free.
 	interpolator.buf = []u8{}
 }
 
@@ -693,6 +711,7 @@ fn InterpolatorStatus.inactive() InterpolatorStatus {
 ///
 /// This is the value to use as-is in the hyperlink, converted from an OS file
 /// path.
+@[heap]
 struct HyperlinkPath implements IClone {
 	// V-specific: the tuple struct payload is exposed to the rest of the
 	// translated printer module as a named field.

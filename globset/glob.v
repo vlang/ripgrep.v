@@ -66,8 +66,7 @@ fn match_strategy_new(pat &Glob) MatchStrategy {
 			kind:  .prefix
 			value: prefix
 		}
-	} else if suffix_pair := pat.suffix() {
-		suffix, component := suffix_pair
+	} else if suffix, component := pat.suffix() {
 		return MatchStrategy{
 			kind:      .suffix
 			value:     suffix
@@ -85,6 +84,7 @@ fn match_strategy_new(pat &Glob) MatchStrategy {
 }
 
 struct TokenRange implements IClone {
+	mut:
 	start rune
 	end   rune
 }
@@ -190,6 +190,34 @@ mut:
 	tokens []Token
 }
 
+// V-specific: the current compiler-generated `IClone` lowering expands
+// mutually recursive aggregate fields at compile time. `Token` and `Tokens`
+// are recursive through their arrays, so spell out Rust's derived deep clone
+// and let the recursion occur only for values present at runtime.
+fn (tok &Token) clone() Token {
+	mut patterns := []Tokens{cap: tok.patterns.len}
+	for pattern in tok.patterns {
+		patterns << pattern.clone()
+	}
+	return Token{
+		kind: tok.kind
+		ch: tok.ch
+		negated: tok.negated
+		ranges: tok.ranges.clone()
+		patterns: patterns
+	}
+}
+
+fn (tokens &Tokens) clone() Tokens {
+	mut cloned := []Token{cap: tokens.tokens.len}
+	for token in tokens.tokens {
+		cloned << token.clone()
+	}
+	return Tokens{
+		tokens: cloned
+	}
+}
+
 fn Tokens.default() Tokens {
 	return Tokens{
 		tokens: []Token{}
@@ -221,6 +249,7 @@ fn (t Tokens) str() string {
 }
 
 struct GlobOptions implements IClone {
+	mut:
 	/// Whether to match case insensitively.
 	case_insensitive    bool
 	/// Whether to require a literal separator to match a separator in a file
@@ -254,10 +283,15 @@ fn glob_options_default() GlobOptions {
 /// It cannot be used directly to match file paths, but it can be converted
 /// to a regular expression string or a matcher.
 pub struct Glob implements IClone {
+	mut:
 	glob_  string
 	re_    string
 	opts   GlobOptions
 	tokens Tokens
+	// V-specific: V represents `&[]Token` as a pointer to an array descriptor.
+	// Keep the basename slice descriptor in the `Glob` so the translated
+	// lifetime-bearing return never takes the address of a temporary slice.
+	basename_tokens_view []Token
 }
 
 pub fn (g Glob) == (other Glob) bool {
@@ -268,6 +302,13 @@ pub fn (g Glob) == (other Glob) bool {
 pub fn Glob.new(glob string) !Glob {
 	mut builder := GlobBuilder.new(&glob)
 	return builder.build()
+}
+
+/// Builds a new pattern with default options from its string representation.
+///
+/// This is the V-exposed equivalent of Rust's `FromStr` implementation.
+pub fn Glob.from_str(glob string) !Glob {
+	return Glob.new(glob)
 }
 
 /// Returns a matcher for this pattern.
@@ -356,7 +397,7 @@ fn (g &Glob) ext() ?string {
 	}
 	mut lit := '.'
 	for i := start + 2; i < g.tokens.tokens.len; i++ {
-		tok := g.tokens.tokens[i]
+		tok := &g.tokens.tokens[i]
 		if tok.kind != .literal || tok.ch == `.` || tok.ch == `/` {
 			return none
 		}
@@ -376,7 +417,7 @@ fn (g &Glob) required_ext() ?string {
 	// need to check for is if it ends with a literal of the form `.ext`.
 	mut chars := []rune{}
 	for i := g.tokens.tokens.len - 1; i >= 0; i-- {
-		tok := g.tokens.tokens[i]
+		tok := &g.tokens.tokens[i]
 		if tok.kind != .literal {
 			return none
 		}
@@ -406,7 +447,7 @@ fn (g &Glob) prefix() ?string {
 	}
 	mut end := g.tokens.tokens.len
 	mut need_sep := false
-	last := g.tokens.tokens[g.tokens.tokens.len - 1]
+	last := &g.tokens.tokens[g.tokens.tokens.len - 1]
 	if last.kind == .zero_or_more {
 		if g.opts.literal_separator {
 			// If a trailing `*` can't match a `/`, then we can't
@@ -424,7 +465,7 @@ fn (g &Glob) prefix() ?string {
 	}
 	mut lit := ''
 	for i := 0; i < end; i++ {
-		tok := g.tokens.tokens[i]
+		tok := &g.tokens.tokens[i]
 		if tok.kind != .literal {
 			return none
 		}
@@ -480,7 +521,7 @@ fn (g &Glob) suffix() ?(string, bool) {
 		start++
 	}
 	for i := start; i < g.tokens.tokens.len; i++ {
-		tok := g.tokens.tokens[i]
+		tok := &g.tokens.tokens[i]
 		if tok.kind != .literal {
 			return none
 		}
@@ -517,7 +558,7 @@ fn (g &^a Glob) basename_tokens[^a]() ?&^a []Token {
 		return none
 	}
 	for i := 1; i < g.tokens.tokens.len; i++ {
-		tok := g.tokens.tokens[i]
+		tok := &g.tokens.tokens[i]
 		match tok.kind {
 			.literal {
 				if tok.ch == `/` {
@@ -541,7 +582,7 @@ fn (g &^a Glob) basename_tokens[^a]() ?&^a []Token {
 			}
 		}
 	}
-	return unsafe { &g.tokens.tokens[1..] }
+	return &g.basename_tokens_view
 }
 
 /// Returns the pattern as a literal if and only if the pattern exclusively
@@ -640,12 +681,18 @@ pub fn (builder &GlobBuilder[^a]) build() !Glob {
 		}
 		return glob_err
 	}
-	tokens := parser.branches.pop() or { panic('glob parser invariant violated') }
+	tokens := parser.branches.pop()
+	basename_tokens_view := if tokens.tokens.len > 1 {
+		tokens.tokens[1..].clone()
+	} else {
+		[]Token{}
+	}
 	return Glob{
-		glob_:  (*builder.glob).to_owned()
-		re_:    tokens.to_regex_with(&builder.opts)
-		opts:   builder.opts.clone()
-		tokens: tokens
+		glob_:                (*builder.glob).to_owned()
+		re_:                  tokens.to_regex_with(&builder.opts)
+		opts:                 builder.opts.clone()
+		tokens:               tokens
+		basename_tokens_view: basename_tokens_view
 	}
 }
 
@@ -721,12 +768,13 @@ fn (tokens &Tokens) to_regex_with(options &GlobOptions) string {
 		re += r'$'
 		return re
 	}
-	tokens.tokens_to_regex(options, &tokens.tokens, mut re)
+	re += tokens.tokens_to_regex(options, &tokens.tokens)
 	re += r'$'
 	return re
 }
 
-fn (tokens &Tokens) tokens_to_regex(options &GlobOptions, src &[]Token, mut re string) {
+fn (tokens &Tokens) tokens_to_regex(options &GlobOptions, src &[]Token) string {
+	mut re := ''
 	for tok in *src {
 		match tok.kind {
 			.literal {
@@ -767,8 +815,7 @@ fn (tokens &Tokens) tokens_to_regex(options &GlobOptions, src &[]Token, mut re s
 			.alternates {
 				mut parts := []string{}
 				for pat in tok.patterns {
-					mut alt := ''
-					pat.tokens_to_regex(options, &pat.tokens, mut alt)
+					alt := pat.tokens_to_regex(options, &pat.tokens)
 					if alt != '' || options.empty_alternates {
 						parts << alt
 					}
@@ -781,6 +828,7 @@ fn (tokens &Tokens) tokens_to_regex(options &GlobOptions, src &[]Token, mut re s
 			}
 		}
 	}
+	return re
 }
 
 /// Convert a Unicode scalar value to an escaped string suitable for use as
@@ -899,7 +947,7 @@ fn (mut p Parser[^a]) pop_alternate() ! {
 	assert start <= p.branches.len
 	mut patterns := []Tokens{}
 	for p.branches.len > start {
-		patterns << (p.branches.pop() or { panic('missing alternate branch') })
+		patterns << p.branches.pop()
 	}
 	patterns.reverse_in_place()
 	p.push_token(token_alternates(patterns))!
@@ -989,10 +1037,9 @@ fn (mut p Parser[^a]) parse_star() ! {
 	if next == none {
 		assert p.bump() == none
 		is_suffix = true
-	} else if ((next or { panic('missing character') }) == `,`
-		|| (next or { panic('missing character') }) == `}`) && p.branches.len >= 2 {
+	} else if (next == `,` || next == `}`) && p.branches.len >= 2 {
 		is_suffix = true
-	} else if is_separator(next or { panic('missing character') }) {
+	} else if is_separator(next) {
 		assert is_separator(p.bump() or { panic('missing separator') })
 		is_suffix = false
 	} else {
@@ -1012,16 +1059,18 @@ fn (mut p Parser[^a]) parse_star() ! {
 	}
 }
 
-fn add_to_last_range(glob &string, mut range TokenRange, add rune) !TokenRange {
-	range.end = add
-	if range.end < range.start {
+fn (p &Parser[^a]) add_to_last_range[^a](range TokenRange, add rune) !TokenRange {
+	if add < range.start {
 		glob_err := GlobError{
-			glob_: (*glob).to_owned()
-			kind_: ErrorKind.invalid_range(range.start, range.end)
+			glob_: (*p.glob).to_owned()
+			kind_: ErrorKind.invalid_range(range.start, add)
 		}
 		return glob_err
 	}
-	return range
+	return TokenRange{
+		start: range.start
+		end:   add
+	}
 }
 
 fn (mut p Parser[^a]) parse_class() ! {
@@ -1032,8 +1081,7 @@ fn (mut p Parser[^a]) parse_class() ! {
 	mut ranges := []TokenRange{}
 	mut negated := false
 	peek := p.peek()
-	if peek != none && ((peek or { panic('missing character') }) == `!`
-		|| (peek or { panic('missing character') }) == `^`) {
+	if peek != none && (peek == `!` || peek == `^`) {
 		_ := p.bump()
 		negated = true
 	}
@@ -1071,7 +1119,7 @@ fn (mut p Parser[^a]) parse_class() ! {
 				} else if in_range {
 					// invariant: in_range is only set when there is
 					// already at least one character seen.
-					ranges[ranges.len - 1] = add_to_last_range(p.glob, ranges[ranges.len - 1], `-`)!
+				ranges[ranges.len - 1] = p.add_to_last_range(ranges[ranges.len - 1], `-`)!
 					in_range = false
 				} else {
 					assert ranges.len > 0
@@ -1082,7 +1130,7 @@ fn (mut p Parser[^a]) parse_class() ! {
 				if in_range {
 					// invariant: in_range is only set when there is
 					// already at least one character seen.
-					ranges[ranges.len - 1] = add_to_last_range(p.glob, ranges[ranges.len - 1], ch)!
+				ranges[ranges.len - 1] = p.add_to_last_range(ranges[ranges.len - 1], ch)!
 				} else {
 					ranges << TokenRange{
 						start: ch

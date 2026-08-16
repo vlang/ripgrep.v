@@ -4,7 +4,7 @@ module globset
 ///
 /// V-specific: Rust implements serde's `Serialize` trait for `Glob`. V does
 /// not have serde traits, so this exposes the equivalent operation directly.
-pub fn (g Glob) to_json() string {
+pub fn (g &Glob) to_json() string {
 	return json_quote(*g.glob())
 }
 

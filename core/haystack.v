@@ -95,13 +95,13 @@ mut:
 
 fn Haystack.new(dent ignore.DirEntry, strip_dot_prefix bool) Haystack {
 	return Haystack{
-		path_value:       haystack_path_value(dent, strip_dot_prefix)
+		path_value:       haystack_path_value(&dent, strip_dot_prefix)
 		dent:             dent
 		strip_dot_prefix: strip_dot_prefix
 	}
 }
 
-fn haystack_path_value(dent ignore.DirEntry, strip_dot_prefix bool) string {
+fn haystack_path_value(dent &ignore.DirEntry, strip_dot_prefix bool) string {
 	path := *dent.path()
 	if strip_dot_prefix && path.starts_with('./') {
 		return path[2..].to_owned()
@@ -120,7 +120,8 @@ pub fn (hay &^a Haystack) path[^a]() &^a string {
 // V-specific: releases the path cache while leaving the borrowed walk entry
 // owned by the caller's WalkResult.
 pub fn (mut hay Haystack) free_path_cache() {
-	unsafe { hay.path_value.free() }
+	// Assigning '' auto-drops (frees) the old owned path once under v3 ownership;
+	// a manual `.free()` first would double-free.
 	hay.path_value = ''
 }
 

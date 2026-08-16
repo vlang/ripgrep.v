@@ -79,8 +79,8 @@ pub fn escape(bytes []u8) string {
 /// Escapes an OS string into a human readable string.
 ///
 /// This is like [`escape`], but accepts an OS string.
-pub fn escape_os(string string) string {
-	return escape(string.bytes())
+pub fn escape_os(s string) string {
+	return escape(s.bytes())
 }
 
 /// Unescapes a string.
@@ -178,8 +178,8 @@ pub fn unescape(s string) []u8 {
 ///
 /// Note that this first lossily decodes the given OS string as UTF-8. That
 /// is, an escaped string (the thing given) should be valid UTF-8.
-pub fn unescape_os(string string) []u8 {
-	return unescape(string)
+pub fn unescape_os(s string) []u8 {
+	return unescape(s)
 }
 
 fn is_printable_ascii(b u8) bool {

@@ -5,7 +5,7 @@ module flags
 pub fn generate_man() string {
 	categories := doc_category_order()
 	mut cats := []string{len: categories.len}
-	for flag in flags {
+	for flag in flag_defs {
 		idx := doc_category_index(flag.doc_category())
 		if cats[idx] != '' {
 			cats[idx] += '.sp\n'

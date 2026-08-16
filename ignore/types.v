@@ -85,8 +85,6 @@ assert matcher_.matched('y.cpp', false).is_whitelist()
 ```
 */
 
-type FileTypeDefRef[^a] = &^a FileTypeDef
-
 /// Glob represents a single glob in a set of file type definitions.
 ///
 /// There may be more than one glob for a particular file type.
@@ -106,7 +104,7 @@ type FileTypeDefRef[^a] = &^a FileTypeDef
 /// the translated gitignore matcher in this module.
 pub struct TypesGlob[^a] implements IClone {
 	kind TypesGlobInner
-	def  ?FileTypeDefRef[^a]
+	def  ?&^a FileTypeDef
 }
 
 enum TypesGlobInner {
@@ -120,7 +118,7 @@ fn TypesGlob.unmatched[^a]() TypesGlob[^a] {
 	}
 }
 
-fn TypesGlob.matched[^a](def FileTypeDefRef[^a]) TypesGlob[^a] {
+fn TypesGlob.matched[^a](def &^a FileTypeDef) TypesGlob[^a] {
 	return TypesGlob[^a]{
 		kind: .matched
 		def:  def
@@ -130,7 +128,7 @@ fn TypesGlob.matched[^a](def FileTypeDefRef[^a]) TypesGlob[^a] {
 /// Return the file type definition that matched, if one exists. A file type
 /// definition always exists when a specific definition matches a file
 /// path.
-pub fn (g &TypesGlob[^a]) file_type_def[^a]() ?FileTypeDefRef[^a] {
+pub fn (g &TypesGlob[^a]) file_type_def[^a]() ?&^a FileTypeDef {
 	return g.def
 }
 
@@ -140,18 +138,19 @@ pub fn (g &TypesGlob[^a]) file_type_def[^a]() ?FileTypeDefRef[^a] {
 /// matcher. File type definitions are also reported when its responsible
 /// for a match.
 pub struct FileTypeDef implements IClone {
-	name  string
-	globs []string
+	mut:
+	name_  string
+	globs_ []string
 }
 
 /// Return the name of this file type.
 pub fn (def &^a FileTypeDef) name[^a]() &^a string {
-	return &def.name
+	return &def.name_
 }
 
 /// Return the globs used to recognize this file type.
 pub fn (def &^a FileTypeDef) globs[^a]() &^a []string {
-	return &def.globs
+	return &def.globs_
 }
 
 /// Types is a file type matcher.
@@ -211,8 +210,8 @@ fn (sel &^a SelectionDef) inner_ref[^a]() &^a FileTypeDef {
 
 fn FileTypeDef.new(name string) FileTypeDef {
 	return FileTypeDef{
-		name:  name.to_owned()
-		globs: []string{}
+		name_:  name.to_owned()
+		globs_: []string{}
 	}
 }
 
@@ -358,14 +357,13 @@ pub fn (builder &TypesBuilder) build() (Types, bool, IgnoreError) {
 		def := builder.types[name] or {
 			return Types.empty(), true, unrecognized_file_type_error(name)
 		}
-		for iglob, glob in def.globs {
+		for iglob, glob in def.globs_ {
 			mut glob_builder := globset.GlobBuilder.new(&glob)
 			glob_builder.literal_separator(true)
 			parsed := glob_builder.build() or {
-				glob_err := err as globset.GlobError
-				return Types.empty(), true, glob_error(glob, (*glob_err.kind()).str())
+				return Types.empty(), true, glob_error(glob.clone(), err.msg())
 			}
-			build_set.add(parsed)
+			build_set.add(parsed.clone())
 			glob_to_selection << GlobSelectionIndex{
 				selection: usize(isel)
 				glob:      usize(iglob)
@@ -390,10 +388,10 @@ pub fn (builder &TypesBuilder) definitions() []FileTypeDef {
 	mut defs := []FileTypeDef{}
 	for _, def in builder.types {
 		mut cloned := def.clone()
-		cloned.globs.sort(a < b)
+		cloned.globs_.sort(a < b)
 		defs << cloned
 	}
-	defs.sort(a.name < b.name)
+	defs.sort(a.name_ < b.name_)
 	return defs
 }
 
@@ -441,8 +439,8 @@ pub fn (mut builder TypesBuilder) add(name string, glob string) (bool, IgnoreErr
 		return true, invalid_definition_error()
 	}
 	mut def := builder.types[name] or { FileTypeDef.new(name) }
-	def.globs << glob.to_owned()
-	builder.types[name] = def
+	def.globs_ << glob.to_owned()
+	builder.types[name] = def.clone()
 	return false, IgnoreError{}
 }
 
@@ -477,8 +475,8 @@ pub fn (mut builder TypesBuilder) add_def(def string) (bool, IgnoreError) {
 				return true, invalid_definition_error()
 			}
 			for type_name in type_names {
-				globs := builder.types[type_name] or { continue }
-				for glob in globs.globs {
+				globs := (builder.types[type_name] or { continue }).clone()
+				for glob in globs.globs_ {
 					has_err, err := builder.add(name, glob)
 					if has_err {
 						return true, err
@@ -497,7 +495,7 @@ pub fn (mut builder TypesBuilder) add_def(def string) (bool, IgnoreError) {
 pub fn (mut builder TypesBuilder) add_defaults() &TypesBuilder {
 	for def in default_types() {
 		for name in def.names {
-				for glob in def.globs {
+			for glob in def.globs {
 					has_err, err := builder.add(name, glob)
 					if has_err {
 						panic(ignore_error_str(err))

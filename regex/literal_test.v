@@ -113,7 +113,8 @@ fn test_inner_literals_respect_backend_acceleration() {
 	accelerated := ConfiguredHIR.new(config.clone(), ['foo[a-z]+'])!
 	accelerated_re := accelerated.to_regex()!
 	assert accelerated_re.is_accelerated()
-	assert !InnerLiterals.new(&accelerated, &accelerated_re).seq.is_finite()
+	accelerated_literals := InnerLiterals.new(&accelerated, &accelerated_re)
+	assert !accelerated_literals.seq.is_finite()
 
 	unicode_word := ConfiguredHIR.new(config.clone(), [r'foo\b[a-z]+'])!
 	unicode_word_re := unicode_word.to_regex()!
@@ -125,7 +126,8 @@ fn test_inner_literals_respect_backend_acceleration() {
 	ascii_word_re := ascii_word.to_regex()!
 	assert ascii_word_re.is_accelerated()
 	assert !ascii_word_re.contains_word_unicode()
-	assert !InnerLiterals.new(&ascii_word, &ascii_word_re).seq.is_finite()
+	ascii_word_literals := InnerLiterals.new(&ascii_word, &ascii_word_re)
+	assert !ascii_word_literals.seq.is_finite()
 
 	case_folded := ConfiguredHIR.new(config, [r'(?i:e.x|ex)'])!
 	case_folded_re := case_folded.to_regex()!

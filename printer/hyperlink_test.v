@@ -202,7 +202,7 @@ fn test_hyperlink_aliases_are_valid_formats() {
 	for alias in hyperlink_aliases() {
 		name := alias.name().clone()
 		format := alias.format().clone()
-		parse_hyperlink_format(format) or {
+		parse_hyperlink_format(format.clone()) or {
 			assert false, "invalid hyperlink alias '${name}': ${format}"
 		}
 	}

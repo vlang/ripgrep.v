@@ -38,8 +38,8 @@ fn summary_no_color_buffer() cli.Buffer {
 	return cli.BufferWriter.stdout(.never).buffer()
 }
 
-fn summary_printer_contents(mut printer Summary[cli.Buffer]) string {
-	return printer.get_mut().as_slice().bytestr()
+fn summary_printer_contents(mut printer_ Summary[cli.Buffer]) string {
+	return printer_.get_mut().as_slice().bytestr()
 }
 
 fn summary_assert_eq_printed(expected string, got string) {
@@ -52,10 +52,10 @@ fn test_summary_path_with_match_error() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.path_with_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink) or { return }
 	assert false
 }
@@ -64,10 +64,10 @@ fn test_summary_path_without_match_error() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.path_without_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink) or { return }
 	assert false
 }
@@ -76,13 +76,13 @@ fn test_summary_count_no_path() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('2\n', got)
 }
 
@@ -103,14 +103,14 @@ fn test_summary_count_no_path_even_with_path() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
 	builder.path(false)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('2\n', got)
 }
 
@@ -118,14 +118,14 @@ fn test_summary_count_path() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlock:2\n', got)
 }
 
@@ -134,14 +134,14 @@ fn test_summary_count_path_with_zero() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
 	builder.exclude_zero(false)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlock:0\n', got)
 }
 
@@ -150,14 +150,14 @@ fn test_summary_count_path_without_zero() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
 	builder.exclude_zero(true)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('', got)
 }
 
@@ -166,14 +166,14 @@ fn test_summary_count_path_field_separator() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
 	builder.separator_field('ZZ'.bytes())
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlockZZ2\n', got)
 }
 
@@ -182,14 +182,14 @@ fn test_summary_count_path_terminator() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
 	builder.path_terminator(u8(0))
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlock\x002\n', got)
 }
 
@@ -198,14 +198,14 @@ fn test_summary_count_path_separator() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
 	builder.separator_path(u8(`\\`))
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := '/home/andrew/sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('\\home\\andrew\\sherlock:2\n', got)
 }
 
@@ -213,15 +213,15 @@ fn test_summary_count_max_matches() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut searcher_builder := searcher.SearcherBuilder.new()
 	searcher_builder.max_matches(u64(1))
 	mut built := searcher_builder.build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
-	mut sink := printer.sink(PrinterMatcher.rust_regex(matcher_))
+	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('1\n', got)
 }
 
@@ -229,14 +229,14 @@ fn test_summary_count_matches() {
 	matcher_ := regex.RegexMatcher.new(r'Watson|Sherlock') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.count_matches)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlock:4\n', got)
 }
 
@@ -244,14 +244,14 @@ fn test_summary_path_with_match_found() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.path_with_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlock\n', got)
 }
 
@@ -259,14 +259,14 @@ fn test_summary_path_with_match_not_found() {
 	matcher_ := regex.RegexMatcher.new(r'ZZZZZZZZ') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.path_with_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('', got)
 }
 
@@ -274,14 +274,14 @@ fn test_summary_path_without_match_found() {
 	matcher_ := regex.RegexMatcher.new(r'ZZZZZZZZZ') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.path_without_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('sherlock\n', got)
 }
 
@@ -289,14 +289,14 @@ fn test_summary_path_without_match_not_found() {
 	matcher_ := regex.RegexMatcher.new(r'Watson') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.path_without_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	built.search_reader(matcher_, mut rdr, &sink)!
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('', got)
 }
 
@@ -304,15 +304,15 @@ fn test_summary_quiet() {
 	matcher_ := regex.RegexMatcher.new(r'Watson|Sherlock') or { panic(err) }
 	mut builder := SummaryBuilder.new()
 	builder.kind(.quiet_with_match)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	built.search_reader(matcher_, mut rdr, &sink)!
 	match_count := sink.match_count
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('', got)
 	// There is actually more than one match, but Quiet should quit after
 	// finding the first one.
@@ -324,9 +324,9 @@ fn test_summary_quiet_with_stats() {
 	mut builder := SummaryBuilder.new()
 	builder.kind(.quiet_with_match)
 	builder.stats(true)
-	mut printer := builder.build(summary_no_color_buffer())
+	mut printer_ := builder.build(summary_no_color_buffer())
 	path := 'sherlock'
-	mut sink := printer.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
+	mut sink := printer_.sink_with_path(PrinterMatcher.rust_regex(matcher_), &path)
 	mut built := searcher.SearcherBuilder.new().build()
 	mut rdr := SummaryByteSliceReader.new(summary_sherlock)
 	built.search_reader(matcher_, mut rdr, &sink)!
@@ -335,7 +335,7 @@ fn test_summary_quiet_with_stats() {
 	assert stats.matches() == u64(4)
 	assert stats.matched_lines() == u64(3)
 
-	got := summary_printer_contents(mut printer)
+	got := summary_printer_contents(mut printer_)
 	summary_assert_eq_printed('', got)
 	// There is actually more than one match, and Quiet will usually quit
 	// after finding the first one, but since we request stats, it will

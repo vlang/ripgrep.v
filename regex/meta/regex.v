@@ -134,11 +134,8 @@ fn (inst &Inst) clone() Inst {
 }
 
 fn (mut inst Inst) free() {
-	unsafe {
-		inst.val_str.free()
-		inst.char_class.free()
-		inst.char_ranges.free()
-	}
+	// Assigning defaults auto-drops (frees) each owned field exactly once under
+	// v3 ownership; a manual `.free()` first would double-free.
 	inst.val_str = ''
 	inst.char_class = []rune{}
 	inst.char_ranges = []RuneRange{}
@@ -349,7 +346,7 @@ pub fn (re &Regex) contains_word_unicode() bool {
 	return false
 }
 
-fn (mut re Regex) drop() {
+pub fn (mut re Regex) drop() {
 	if isnil(re.refs) {
 		return
 	}
@@ -465,8 +462,8 @@ fn read_rune_at(str &u8, len int, index int) (rune, int) {
 		}
 		if index + 2 < len && is_utf8_continuation_byte(str[index + 1])
 			&& is_utf8_continuation_byte(str[index + 2]) {
-			if b0 == 0xe0 && str[index + 1] >= 0xa0 || b0 >= 0xe1 && b0 <= 0xec
-				|| b0 == 0xed && str[index + 1] <= 0x9f || b0 >= 0xee && b0 <= 0xef {
+			if (b0 == 0xe0 && str[index + 1] >= 0xa0) || (b0 >= 0xe1 && b0 <= 0xec)
+				|| (b0 == 0xed && str[index + 1] <= 0x9f) || (b0 >= 0xee && b0 <= 0xef) {
 				return rune((u32(b0 & 0x0f) << 12) | (u32(str[index + 1] & 0x3f) << 6) | u32(str[
 					index + 2] & 0x3f)), 3
 			}
@@ -474,8 +471,8 @@ fn read_rune_at(str &u8, len int, index int) (rune, int) {
 		if index + 3 < len && is_utf8_continuation_byte(str[index + 1])
 			&& is_utf8_continuation_byte(str[index + 2])
 			&& is_utf8_continuation_byte(str[index + 3]) {
-			if b0 == 0xf0 && str[index + 1] >= 0x90 || b0 >= 0xf1 && b0 <= 0xf3
-				|| b0 == 0xf4 && str[index + 1] <= 0x8f {
+			if (b0 == 0xf0 && str[index + 1] >= 0x90) || (b0 >= 0xf1 && b0 <= 0xf3)
+				|| (b0 == 0xf4 && str[index + 1] <= 0x8f) {
 				return rune((u32(b0 & 0x07) << 18) | (u32(str[index + 1] & 0x3f) << 12) | (u32(str[
 					index + 2] & 0x3f) << 6) | u32(str[index + 3] & 0x3f)), 4
 			}
@@ -580,7 +577,7 @@ pub fn compile_with_limits(pattern string, size_limit usize, memo_size_limit usi
 	mut compiler := Compiler{
 		prog: []Inst{cap: 128}
 	}
-	compiler.emit_node(root)
+	compiler.emit_node(&root)
 	compiler.emit(Inst{ typ: .match })
 
 	// Phase 3: Optimization
@@ -603,7 +600,7 @@ pub fn compile_with_limits(pattern string, size_limit usize, memo_size_limit usi
 	mut needs_memo := false
 
 	if optimized_prog.len > 0 {
-		first := optimized_prog[0]
+		first := &optimized_prog[0]
 		if first.typ == .string {
 			prefix = first.val_str.clone()
 			has_prefix = true
@@ -688,7 +685,7 @@ fn (mut c Compiler) optimize() []Inst {
 
 	mut i := 0
 	for i < c.prog.len {
-		inst := c.prog[i]
+		inst := &c.prog[i]
 		idx_map[i] = new_prog.len
 
 		// Optimization: Merge consecutive chars
@@ -696,7 +693,7 @@ fn (mut c Compiler) optimize() []Inst {
 			mut s_val := unsafe { u8(inst.val).ascii_str() }
 			mut j := i + 1
 			for j < c.prog.len && !targets[j] {
-				next := c.prog[j]
+				next := &c.prog[j]
 				if next.typ == .char && !next.ignore_case && next.val < 128 {
 					s_val += unsafe { u8(next.val).ascii_str() }
 					j++
@@ -737,8 +734,6 @@ fn (mut c Compiler) optimize() []Inst {
 // It populates the bitmap for O(1) ASCII matching and the slice for Unicode.
 fn (mut c Compiler) emit_class(node Node) {
 	mut bitmap := [4]u32{}
-	mut char_class := node.char_set.clone()
-	char_ranges := node.char_ranges.clone()
 	mut inverted := node.inverted
 
 	// Pre-compile common classes into the bitmap for O(1) lookups
@@ -831,8 +826,8 @@ fn (mut c Compiler) emit_class(node Node) {
 
 	c.emit(Inst{
 		typ:          .class
-		char_class:   char_class
-		char_ranges:  char_ranges
+		char_class:   node.char_set.clone()
+		char_ranges:  node.char_ranges.clone()
 		bitmap:       bitmap
 		inverted:     inverted
 		ignore_case:  node.ignore_case
@@ -842,7 +837,7 @@ fn (mut c Compiler) emit_class(node Node) {
 }
 
 // emit_node handles quantifiers and loops, delegating the actual logic to emit_logic.
-fn (mut c Compiler) emit_node(node Node) {
+fn (mut c Compiler) emit_node(node &Node) {
 	if node.typ in [.start_of_string, .end_of_string, .start_of_haystack, .end_of_haystack,
 		.word_boundary, .non_word_boundary] {
 		// Repeating a zero-width assertion is idempotent. Emitting the generic
@@ -913,8 +908,8 @@ fn (mut c Compiler) emit_logic(node Node) {
 			if node.group_capture_index != -1 {
 				c.emit(Inst{ typ: .save, group_idx: node.group_capture_index * 2 })
 			}
-			for child in node.nodes {
-				c.emit_node(child)
+			for ci in 0 .. node.nodes.len {
+				c.emit_node(&node.nodes[ci])
 			}
 			if node.group_capture_index != -1 {
 				c.emit(Inst{ typ: .save, group_idx: node.group_capture_index * 2 + 1 })
@@ -928,14 +923,14 @@ fn (mut c Compiler) emit_logic(node Node) {
 			for i := 0; i < node.alternatives.len - 1; i++ {
 				split_idx := c.emit(Inst{ typ: .split })
 				c.prog[split_idx].target_x = c.prog.len
-				for child in node.alternatives[i] {
-					c.emit_node(child)
+				for ci in 0 .. node.alternatives[i].len {
+					c.emit_node(&node.alternatives[i][ci])
 				}
 				end_jumps << c.emit(Inst{ typ: .jmp })
 				c.prog[split_idx].target_y = c.prog.len
 			}
-			for child in node.alternatives.last() {
-				c.emit_node(child)
+			for ci in 0 .. node.alternatives[node.alternatives.len - 1].len {
+				c.emit_node(&node.alternatives[node.alternatives.len - 1][ci])
 			}
 			for idx in end_jumps {
 				c.prog[idx].target_x = c.prog.len
@@ -1435,7 +1430,7 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 					pos++
 				}
 			}
-			parsed_nodes.last().quant = q
+			parsed_nodes[parsed_nodes.len - 1].quant = q
 		}
 		current_sequence << parsed_nodes
 	}
@@ -1809,7 +1804,7 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 							m.grown_stack = []int{len: new_len}
 							m.grown_stack.flags |= .noslices
 							for i in 0 .. stack_ptr {
-								m.grown_stack[i] = stack_data[i]
+								m.grown_stack[i] = m.inline_stack[i]
 							}
 						} else {
 							m.grown_stack.grow_len(new_len - m.grown_stack.len)
@@ -1970,9 +1965,10 @@ pub fn (r &Regex) find_all(text string) []Match {
 	mut i := 0
 	for i <= text.len {
 		if res := r.vm_match(text, i, mut m) {
+			end := res.end
 			matches << res
-			if res.end > i {
-				i = res.end
+			if end > i {
+				i = end
 			} else {
 				// The bytes matcher reports empty matches between every pair of
 				// bytes, including inside a valid UTF-8 encoding.

@@ -40,7 +40,7 @@ mut:
 	fail_after int
 }
 
-fn LimitedChunkReaderForSearch.new(bytes []u8, chunk int, fail_after int) LimitedChunkReaderForSearch {
+fn LimitedChunkReaderForSearch.new(bytes &[]u8, chunk int, fail_after int) LimitedChunkReaderForSearch {
 	return LimitedChunkReaderForSearch{
 		bytes:      bytes.clone()
 		chunk:      chunk
@@ -80,7 +80,7 @@ fn (m LiteralMatcher) with_line_term(line_term ?matcher.LineTerminator) LiteralM
 	}
 }
 
-fn (m LiteralMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+fn (m LiteralMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	if at > haystack.len {
 		return matcher.FallibleMatch.absent()
 	}
@@ -104,7 +104,7 @@ fn (m LiteralMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
 	return matcher.FallibleMatch.absent()
 }
 
-fn (m LiteralMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+fn (m LiteralMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
 	return matcher.shortest_match_at(m, haystack, at)
 }
 
@@ -124,7 +124,7 @@ fn (m LiteralMatcher) capture_index(name string) ?usize {
 	return none
 }
 
-fn (m LiteralMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m LiteralMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	_ = haystack
 	_ = at
@@ -141,7 +141,7 @@ fn (m LiteralMatcher) line_terminator() ?matcher.LineTerminator {
 	return m.line_term
 }
 
-fn (m LiteralMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+fn (m LiteralMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind {
 	maybe_match := m.find_at(haystack, 0)!
 	mat := maybe_match.get() or {
 		return matcher.FallibleLineMatchKind.absent()
@@ -151,14 +151,14 @@ fn (m LiteralMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMa
 
 struct ShortestMatchOnlyMatcher {}
 
-fn (m ShortestMatchOnlyMatcher) find_at(haystack []u8, at usize) !matcher.FallibleMatch {
+fn (m ShortestMatchOnlyMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	_ = m
 	_ = haystack
 	_ = at
 	return error('search core called find_at instead of shortest_match_at')
 }
 
-fn (m ShortestMatchOnlyMatcher) shortest_match_at(haystack []u8, at usize) !matcher.FallibleUsize {
+fn (m ShortestMatchOnlyMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
 	_ = m
 	for i := at; i < haystack.len; i++ {
 		if haystack[i] == `x` {
@@ -183,7 +183,7 @@ fn (m ShortestMatchOnlyMatcher) capture_index(name string) ?usize {
 	return matcher.default_capture_index(name)
 }
 
-fn (m ShortestMatchOnlyMatcher) captures_at(haystack []u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m ShortestMatchOnlyMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
@@ -198,7 +198,7 @@ fn (m ShortestMatchOnlyMatcher) line_terminator() ?matcher.LineTerminator {
 	return none
 }
 
-fn (m ShortestMatchOnlyMatcher) find_candidate_line(haystack []u8) !matcher.FallibleLineMatchKind {
+fn (m ShortestMatchOnlyMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind {
 	_ = m
 	_ = haystack
 	return error('slow line search should not request a candidate line')
@@ -571,7 +571,7 @@ fn test_search_reader_explicit_utf16le_streams_until_quit() {
 	for _ in 0 .. 256 {
 		haystack << [u8(`x`), 0, `\n`, 0]
 	}
-	mut source := LimitedChunkReaderForSearch.new(haystack, 5, 16)
+	mut source := LimitedChunkReaderForSearch.new(&haystack, 5, 16)
 	mut builder := SearcherBuilder.new()
 	encoding := Encoding.new('utf-16le')!
 	builder.encoding(encoding)
@@ -591,7 +591,7 @@ fn test_search_reader_bom_sniffed_utf16le_streams_until_quit() {
 	for _ in 0 .. 256 {
 		haystack << [u8(`x`), 0, `\n`, 0]
 	}
-	mut source := LimitedChunkReaderForSearch.new(haystack, 5, 20)
+	mut source := LimitedChunkReaderForSearch.new(&haystack, 5, 20)
 	mut builder := SearcherBuilder.new()
 	builder.max_matches(u64(1))
 	mut searcher_ := builder.build()
@@ -609,7 +609,7 @@ fn test_search_reader_iconv_encoding_streams_until_quit() {
 	for _ in 0 .. 256 {
 		haystack << 'x\n'.bytes()
 	}
-	mut source := LimitedChunkReaderForSearch.new(haystack, 5, 16)
+	mut source := LimitedChunkReaderForSearch.new(&haystack, 5, 16)
 	mut builder := SearcherBuilder.new()
 	encoding := Encoding.new('cp1251')!
 	builder.encoding(encoding)
@@ -626,7 +626,7 @@ fn test_search_reader_iconv_encoding_streams_until_quit() {
 
 fn test_search_reader_shift_jis_preserves_one_byte_chunk_boundaries() {
 	haystack := [u8(0x93), 0xfa, 0x96, 0x7b, `\n`]
-	mut source := LimitedChunkReaderForSearch.new(haystack, 1, haystack.len)
+	mut source := LimitedChunkReaderForSearch.new(&haystack, 1, haystack.len)
 	mut builder := SearcherBuilder.new()
 	builder.encoding(Encoding.new('shift_jis')!)
 	mut searcher_ := builder.build()
@@ -637,7 +637,7 @@ fn test_search_reader_shift_jis_preserves_one_byte_chunk_boundaries() {
 
 fn test_search_reader_iso2022jp_preserves_state_across_one_byte_chunks() {
 	haystack := [u8(0x1b), `$`, `B`, 0x24, 0x22, 0x1b, `(`, `B`, `\n`]
-	mut source := LimitedChunkReaderForSearch.new(haystack, 1, haystack.len)
+	mut source := LimitedChunkReaderForSearch.new(&haystack, 1, haystack.len)
 	mut builder := SearcherBuilder.new()
 	builder.encoding(Encoding.new('iso-2022-jp')!)
 	mut searcher_ := builder.build()

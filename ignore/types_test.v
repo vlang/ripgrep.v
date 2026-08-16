@@ -136,8 +136,8 @@ fn test_types_definitions_preserve_glob_syntax() {
 	assert !has_err, err.msg()
 	defs := builder.definitions()
 	assert defs.len == 1
-	assert defs[0].name == 'foo'
-	assert defs[0].globs == ['*.{rs,foo}']
+	assert *defs[0].name() == 'foo'
+	assert *defs[0].globs() == ['*.{rs,foo}']
 }
 
 fn test_types_build_rejects_invalid_glob() {
@@ -161,7 +161,7 @@ fn test_types_match_reports_definition_and_clones_matcher() {
 	mat := types_.matched('lib.rs', false)
 	glob := mat.inner() or { panic('missing type glob') }
 	def := glob.file_type_def() or { panic('missing file type definition') }
-	assert def.name == 'rust'
+	assert *def.name() == 'rust'
 
 	cloned := types_.clone()
 	assert cloned.matched('lib.rs', false).is_whitelist()

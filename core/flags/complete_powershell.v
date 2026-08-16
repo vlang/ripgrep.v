@@ -8,7 +8,7 @@ const complete_powershell_template_flag = "[CompletionResult]::new('!DASH_NAME!'
 /// using Clap 2.x. Improvements on this are welcome.
 pub fn generate_complete_powershell() string {
 	mut flags_out := ''
-	for i, flag in flags {
+	for i, flag in flag_defs {
 		doc := flag.doc_short().replace("'", "''")
 
 		dash_name := '--${flag.name_long()}'

@@ -4,7 +4,7 @@ import io
 
 $if !windows {
 	#include <string.h>
-	fn C.memchr(s voidptr, c int, n u64) voidptr
+	fn C.memchr(s voidptr, c i32, n usize) voidptr
 }
 
 /// The default buffer capacity that we use for the line buffer.
@@ -61,6 +61,7 @@ fn (d BinaryDetection) is_quit() bool {
 }
 
 struct LineBufferConfig implements IClone {
+mut:
 	/// The number of bytes to attempt to read at a time.
 	capacity usize
 	/// The line terminator.
@@ -230,10 +231,11 @@ fn (mut rdr LineBufferReader[^r, ^b]) consume[^r, ^b](amt usize) {
 /// Callers should create line buffers sparingly and reuse them when possible.
 /// Line buffers cannot be used directly, but instead must be used via the
 /// LineBufferReader.
+@[heap]
 struct LineBuffer implements IClone {
+mut:
 	/// The configuration of this buffer.
 	config LineBufferConfig
-mut:
 	/// The primary buffer with which to hold data.
 	buf []u8
 	/// The current position of this buffer. This is always a valid sliceable
@@ -343,8 +345,8 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 	assert lb.pos == 0
 	for {
 		lb.ensure_capacity()!
-		mut free := lb.free_buffer()
-		nread := rdr.read(mut free) or {
+		mut free_space := lb.free_buffer()
+		nread := rdr.read(mut free_space) or {
 			if is_reader_eof(err) {
 				0
 			} else {
@@ -493,7 +495,7 @@ fn find_byte(bytes []u8, byte u8) ?usize {
 	$if !windows {
 		unsafe {
 			base := voidptr(bytes.data)
-			found := C.memchr(base, int(byte), u64(bytes.len))
+			found := C.memchr(base, i32(byte), usize(bytes.len))
 			if isnil(found) {
 				return none
 			}

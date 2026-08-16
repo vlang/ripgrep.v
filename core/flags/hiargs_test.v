@@ -17,7 +17,7 @@ fn (mut w HiArgsBufferWriter) flush() ! {
 	_ = w
 }
 
-fn (mut w HiArgsBufferWriter) set_color(spec printer.ColorSpec) ! {
+fn (mut w HiArgsBufferWriter) set_color(spec &printer.ColorSpec) ! {
 	_ = w
 	_ = spec
 }
@@ -176,7 +176,7 @@ fn test_hiargs_builds_search_worker_components() {
 
 	mut low := default_low_args()
 	low.patterns = [pattern_regexp('needle')]
-	low.positional = [path]
+	low.positional = [path.clone()]
 	low.stats = true
 	hi := must_hiargs(mut low)
 
@@ -184,7 +184,7 @@ fn test_hiargs_builds_search_worker_components() {
 	searcher_ := hi.searcher() or { panic(err.msg()) }
 	printer_ := hi.printer(.standard, HiArgsBufferWriter{})
 	mut worker := hi.search_worker(matcher_, searcher_, printer_) or { panic(err.msg()) }
-	result := worker.search_path(&path) or { panic(err.msg()) }
+	result := worker.search_path(path) or { panic(err.msg()) }
 
 	assert result.has_match()
 	stats := result.stats() or { panic('missing stats') }

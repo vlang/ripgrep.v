@@ -3,6 +3,7 @@ module printer
 import log
 import matcher
 import searcher
+import sync.arc
 import time
 
 /// The configuration for the summary printer.
@@ -18,7 +19,9 @@ mut:
 	stats           bool
 	path            bool
 	exclude_zero    bool
-	separator_field []u8
+	// Rust: `Arc<Vec<u8>>`. Cloning the config shares the field separator bytes
+	// via the atomic refcount instead of deep-copying them.
+	separator_field arc.Arc[[]u8]
 	separator_path  ?u8
 	path_terminator ?u8
 }
@@ -27,11 +30,11 @@ fn default_summary_config() SummaryConfig {
 	return SummaryConfig{
 		kind:            .count
 		colors:          ColorSpecs{}
-		hyperlink:       HyperlinkConfig{}
+		hyperlink:       HyperlinkConfig.default()
 		stats:           false
 		path:            true
 		exclude_zero:    true
-		separator_field: [u8(`:`)]
+		separator_field: arc.new([u8(`:`)])
 	}
 }
 
@@ -263,7 +266,7 @@ pub fn (mut builder SummaryBuilder) exclude_zero(yes bool) &SummaryBuilder {
 ///
 /// By default, this is set to `:`.
 pub fn (mut builder SummaryBuilder) separator_field(sep []u8) &SummaryBuilder {
-	builder.config.separator_field = sep
+	builder.config.separator_field = arc.new(sep)
 	return builder
 }
 
@@ -443,10 +446,9 @@ mut:
 fn (mut sink SummarySink[^p, ^s, W]) drop[^p, ^s]() {
 	sink.matcher.drop()
 	sink.interpolator.free()
-	if mut path := sink.path {
-		path.free()
-		sink.path = ?PrinterPath(none)
-	}
+	// Assigning `none` auto-drops the `PrinterPath` (freeing its bytes once);
+	// unwrapping into a shallow copy and calling `.free()` first double-frees.
+	sink.path = ?PrinterPath(none)
 }
 
 /// Release resources owned by this sink once its search is complete.
@@ -530,7 +532,7 @@ fn (mut sink SummarySink[^p, ^s, W]) write_path_field[^p, ^s]() ! {
 		if term := sink.summary.config.path_terminator {
 			sink.write_all([term])!
 		} else {
-			sink.write_all(sink.summary.config.separator_field)!
+			sink.write_all(sink.summary.config.separator_field.get())!
 		}
 	}
 }
@@ -566,7 +568,7 @@ fn (mut sink SummarySink[^p, ^s, W]) write_line_term[^p, ^s](searcher_ &searcher
 }
 
 /// Write the given bytes using the give style.
-fn (mut sink SummarySink[^p, ^s, W]) write_spec[^p, ^s](spec ColorSpec, buf []u8) ! {
+fn (mut sink SummarySink[^p, ^s, W]) write_spec[^p, ^s](spec &ColorSpec, buf []u8) ! {
 	sink.summary.wtr.set_color(spec)!
 	sink.write_all(buf)!
 	sink.summary.wtr.reset()!
@@ -596,8 +598,11 @@ pub fn (mut sink SummarySink[^p, ^s, W]) matched[^b, ^p, ^s](searcher_ &searcher
 		buf := mat.buffer()
 		range := mat.bytes_range_in_buffer()
 		mut count := u64(0)
-		find_iter_at_in_context(searcher_, sink.matcher, buf, range, fn [mut count] (_mat matcher.Match) bool {
-			count++
+		// V closures capture by value; increment through a pointer so the count
+		// persists out of the callback (otherwise every line counts as one match).
+		count_ptr := &count
+		find_iter_at_in_context(searcher_, sink.matcher, buf, range, fn [count_ptr] (_mat matcher.Match) bool {
+			unsafe { (*count_ptr)++ }
 			return true
 		})!
 		// Because of `find_iter_at_in_context` being a giant
