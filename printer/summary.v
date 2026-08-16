@@ -550,6 +550,9 @@ fn (mut sink SummarySink[^p, ^s, W]) write_path[^p, ^s]() ! {
 
 /// Starts a hyperlink span when applicable.
 fn (mut sink SummarySink[^p, ^s, W]) start_hyperlink[^p, ^s]() !InterpolatorStatus {
+	if sink.summary.config.hyperlink.format().is_empty() {
+		return InterpolatorStatus.inactive()
+	}
 	if mut path := sink.path {
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)

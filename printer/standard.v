@@ -1322,6 +1322,9 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_path_hyperlink[^a, ^p, ^s](mut pa
 }
 
 fn (mut imp StandardImpl[^a, ^p, ^s, W]) start_hyperlink[^a, ^p, ^s](mut path PrinterPath[^p], line_number ?u64, column ?u64) !InterpolatorStatus {
+	if imp.config().hyperlink.format().is_empty() {
+		return InterpolatorStatus.inactive()
+	}
 	hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 	values := Values.new(hyperpath).line(line_number).column(column)
 	return imp.sink.interpolator.begin(&values, mut imp.sink.standard.wtr)

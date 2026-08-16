@@ -1,5 +1,6 @@
 module printer
 
+import cli
 import os
 
 fn test_printer_path_as_bytes() {
@@ -48,4 +49,14 @@ fn test_printer_path_caches_missing_hyperlink() {
 	assert ppath.as_hyperlink() == none
 	assert ppath.hyperlink_initialized
 	assert !ppath.has_hyperlink
+}
+
+fn test_path_printer_empty_hyperlink_format_skips_path_resolution() {
+	path := os.join_path(os.temp_dir(), 'ripgrep_v_printer_path_unresolved_hyperlink_test.txt')
+	os.rm(path) or {}
+	mut printer_ := PathPrinterBuilder.new().build(cli.BufferWriter.stdout(.always).buffer())
+	mut ppath := PrinterPath.new(&path)
+	status := printer_.start_hyperlink(mut ppath)!
+	assert !status.active
+	assert !ppath.hyperlink_initialized
 }

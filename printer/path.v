@@ -155,6 +155,9 @@ pub fn (mut pp PathPrinter[W]) flush() ! {
 /// Starts a hyperlink span when applicable.
 fn (mut pp PathPrinter[W]) start_hyperlink[^p](mut path PrinterPath[^p]) !InterpolatorStatus {
 	$if W is WriteColor {
+		if pp.config.hyperlink.format().is_empty() {
+			return InterpolatorStatus.inactive()
+		}
 		hyperpath := path.as_hyperlink() or { return InterpolatorStatus.inactive() }
 		values := Values.new(hyperpath)
 		return pp.interpolator.begin(&values, mut pp.wtr)
