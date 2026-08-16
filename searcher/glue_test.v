@@ -266,7 +266,10 @@ struct SearcherTester {
 	mut:
 	haystack                        string
 	pattern                         string
-	filter                          ?regex_meta.Regex
+	// V-specific: V3 cannot borrow a `Regex` payload directly from an optional
+	// field. Keep the Rust optional as an initialized value plus a presence bit.
+	filter_value                    regex_meta.Regex
+	has_filter                      bool
 	print_labels                    bool
 	expected_no_line_number         ?string
 	expected_with_line_number       ?string
@@ -288,7 +291,8 @@ fn SearcherTester.new(haystack string, pattern string) SearcherTester {
 	return SearcherTester{
 		haystack:        haystack.to_owned()
 		pattern:         pattern.to_owned()
-		filter:          none
+		filter_value:    regex_meta.compile('') or { panic(err) }
+		has_filter:      false
 		print_labels:    false
 		by_line:         true
 		multi_line:      true
@@ -353,7 +357,8 @@ fn (tester &SearcherTester) test() {
 /// printf debugging and only want one particular test configuration to
 /// execute.
 fn (mut tester SearcherTester) filter(pattern string) &SearcherTester {
-	tester.filter = regex_meta.compile(pattern) or { panic(err) }
+	tester.filter_value = regex_meta.compile(pattern) or { panic(err) }
+	tester.has_filter = true
 	return tester
 }
 
@@ -535,11 +540,10 @@ fn (tester &SearcherTester) minimal_heap_limit(multi_line bool) usize {
 /// Inclusion is determined by the filter specified. If no filter has been
 /// given, then this always returns `true`.
 fn (tester &SearcherTester) include(label string) bool {
-	if tester.filter == none {
+	if !tester.has_filter {
 		return true
 	}
-	filter := unsafe { &tester.filter? }
-	return filter.find(label) != none
+	return tester.filter_value.find(label) != none
 }
 
 // V-specific equivalent of Rust's `str::lines`, which recognizes `\n` and

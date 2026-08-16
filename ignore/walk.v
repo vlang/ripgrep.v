@@ -1153,9 +1153,9 @@ fn (mut walk Walk) enqueue_root_path(path string) {
 		walk.push_result(walk_result_from_entry(DirEntry.new_stdin()))
 		return
 	}
-	root, err := prepare_root_entry(path, walk.follow_links)
-	if err.kind != .other || err.message != '' {
-		walk.push_result(walk_result_from_error(err))
+	root, root_err := prepare_root_entry(path, walk.follow_links)
+	if root_err.kind != .other || root_err.message != '' {
+		walk.push_result(walk_result_from_error(root_err))
 		return
 	}
 	mut dent := root
@@ -1323,9 +1323,9 @@ fn (mut walk Walk) visit_root_path(mut visitor ParallelVisitor, path string) Wal
 		}
 		return .continue_
 	}
-	root, err := prepare_root_entry(path, walk.follow_links)
-	if err.kind != .other || err.message != '' {
-		return visitor.visit(walk_result_from_error(err))
+	root, root_err := prepare_root_entry(path, walk.follow_links)
+	if root_err.kind != .other || root_err.message != '' {
+		return visitor.visit(walk_result_from_error(root_err))
 	}
 	mut dent := root
 	mut ig := walk.ig_root.clone()
@@ -1869,7 +1869,7 @@ fn (wp &WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWo
 		}
 		root, root_err := prepare_root_entry(path, wp.follow_links)
 		if root_err.kind != .other || root_err.message != '' {
-			if visitor.visit(walk_result_from_error(root_err)).is_quit() {
+			if visitor.visit(walk_result_from_error(root_err.clone())).is_quit() {
 				return initial
 			}
 			continue
@@ -1879,7 +1879,8 @@ fn (wp &WalkParallel) initial_work(mut visitor ParallelVisitor) []WalkStealingWo
 			parent_ig, has_parent_err, parent_err := wp.ig_root.add_parents(root.path().clone())
 			ig.free_nodes()
 			ig = parent_ig
-			if has_parent_err && visitor.visit(walk_result_from_error(parent_err)).is_quit() {
+			if has_parent_err
+				&& visitor.visit(walk_result_from_error(parent_err.clone())).is_quit() {
 				return initial
 			}
 		}

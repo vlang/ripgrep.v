@@ -57,7 +57,7 @@ pub fn generate_complete_fish() string {
 				''
 			}
 			out += complete_fish_template_negated.replace('!NEGATED!', negated).replace('!SHORT!',
-				short_negated).replace('!LONG!', long).replace('!DOC!', doc)
+				short_negated.clone()).replace('!LONG!', long).replace('!DOC!', doc)
 		}
 	}
 	return out

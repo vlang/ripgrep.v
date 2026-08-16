@@ -301,19 +301,23 @@ fn (mut fm FlagMapper) parse_short_arg(arg string, pos int) !bool {
 
 fn (mut fm FlagMapper) parse_registered_flags() ! {
 	start := int(fm.config.skip)
+	mut stop := ''
+	mut has_stop := false
+	if configured_stop := fm.config.stop {
+		stop = configured_stop.clone()
+		has_stop = true
+	}
 	mut i := start
 	for i < fm.input.len {
 		if i in fm.handled_pos {
 			i++
 			continue
 		}
-		arg := fm.input[i]
-		if stop := fm.config.stop {
-			if arg == stop {
-				break
-			}
+		arg := fm.input[i].clone()
+		if has_stop && arg == stop {
+			break
 		}
-		if fm.parse_long_arg(arg, i)! {
+		if fm.parse_long_arg(arg.clone(), i)! {
 			i++
 			continue
 		}

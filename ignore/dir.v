@@ -113,8 +113,9 @@ mut:
 // happens automatically when the last owning Arc is dropped.
 struct IgnoreNode {
 mut:
-	/// The parent directory to match next (`none` at the root).
-	parent ?arc.Arc[IgnoreNode]
+	// V-specific: V3 cannot clone an `Option<Arc<T>>` field directly. This
+	// zero-or-one array preserves the Rust optional Arc and owns its handle.
+	parent []arc.Arc[IgnoreNode]
 	/// The path to the directory that this matcher was built from.
 	dir string
 	/// The matcher for custom ignore files
@@ -135,16 +136,8 @@ mut:
 // The borrow is tied to the caller's lifetime because the whole node chain is
 // kept alive by the originating `Ignore`.
 fn (node &^a IgnoreNode) parent_node[^a]() ?&^a IgnoreNode {
-	if p := node.parent {
-		return p.get()
-	}
-	return none
-}
-
-// clone_parent_arc returns an owned Arc handle to the parent node, if any.
-fn clone_parent_arc(node &IgnoreNode) ?arc.Arc[IgnoreNode] {
-	if p := node.parent {
-		return p.clone()
+	if node.parent.len > 0 {
+		return node.parent[0].get()
 	}
 	return none
 }
@@ -215,10 +208,7 @@ pub fn (ig &^a Ignore) path[^a]() &^a string {
 }
 
 pub fn (ig &Ignore) is_root() bool {
-	if _ := ig.node.get().parent {
-		return false
-	}
-	return true
+	return ig.node.get().parent.len == 0
 }
 
 pub fn (ig &Ignore) is_absolute_parent() bool {
@@ -226,8 +216,8 @@ pub fn (ig &Ignore) is_absolute_parent() bool {
 }
 
 pub fn (ig &Ignore) parent() ?Ignore {
-	if p := ig.node.get().parent {
-		return ig.with_node(p.clone())
+	if ig.node.get().parent.len > 0 {
+		return ig.with_node(ig.node.get().parent[0].clone())
 	}
 	return none
 }
@@ -368,7 +358,7 @@ fn (ig &Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
 	}
 	final_has_err, final_err := errs.into_error_option()
 	return IgnoreNode{
-		parent:                ig.node.clone()
+		parent:                [ig.node.clone()]
 		dir:                   normalize_path(dir).to_owned()
 		custom_ignore_matcher: custom_ig_matcher
 		ignore_matcher:        ig_matcher
@@ -563,12 +553,11 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 
 /// Returns an iterator over parent ignore matchers, including this one.
 pub fn (ig &Ignore) parents() Parents {
-	mut items := []Ignore{}
-	mut cur := ?arc.Arc[IgnoreNode](ig.node.clone())
-	for {
-		node_arc := cur or { break }
-		items << ig.with_node(node_arc.clone())
-		cur = clone_parent_arc(node_arc.get())
+	mut items := [ig.clone()]
+	mut node := ig.node.get()
+	for node.parent.len > 0 {
+		items << ig.with_node(node.parent[0].clone())
+		node = node.parent[0].get()
 	}
 	return Parents{
 		items: items
@@ -683,7 +672,6 @@ pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 	}
 	return Ignore{
 		node: arc.new(IgnoreNode{
-			parent:                none
 			dir:                   builder.dir.clone()
 			custom_ignore_matcher: Gitignore.empty()
 			ignore_matcher:        Gitignore.empty()
@@ -991,8 +979,8 @@ fn (ig &Ignore) first_relative_dir_after_absolute_path() string {
 	mut node := ig.node.get()
 	for {
 		if !node.is_absolute_parent {
-			if p := node.parent {
-				if p.get().is_absolute_parent {
+			if node.parent.len > 0 {
+				if node.parent[0].get().is_absolute_parent {
 					return node.dir
 				}
 			}

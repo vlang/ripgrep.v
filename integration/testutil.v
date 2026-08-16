@@ -383,7 +383,7 @@ fn rg_binary() string {
 	} else {
 		@VEXE
 	}
-	command := '${sh_quote(vbin)} -ownership -o ${sh_quote(out)} ${sh_quote(source)}'
+	command := '${sh_quote(vbin)} -no-memory-limit -d ownership -ownership -o ${sh_quote(out)} ${sh_quote(source)}'
 	result := os.execute(command)
 	if result.exit_code != 0 || !os.exists(out) || os.file_size(out) == 0 {
 		panic('failed to build integration rg binary with `${command}`:\n${result.output}')

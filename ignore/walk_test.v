@@ -396,7 +396,7 @@ fn test_no_ignores() {
 		'a/b/c'])
 }
 
-fn test_custom_ignore() {
+fn test_walk_custom_ignore() {
 	td := tmpdir()
 	defer {
 		td.cleanup()
@@ -436,7 +436,7 @@ fn test_custom_ignore_exclusive_use() {
 	assert_paths(td.path(), builder, ['bar', 'a', 'a/bar'])
 }
 
-fn test_gitignore() {
+fn test_walk_gitignore() {
 	td := tmpdir()
 	defer {
 		td.cleanup()
@@ -452,7 +452,7 @@ fn test_gitignore() {
 	assert_paths(td.path(), WalkBuilder.new(td.path()), ['bar', 'a', 'a/bar'])
 }
 
-fn test_explicit_ignore() {
+fn test_walk_explicit_ignore() {
 	td := tmpdir()
 	defer {
 		td.cleanup()
