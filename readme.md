@@ -14,13 +14,13 @@ the V mappings for functions whose names necessarily changed.
 The current tree was built with V from the exact current `origin/master`,
 commit `45676a0799d4d86aa9bfbe9ffcfbb7bec9e564a9`, and with the profiled V3
 optimizations in [vlang/v#28117](https://github.com/vlang/v/pull/28117), commit
-`3e804d43c7`. Both revisions compile the translation. A clean optimized V3
+`e5326b47f6`. Both revisions compile the translation. A clean optimized V3
 ownership compiler can be reproduced with:
 
 ```sh
 git -C /path/to/v fetch origin master
 git -C /path/to/v fetch origin v3-ripgrep-subsecond-compile
-git -C /path/to/v worktree add --detach /tmp/v-ripgrep-compiler 3e804d43c7
+git -C /path/to/v worktree add --detach /tmp/v-ripgrep-compiler e5326b47f6
 make -C /tmp/v-ripgrep-compiler
 /tmp/v-ripgrep-compiler/v -old-compiler -no-parallel -nocache -prod -gc none \
   -prealloc \
@@ -69,7 +69,7 @@ performing a byte-for-byte comparison.
 ## Clean Compile Time And Disk Use
 
 These measurements were taken on the same Apple M5 Max running macOS 26.5.
-V used V3 optimization commit `3e804d43c7` above, with the V3 compiler itself
+V used V3 optimization commit `e5326b47f6` above, with the V3 compiler itself
 built using `-prod -gc none -prealloc -d ownership`. Rust was `rustc 1.97.1`;
 the Rust source was ripgrep `15.1.0` at commit `4519153`. Dependencies were
 downloaded before timing. V used `-nocache`; every Rust run used a distinct
