@@ -14,13 +14,13 @@ the V mappings for functions whose names necessarily changed.
 The current tree was built with V from the exact current `origin/master`,
 commit `45676a0799d4d86aa9bfbe9ffcfbb7bec9e564a9`, and with the profiled V3
 optimizations in [vlang/v#28117](https://github.com/vlang/v/pull/28117), commit
-`5ce4469987`. Both revisions compile the translation. A clean optimized V3
+`3e804d43c7`. Both revisions compile the translation. A clean optimized V3
 ownership compiler can be reproduced with:
 
 ```sh
 git -C /path/to/v fetch origin master
 git -C /path/to/v fetch origin v3-ripgrep-subsecond-compile
-git -C /path/to/v worktree add --detach /tmp/v-ripgrep-compiler 5ce4469987
+git -C /path/to/v worktree add --detach /tmp/v-ripgrep-compiler 3e804d43c7
 make -C /tmp/v-ripgrep-compiler
 /tmp/v-ripgrep-compiler/v -old-compiler -no-parallel -nocache -prod -gc none \
   -prealloc \
@@ -69,27 +69,27 @@ performing a byte-for-byte comparison.
 ## Clean Compile Time And Disk Use
 
 These measurements were taken on the same Apple M5 Max running macOS 26.5.
-V used V3 optimization commit `5ce4469987` above, with the V3 compiler itself
+V used V3 optimization commit `3e804d43c7` above, with the V3 compiler itself
 built using `-prod -gc none -prealloc -d ownership`. Rust was `rustc 1.97.1`;
 the Rust source was ripgrep `15.1.0` at commit `4519153`. Dependencies were
 downloaded before timing. V used `-nocache`; every Rust run used a distinct
-empty target directory. The V debug result is the mean of 10 runs, while the
-other entries are medians of three clean runs.
+empty target directory. The V debug result is the median of five clean runs,
+while the other entries are medians of three clean runs.
 
 | Clean build mode | V | Rust |
 | --- | ---: | ---: |
-| Default/debug | 0.88 s | 3.26 s |
+| Default/debug | 0.89 s | 3.26 s |
 | Production/release | 12.24 s | 5.32 s |
 
 The V default/debug row omits `-prod` for the ripgrep_v target and uses TCC; the
 V3 compiler running that build remains a production compiler. Hyperfine
-measured `875.0 +/- 5.3 ms` over 10 runs (range 867.3--883.8 ms). The V
-production row uses `-prod`; a representative run spent 0.77 s in V3 through
-C generation and 11.33 s in external Clang `-O3 -flto`.
+measured a 905.4 ms median over a separate 10-run sample. The V production row
+uses `-prod`; a representative run spent 0.77 s in V3 through C generation and
+11.33 s in external Clang `-O3 -flto`.
 
 For comparison, unmodified V `origin/master` at `45676a079` took 1.555 s for
 the default/debug build under the same conditions. The profiled changes reduce
-that to 0.876 s, a 43.7% reduction.
+that to 0.887 s, a 43.0% reduction.
 
 The V frontend parses 268 files and 98,614 lines for this build: 57,113 lines
 come from ripgrep_v and 41,501 come from imported V library modules. Thus the
@@ -101,20 +101,20 @@ shows the median of five clean default/debug builds:
 
 | V3 stage | Time |
 | --- | ---: |
-| Parse setup/cache | 2.29 ms |
+| Parse setup/cache | 2.41 ms |
 | Parse `.vh` | 0.00 ms |
-| Parse `.v` in parallel | 21.13 ms |
-| Resolve imports | 15.78 ms |
-| Check in parallel | 213.22 ms |
-| Ownership (included in check) | 19.11 ms |
-| Mark used | 25.59 ms |
-| Transform in parallel | 118.27 ms |
-| Annotate types | 24.60 ms |
-| Monomorphize | 219.19 ms |
-| Generate C in parallel | 138.99 ms |
+| Parse `.v` in parallel | 20.83 ms |
+| Resolve imports | 16.22 ms |
+| Check in parallel | 221.12 ms |
+| Ownership (included in check) | 18.67 ms |
+| Mark used | 25.28 ms |
+| Transform in parallel | 119.11 ms |
+| Annotate types | 24.66 ms |
+| Monomorphize | 221.87 ms |
+| Generate C in parallel | 139.47 ms |
 | C object cache | 0.01 ms |
-| TCC | 96.76 ms |
-| Total | 875.74 ms |
+| TCC | 98.74 ms |
+| Total | 887.44 ms |
 
 Ownership is a nested part of the checker timing and is shown for visibility;
 it must not be added to the total a second time.
