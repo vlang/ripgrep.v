@@ -48,7 +48,7 @@ On macOS arm64, sorted output was byte-identical to installed Rust ripgrep
 | Workload | Lines | Bytes |
 | --- | ---: | ---: |
 | Explicit source search | 3,911 | 299,682 |
-| Default recursive `if` search | 9,407 | 676,739 |
+| Default recursive `if` search | 9,407 | 657,926 |
 | PCRE2 lookbehind search | 1,237 | 81,353 |
 
 The explicit source search was:
