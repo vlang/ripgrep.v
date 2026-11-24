@@ -6,6 +6,7 @@ import core.flags
 import ignore
 import printer
 import sync
+import sync.arc
 import sync.stdatomic
 import time
 
@@ -391,7 +392,7 @@ fn (mut visitor SearchParallelVisitor) free() {
 	unsafe { free(&visitor) }
 }
 
-fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {
+fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop arc.Atomic[bool]) bool {
 	walk.stream(events, stop)
 	return true
 }
@@ -446,11 +447,11 @@ fn files_parallel(args &flags.HiArgs) !bool {
 	if args.sort_requires_buffering() {
 		return files(args)
 	}
-	stop := stdatomic.new_atomic(false)
+	stop := arc.new_atomic(false)
 	results := chan FilesParallelResult{cap: parallel_job_queue_capacity}
 	walk := args.walk_builder()!.build_parallel()
 	producer := spawn files_parallel_producer(walk, args.haystack_builder(),
-		args.quit_after_match(), results, stop)
+		args.quit_after_match(), results, stop.clone())
 
 	mut matched := false
 	mut output_err := ?IError(none)
@@ -493,9 +494,9 @@ fn (mut result FilesParallelResult) free() {
 	result.path = ''
 }
 
-fn files_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, quit_after_match bool, results chan FilesParallelResult, stop &stdatomic.AtomicVal[bool]) bool {
+fn files_parallel_producer(walk ignore.WalkParallel, haystack_builder core.HaystackBuilder, quit_after_match bool, results chan FilesParallelResult, stop arc.Atomic[bool]) bool {
 	events := chan ignore.WalkParallelStreamResult{cap: parallel_job_queue_capacity}
-	stream := spawn walk_parallel_stream_runner(walk, events, stop)
+	stream := spawn walk_parallel_stream_runner(walk, events, stop.clone())
 	for {
 		mut event := <-events
 		if event.done {

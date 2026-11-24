@@ -2,6 +2,7 @@ module ignore
 
 import os
 import sync
+import sync.arc
 import sync.stdatomic
 
 fn wfile(path string, contents string) {
@@ -159,13 +160,13 @@ fn walk_collect_parallel(prefix string, builder &WalkBuilder) []string {
 	return paths
 }
 
-fn walk_parallel_stream_test_runner(walk WalkParallel, events chan WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {
+fn walk_parallel_stream_test_runner(walk WalkParallel, events chan WalkParallelStreamResult, stop arc.Atomic[bool]) bool {
 	walk.stream(events, stop)
 	return true
 }
 
 fn walk_collect_stream(prefix string, builder &WalkBuilder) []string {
-	stop := stdatomic.new_atomic(false)
+	stop := arc.new_atomic(false)
 	events := chan WalkParallelStreamResult{cap: 32}
 	stream := spawn walk_parallel_stream_test_runner(builder.build_parallel(), events, stop)
 	mut paths := []string{}

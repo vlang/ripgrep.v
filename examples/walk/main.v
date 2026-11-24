@@ -2,7 +2,7 @@ module main
 
 import ignore
 import os
-import sync.stdatomic
+import sync.arc
 
 enum DirEntryKind {
 	walkdir
@@ -61,7 +61,7 @@ fn walkdir_paths(root string) ![]string {
 	return paths
 }
 
-fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop &stdatomic.AtomicVal[bool]) bool {
+fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop arc.Atomic[bool]) bool {
 	walk.stream(events, stop)
 	return true
 }
@@ -92,7 +92,7 @@ fn main() {
 	if parallel {
 		mut builder := ignore.WalkBuilder.new(path)
 		builder.threads(6)
-		stop := stdatomic.new_atomic(false)
+		stop := arc.new_atomic(false)
 		events := chan ignore.WalkParallelStreamResult{cap: 100}
 		stream_thread := spawn walk_parallel_stream_runner(builder.build_parallel(), events,
 			stop)

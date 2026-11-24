@@ -53,10 +53,12 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   thread-shared callbacks and visitors. The V walker synchronizes shared state at
   runtime and joins its workers before returning. V's proposed default thread-transfer
   check rejects the two-worker mutable-counter probe. A follow-up permits a direct
-  scalar borrow with a lexical deferred join. The combined compiler still rejects
-  the V walker's borrowed atomics and work queues, its visitor interface, and the raw
-  reference count inside its shared regex data. The walker needs scoped loans across
-  collections of thread handles and static transfer bounds for callbacks and visitors.
+  scalar borrow with a lexical deferred join. Worker cancellation flags and counters now
+  move reference-counted atomic handles. Regex clones share their immutable program
+  through `sync.arc.Arc`. The strict compiler stack still rejects transfers involving
+  the locked ignore cache, work-stealing queues, and the visitor interface. The
+  walker needs scoped aggregate loans or owned synchronized queues, together with
+  static transfer bounds for callbacks and visitors.
   [Transfer checks](https://github.com/vlang/v/pull/32872)
   [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use

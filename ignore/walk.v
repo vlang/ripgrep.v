@@ -3,8 +3,7 @@ module ignore
 import os
 import runtime
 import sync
-import sync.stdatomic
-
+import sync.arc
 import time
 
 $if !windows {
@@ -1755,14 +1754,14 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 		return
 	}
 	stacks := WorkStealingStacks.new(worker_count, mut initial)
-	quit_now := stdatomic.new_atomic(false)
-	active_workers := stdatomic.new_atomic(worker_count)
+	quit_now := arc.new_atomic(false)
+	active_workers := arc.new_atomic(worker_count)
 	mut threads := []thread bool{}
-	threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, first_visitor, quit_now,
-		active_workers, 0)
+	threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, first_visitor, quit_now.clone(),
+		active_workers.clone(), 0)
 	for worker_index in 1 .. worker_count {
 		visitor := factory.create()
-		threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, visitor, quit_now, active_workers,
+		threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, visitor, quit_now.clone(), active_workers.clone(),
 			worker_index)
 	}
 	for worker_thread in threads {
@@ -1770,10 +1769,6 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 	}
 	unsafe { threads.free() }
 	stacks.free()
-	unsafe {
-		free(quit_now)
-		free(active_workers)
-	}
 }
 
 // A result emitted by unordered parallel traversal.
@@ -1789,15 +1784,15 @@ pub:
 // This is intended for callers that always continue traversal unless a shared
 // stop flag is set. It does not support `WalkState.skip`; callers needing
 // per-directory skip decisions should use `run`/`visit`.
-pub fn (wp WalkParallel) stream[^a](results chan WalkParallelStreamResult, stop &^a stdatomic.AtomicVal[bool]) {
+pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop arc.Atomic[bool]) {
 	worker_count := wp.worker_count()
 	if worker_count <= 1 {
-		wp.stream_serial(results, stop)
+		wp.stream_serial(results, &stop)
 		return
 	}
-	mut initial_visitor := WalkParallelStreamVisitor[^a]{
+	mut initial_visitor := WalkParallelStreamVisitor{
 		results: results
-		stop:    stop
+		stop:    stop.clone()
 	}
 	mut initial_visitor_box := ParallelVisitor(&initial_visitor)
 	mut initial := wp.initial_work(mut initial_visitor_box)
@@ -1808,10 +1803,10 @@ pub fn (wp WalkParallel) stream[^a](results chan WalkParallelStreamResult, stop 
 		return
 	}
 	stacks := WorkStealingStacks.new(worker_count, mut initial)
-	active_workers := stdatomic.new_atomic(worker_count)
+	active_workers := arc.new_atomic(worker_count)
 	mut threads := []thread bool{}
 	for worker_index in 0 .. worker_count {
-		threads << spawn walk_stealing_stream_worker(wp.clone(), stacks, results, stop, active_workers,
+		threads << spawn walk_stealing_stream_worker(wp.clone(), stacks, results, stop.clone(), active_workers.clone(),
 			worker_index)
 	}
 	for worker_thread in threads {
@@ -1819,17 +1814,16 @@ pub fn (wp WalkParallel) stream[^a](results chan WalkParallelStreamResult, stop 
 	}
 	unsafe { threads.free() }
 	stacks.free()
-	unsafe { free(active_workers) }
 	results <- WalkParallelStreamResult{
 		done: true
 	}
 }
 
-fn (wp &WalkParallel) stream_serial[^a](results chan WalkParallelStreamResult, stop &^a stdatomic.AtomicVal[bool]) {
+fn (wp &WalkParallel) stream_serial(results chan WalkParallelStreamResult, stop &arc.Atomic[bool]) {
 	mut walk := wp.new_walk()
-	mut visitor := WalkParallelStreamVisitor[^a]{
+	mut visitor := WalkParallelStreamVisitor{
 		results: results
-		stop:    stop
+		stop:    stop.clone()
 	}
 	mut visitor_box := ParallelVisitor(&visitor)
 	for path in wp.paths {
@@ -1953,9 +1947,9 @@ fn (wp &WalkParallel) worker_count() int {
 	return count
 }
 
-struct WalkParallelStreamVisitor[^a] {
+struct WalkParallelStreamVisitor {
 	results chan WalkParallelStreamResult
-	stop    &^a stdatomic.AtomicVal[bool]
+	stop    arc.Atomic[bool]
 }
 
 struct WalkStealingWork implements IClone {
@@ -2126,7 +2120,7 @@ fn (stacks &WorkStealingStacks) take(worker_index int) ?WalkStealingWork {
 	return none
 }
 
-fn take_work(stacks &WorkStealingStacks, active_workers &stdatomic.AtomicVal[int], stop &stdatomic.AtomicVal[bool], worker_index int) ?WalkStealingWork {
+fn take_work(stacks &WorkStealingStacks, active_workers &arc.Atomic[int], stop &arc.Atomic[bool], worker_index int) ?WalkStealingWork {
 	if work := stacks.take(worker_index) {
 		return work
 	}
@@ -2146,14 +2140,14 @@ fn take_work(stacks &WorkStealingStacks, active_workers &stdatomic.AtomicVal[int
 	return none
 }
 
-fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visitor_in ParallelVisitor, stop &stdatomic.AtomicVal[bool], active_workers &stdatomic.AtomicVal[int], worker_index int) bool {
+fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visitor_in ParallelVisitor, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
 	mut walk := wp.new_walk()
 	mut visitor := visitor_in
 	defer {
 		free_parallel_visitor(visitor)
 	}
 	for !stop.load() {
-		work := take_work(stacks, active_workers, stop, worker_index) or { break }
+		work := take_work(stacks, &active_workers, &stop, worker_index) or { break }
 		state := walk_stealing_run_one(mut walk, stacks, worker_index, mut visitor, work)
 		if state.is_quit() {
 			stop.store(true)
@@ -2163,15 +2157,15 @@ fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visit
 	return true
 }
 
-fn walk_stealing_stream_worker[^a](wp WalkParallel, stacks &WorkStealingStacks, results chan WalkParallelStreamResult, stop &^a stdatomic.AtomicVal[bool], active_workers &stdatomic.AtomicVal[int], worker_index int) bool {
+fn walk_stealing_stream_worker(wp WalkParallel, stacks &WorkStealingStacks, results chan WalkParallelStreamResult, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
 	mut walk := wp.new_walk()
-	mut sender := WalkParallelStreamVisitor[^a]{
+	mut sender := WalkParallelStreamVisitor{
 		results: results
-		stop:    stop
+		stop:    stop.clone()
 	}
 	mut sender_box := ParallelVisitor(&sender)
 	for !stop.load() {
-		work := take_work(stacks, active_workers, stop, worker_index) or { break }
+		work := take_work(stacks, &active_workers, &stop, worker_index) or { break }
 		state := walk_stealing_run_one(mut walk, stacks, worker_index, mut sender_box, work)
 		if state.is_quit() {
 			stop.store(true)
@@ -2305,7 +2299,7 @@ fn walk_stealing_run_one(mut walk Walk, stacks &WorkStealingStacks, worker_index
 	return .continue_
 }
 
-fn (mut visitor WalkParallelStreamVisitor[^a]) visit[^a](result WalkResult) WalkState {
+fn (mut visitor WalkParallelStreamVisitor) visit(result WalkResult) WalkState {
 	if visitor.stop.load() {
 		return .quit
 	}
@@ -2318,7 +2312,7 @@ fn (mut visitor WalkParallelStreamVisitor[^a]) visit[^a](result WalkResult) Walk
 	return .continue_
 }
 
-fn (mut visitor WalkParallelStreamVisitor[^a]) free[^a]() {
+fn (mut visitor WalkParallelStreamVisitor) free() {
 	_ = visitor
 }
 
