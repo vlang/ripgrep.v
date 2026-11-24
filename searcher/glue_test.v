@@ -1,5 +1,6 @@
 module searcher
 
+import encoding.utf8
 import io
 import matcher
 import regex
@@ -1846,7 +1847,7 @@ and exhibited clearly, with a label attached.    '
 	builder.line_number(true)
 	mut searcher_ := builder.build()
 	mut rdr := GlueByteSliceReader.new(haystack)
-	mut sink := Lossy.new(fn (n u64, line string) !bool {
+	mut sink := Lossy.new(fn (n u64, line utf8.View) !bool {
 		print('${n}:${line}')
 		return true
 	})
@@ -1865,7 +1866,7 @@ fn test_glue_regression_2260() {
 
 	mut matched := false
 	matched_ptr := &matched
-	mut sink := UTF8.new(fn [matched_ptr] (_ u64, _ string) !bool {
+	mut sink := UTF8.new(fn [matched_ptr] (_ u64, _ utf8.View) !bool {
 		unsafe {
 			*matched_ptr = true
 		}

@@ -30,8 +30,8 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
 
 - `crates/searcher/src/{sink,lines}.rs` borrows match, context and line bytes from the
   input. The corresponding V APIs in `searcher/lib.v` return lifetime-bearing references.
-  Cloning a match shares its input. A V match stores its range descriptor inline to avoid
-  a per-match allocation, so a view of that range borrows the match as well as its bytes.
+  Cloning a match shares its input. V matches and `LineView` store their range descriptors
+  inline. Access to an inline descriptor also borrows the match or line view that holds it.
 - `crates/printer/src/util.rs` borrows replacement bytes and offsets from the replacer,
   and original bytes and offsets from the search. `printer/support.v` borrows the
   haystack and replacement pattern and carries the output borrows through `Replacement`
@@ -40,8 +40,9 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
 - Rust's `PrinterPath` uses `Cow` and caches hyperlink resolution in `OnceCell`. The V
   path wrapper borrows the ordinary path bytes, owns a copy for separator replacement,
   and caches both successful and unsuccessful hyperlink lookups. JSON message paths,
-  lines and submatches borrow their source through serialization. UTF-8 sink conversion
-  still materializes V strings for callbacks.
+  lines and submatches borrow their source through serialization. The UTF-8 sinks pass
+  a validated view to callbacks and allocate repaired bytes for malformed input to
+  `Lossy`. The view API is proposed in [vlang/v#32869](https://github.com/vlang/v/pull/32869).
 - Rust shares matcher and printer configuration through `Arc` and releases child
   processes and native matcher resources through `Drop`. The V equivalents use
   `sync.arc` and `Drop` in `ignore/dir.v`, `printer/`, `cli/process.v` and `pcre2/matcher.v`.
@@ -55,10 +56,11 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
   mutable access to the searcher and printer state, without `RefCell`'s dynamic loan
   checks.
-- V `17004a4` accepts both a return of `cli.Buffer.as_slice()` from a local buffer and a
-  call to `buffer.clear()` before the returned view's last use. Rust rejects both loan
-  patterns. V also allocates a descriptor for a returned array range reference, such as
-  the one from `LineIter.next()`. These compiler differences limit ownership parity.
+- The checker change in [vlang/v#32866](https://github.com/vlang/v/pull/32866) catches
+  the two `cli.Buffer.as_slice()` probes for an escaping local and a live view during
+  `buffer.clear()`. The same compiler accepts mutation of a byte array while an
+  `encoding.utf8.View` returned inside an option is live. General borrow tracking
+  through returned aggregate values and Rust's thread safety guarantees remain open.
 
 ## File inventory
 

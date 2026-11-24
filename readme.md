@@ -12,8 +12,10 @@ audit found no omitted logic or translation stubs. See
 the V mappings for functions whose names necessarily changed.
 
 Build with V including the ownership checker fixes in
-[vlang/v#32859](https://github.com/vlang/v/pull/32859) and `sync.arc.Weak`
-from [vlang/v#32865](https://github.com/vlang/v/pull/32865).
+[vlang/v#32859](https://github.com/vlang/v/pull/32859) and
+[vlang/v#32866](https://github.com/vlang/v/pull/32866), `sync.arc.Weak` from
+[vlang/v#32865](https://github.com/vlang/v/pull/32865), and `encoding.utf8.View` from
+[vlang/v#32869](https://github.com/vlang/v/pull/32869).
 
 ```sh
 cd /path/to/ripgrep_v

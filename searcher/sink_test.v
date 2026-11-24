@@ -1,5 +1,6 @@
 module searcher
 
+import encoding.utf8
 import matcher
 
 struct MinimalSink {
@@ -65,10 +66,10 @@ fn test_line_iterator_yields_borrowed_views() {
 	first := lines.next() or { panic('missing first line') }
 	second := lines.next() or { panic('missing second line') }
 
-	assert first.bytestr() == 'x\n'
-	assert second.bytestr() == 'yz'
-	assert first.data == input.data
-	assert unsafe { second.data == &u8(input.data) + 2 }
+	assert first.as_bytes().bytestr() == 'x\n'
+	assert second.as_bytes().bytestr() == 'yz'
+	assert first.as_bytes().data == input.data
+	assert unsafe { second.as_bytes().data == &u8(input.data) + 2 }
 	assert lines.next() == none
 }
 
@@ -77,14 +78,16 @@ fn test_utf8_sink_reports_utf8_match() {
 	mut got_text := ''
 	got_line_ptr := &got_line
 	got_text_ptr := &got_text
-	mut sink := UTF8.new(fn [got_line_ptr, got_text_ptr] (line u64, text string) !bool {
+	bytes := 'abc\n'.bytes()
+	address := bytes.data
+	mut sink := UTF8.new(fn [got_line_ptr, got_text_ptr, address] (line u64, text utf8.View) !bool {
+		assert text.as_bytes().data == address
 		unsafe {
 			*got_line_ptr = line
-			*got_text_ptr = text.to_owned()
+			*got_text_ptr = text.str()
 		}
 		return true
 	})
-	bytes := 'abc\n'.bytes()
 	mat := SinkMatch.new(&bytes, matcher.Match.new(0, 4)).with_line_number(u64(7))
 	searcher_ := Searcher.new()
 
@@ -94,7 +97,7 @@ fn test_utf8_sink_reports_utf8_match() {
 }
 
 fn test_utf8_sink_rejects_invalid_utf8() {
-	mut sink := UTF8.new(fn (line u64, text string) !bool {
+	mut sink := UTF8.new(fn (line u64, text utf8.View) !bool {
 		_ = line
 		_ = text
 		return true
@@ -111,7 +114,7 @@ fn test_utf8_sink_rejects_invalid_utf8() {
 }
 
 fn test_utf8_sink_reports_incomplete_utf8() {
-	mut sink := UTF8.new(fn (line u64, text string) !bool {
+	mut sink := UTF8.new(fn (line u64, text utf8.View) !bool {
 		_ = line
 		_ = text
 		return true
@@ -128,7 +131,7 @@ fn test_utf8_sink_reports_incomplete_utf8() {
 }
 
 fn test_utf8_sink_requires_line_numbers() {
-	mut sink := UTF8.new(fn (line u64, text string) !bool {
+	mut sink := UTF8.new(fn (line u64, text utf8.View) !bool {
 		_ = line
 		_ = text
 		return true
@@ -144,15 +147,27 @@ fn test_utf8_sink_requires_line_numbers() {
 	assert false
 }
 
+fn test_lossy_sink_borrows_valid_utf8() {
+	bytes := 'café\n'.bytes()
+	address := bytes.data
+	mut sink := Lossy.new(fn [address] (_ u64, text utf8.View) !bool {
+		assert text.as_bytes().data == address
+		return true
+	})
+	mat := SinkMatch.new(&bytes, matcher.Match.new(0, uint(bytes.len))).with_line_number(u64(1))
+	searcher_ := Searcher.new()
+	assert sink.matched(&searcher_, &mat)!
+}
+
 fn test_lossy_sink_replaces_invalid_utf8() {
 	mut got_line := u64(0)
 	mut got_bytes := []u8{}
 	got_line_ptr := &got_line
 	got_bytes_ptr := &got_bytes
-	mut sink := Lossy.new(fn [got_line_ptr, got_bytes_ptr] (line u64, text string) !bool {
+	mut sink := Lossy.new(fn [got_line_ptr, got_bytes_ptr] (line u64, text utf8.View) !bool {
 		unsafe {
 			*got_line_ptr = line
-			*got_bytes_ptr = text.bytes()
+			*got_bytes_ptr = text.as_bytes().clone()
 		}
 		return true
 	})
@@ -168,9 +183,9 @@ fn test_lossy_sink_replaces_invalid_utf8() {
 fn test_lossy_sink_replaces_incomplete_sequence_once() {
 	mut got_bytes := []u8{}
 	got_bytes_ptr := &got_bytes
-	mut sink := Lossy.new(fn [got_bytes_ptr] (_line u64, text string) !bool {
+	mut sink := Lossy.new(fn [got_bytes_ptr] (_line u64, text utf8.View) !bool {
 		unsafe {
-			*got_bytes_ptr = text.bytes()
+			*got_bytes_ptr = text.as_bytes().clone()
 		}
 		return true
 	})
@@ -187,7 +202,7 @@ fn test_bytes_sink_reports_raw_bytes() {
 	mut got_bytes := []u8{}
 	got_line_ptr := &got_line
 	got_bytes_ptr := &got_bytes
-	mut sink := Bytes.new(fn [got_line_ptr, got_bytes_ptr] (line u64, bytes []u8) !bool {
+	mut sink := Bytes.new(fn [got_line_ptr, got_bytes_ptr] (line u64, bytes &[]u8) !bool {
 		unsafe {
 			*got_line_ptr = line
 			*got_bytes_ptr = bytes.clone()

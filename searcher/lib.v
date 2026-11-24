@@ -1,7 +1,7 @@
 module searcher
 
 import encoding.iconv
-import encoding.utf8.validate
+import encoding.utf8
 import io
 import log
 import matcher
@@ -2873,10 +2873,25 @@ pub fn (iter &LineIter[^b]) count[^b]() u64 {
 	return count
 }
 
+// LineView keeps one line's descriptor inline and borrows the input buffer.
+pub struct LineView[^b] {
+	source_ &^b []u8
+	bytes_  []u8
+}
+
+// as_bytes borrows the inline descriptor for the line.
+pub fn (line &^a LineView[^b]) as_bytes[^a, ^b]() &^a []u8 {
+	return &line.bytes_
+}
+
 // next returns the next line, including its terminator if present.
-pub fn (mut iter LineIter[^b]) next[^b]() ?&^b []u8 {
+pub fn (mut iter LineIter[^b]) next[^b]() ?LineView[^b] {
 	m := iter.stepper.next_match(iter.bytes) or { return none }
-	return &(*iter.bytes)[m.start()..m.end()]
+	return LineView[^b]{
+		source_: iter.bytes
+		// Retain the inline range descriptor and share the iterator's backing bytes.
+		bytes_:  unsafe { (*iter.bytes)[m.start()..m.end()] }
+	}
 }
 
 /// A type that describes a match reported by a searcher.
@@ -3034,8 +3049,9 @@ fn (mut step LineStep) next_match[^b](bytes &^b []u8) ?matcher.Match {
 
 @[inline]
 fn (mut step LineStep) next_impl[^b](bytes_in &^b []u8) ?(uint, uint) {
-	bytes := &(*bytes_in)[..step.end]
-	if line_end := find_byte((*bytes)[step.pos..], step.line_term) {
+	// The bounded descriptor shares the caller's bytes for the duration of the scan.
+	bytes := unsafe { (*bytes_in)[step.pos..step.end] }
+	if line_end := find_byte(&bytes, step.line_term) {
 		start := step.pos
 		end := step.pos + line_end + 1
 		$if debug {
@@ -3045,9 +3061,9 @@ fn (mut step LineStep) next_impl[^b](bytes_in &^b []u8) ?(uint, uint) {
 		step.pos = end
 		return start, end
 	}
-	if step.pos < bytes.len {
+	if bytes.len > 0 {
 		start := step.pos
-		end := bytes.len
+		end := step.end
 		$if debug {
 			assert start <= end
 		}
@@ -3404,11 +3420,11 @@ pub fn (mut sink SinkDefaults) finish(searcher_ &Searcher, finish &SinkFinish) !
 ///
 /// V-specific: these types are in the `searcher` module because V modules are
 /// directory based.
-// V-specific callback aliases represent the closure types used by the Rust
-// convenience sinks. V slices and strings are borrowed descriptors here.
-pub type BytesSinkCallback = fn (u64, []u8) !bool
+// V-specific callback aliases carry a borrowed byte array or a validated text
+// view for the duration of the callback.
+pub type BytesSinkCallback = fn (u64, &[]u8) !bool
 
-pub type StringSinkCallback = fn (u64, string) !bool
+pub type StringSinkCallback = fn (u64, utf8.View) !bool
 
 /// A sink that provides line numbers and matches as strings while ignoring
 /// everything else.
@@ -3440,11 +3456,14 @@ pub fn UTF8.new(callback StringSinkCallback) UTF8 {
 pub fn (mut sink UTF8) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher_
 	matched := mat.bytes()
-	if err := first_utf8_error(matched) {
-		return error(err.msg())
+	text := utf8.view(matched) or {
+		if invalid := first_utf8_error(matched) {
+			return error(invalid.msg())
+		}
+		return error('invalid UTF-8')
 	}
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
-	return sink.callback(line_number, matched.bytestr())!
+	return sink.callback(line_number, text)!
 }
 
 /// A sink that provides line numbers and matches as (lossily converted)
@@ -3479,7 +3498,13 @@ pub fn Lossy.new(callback StringSinkCallback) Lossy {
 pub fn (mut sink Lossy) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bool {
 	_ = searcher_
 	line_number := mat.line_number() or { return error('line numbers not enabled') }
-	return sink.callback(line_number, lossy_utf8_string(mat.bytes()))!
+	matched := mat.bytes()
+	if text := utf8.view(matched) {
+		return sink.callback(line_number, text)!
+	}
+	repaired := lossy_utf8_bytes(matched)
+	text := utf8.view(&repaired) or { return error('invalid repaired UTF-8') }
+	return sink.callback(line_number, text)!
 }
 
 /// A sink that provides line numbers and matches as raw bytes while
@@ -3513,13 +3538,6 @@ pub fn (mut sink Bytes) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !bo
 	return sink.callback(line_number, mat.bytes())!
 }
 
-fn is_valid_utf8_bytes(bytes []u8) bool {
-	if bytes.len == 0 {
-		return true
-	}
-	return validate.utf8_data(&bytes[0], bytes.len)
-}
-
 struct Utf8ErrorInfo {
 	valid_up_to uint
 	error_len   ?uint
@@ -3532,10 +3550,10 @@ fn (err Utf8ErrorInfo) msg() string {
 	return 'incomplete utf-8 byte sequence from index ${err.valid_up_to}'
 }
 
-fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
+fn first_utf8_error(bytes &[]u8) ?Utf8ErrorInfo {
 	mut i := uint(0)
 	for i < uint(bytes.len) {
-		first := bytes[i]
+		first := (*bytes)[i]
 		if first < 0x80 {
 			i++
 			continue
@@ -3553,7 +3571,7 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 				error_len:   none
 			}
 		}
-		if !is_valid_utf8_second(first, bytes[i + 1]) {
+		if !is_valid_utf8_second(first, (*bytes)[i + 1]) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
 				error_len:   uint(1)
@@ -3569,7 +3587,7 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 				error_len:   none
 			}
 		}
-		if !is_utf8_continuation(bytes[i + 2]) {
+		if !is_utf8_continuation((*bytes)[i + 2]) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
 				error_len:   uint(2)
@@ -3585,7 +3603,7 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 				error_len:   none
 			}
 		}
-		if !is_utf8_continuation(bytes[i + 3]) {
+		if !is_utf8_continuation((*bytes)[i + 3]) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
 				error_len:   uint(3)
@@ -3596,24 +3614,28 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 	return none
 }
 
-fn lossy_utf8_string(bytes []u8) string {
-	if is_valid_utf8_bytes(bytes) {
-		return bytes.bytestr()
+fn lossy_utf8_string(bytes &[]u8) string {
+	if text := utf8.view(bytes) {
+		return text.str()
 	}
+	return lossy_utf8_bytes(bytes).bytestr()
+}
+
+fn lossy_utf8_bytes(bytes &[]u8) []u8 {
 	mut out := []u8{cap: bytes.len}
 	mut start := uint(0)
 	for start < uint(bytes.len) {
-		err := first_utf8_error(bytes[start..]) or {
-			append_bytes(mut out, bytes[start..])
+		err := first_utf8_error((*bytes)[start..]) or {
+			append_bytes(mut out, (*bytes)[start..])
 			break
 		}
 		valid_end := start + err.valid_up_to
-		append_bytes(mut out, bytes[start..valid_end])
+		append_bytes(mut out, (*bytes)[start..valid_end])
 		append_utf8(mut out, u32(0xfffd))
 		error_len := err.error_len or { break }
 		start = valid_end + error_len
 	}
-	return out.bytestr()
+	return out
 }
 
 fn utf8_sequence_width(first u8) uint {

@@ -1,5 +1,6 @@
 module main
 
+import encoding.utf8
 import os
 import regex
 import searcher
@@ -20,7 +21,7 @@ fn example() ! {
 	matcher_ref := regex.RegexMatcherRef.new(&matcher_)
 	mut searcher_ := searcher.Searcher.new()
 	mut stdin := os.stdin()
-	mut sink := searcher.UTF8.new(fn (line_number u64, line string) !bool {
+	mut sink := searcher.UTF8.new(fn (line_number u64, line utf8.View) !bool {
 		print('${line_number}:${line}')
 		return true
 	})
