@@ -57,9 +57,10 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   move reference-counted atomic handles. Regex clones share their immutable program
   through `sync.arc.Arc`. The compiled ignore cache uses `sync.arc.Mutex`, which
   moves the map into each protected update and keeps the allocation alive across
-  workers. The strict compiler stack now accepts that cache. The walker still
-  needs scoped aggregate loans or owned synchronized queues, together with static
-  transfer bounds for its filter callback and visitor interface.
+  workers. Each worker owns a handle to the work-stealing queues. A paired update
+  moves work while both queues are locked. The strict compiler stack accepts the
+  cache and queues. The walker still needs static transfer bounds for its filter
+  callback and visitor interface.
   [Arc-owned mutex](https://github.com/vlang/v/pull/32885)
   [Transfer checks](https://github.com/vlang/v/pull/32872)
   [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)

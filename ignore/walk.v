@@ -1757,18 +1757,17 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 	quit_now := arc.new_atomic(false)
 	active_workers := arc.new_atomic(worker_count)
 	mut threads := []thread bool{}
-	threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, first_visitor, quit_now.clone(),
+	threads << spawn walk_stealing_visit_worker(wp.clone(), stacks.clone(), first_visitor, quit_now.clone(),
 		active_workers.clone(), 0)
 	for worker_index in 1 .. worker_count {
 		visitor := factory.create()
-		threads << spawn walk_stealing_visit_worker(wp.clone(), stacks, visitor, quit_now.clone(), active_workers.clone(),
+		threads << spawn walk_stealing_visit_worker(wp.clone(), stacks.clone(), visitor, quit_now.clone(), active_workers.clone(),
 			worker_index)
 	}
 	for worker_thread in threads {
 		worker_thread.wait()
 	}
 	unsafe { threads.free() }
-	stacks.free()
 }
 
 // A result emitted by unordered parallel traversal.
@@ -1806,14 +1805,13 @@ pub fn (wp WalkParallel) stream(results chan WalkParallelStreamResult, stop arc.
 	active_workers := arc.new_atomic(worker_count)
 	mut threads := []thread bool{}
 	for worker_index in 0 .. worker_count {
-		threads << spawn walk_stealing_stream_worker(wp.clone(), stacks, results, stop.clone(), active_workers.clone(),
+		threads << spawn walk_stealing_stream_worker(wp.clone(), stacks.clone(), results, stop.clone(), active_workers.clone(),
 			worker_index)
 	}
 	for worker_thread in threads {
 		worker_thread.wait()
 	}
 	unsafe { threads.free() }
-	stacks.free()
 	results <- WalkParallelStreamResult{
 		done: true
 	}
@@ -1970,24 +1968,20 @@ fn (work &WalkStealingWork) clone() WalkStealingWork {
 	}
 }
 
-@[heap]
 struct WorkStealingStacks {
-	queues []&WorkStealingQueue
+	queues []arc.Mutex[WorkStealingQueue]
 }
 
-@[heap]
 struct WorkStealingQueue {
-	mutex &sync.Mutex
 mut:
 	items []WalkStealingWork
 	head  int
 }
 
-fn WorkStealingQueue.new() &WorkStealingQueue {
+fn WorkStealingQueue.new() WorkStealingQueue {
 	mut items := []WalkStealingWork{}
 	unsafe { items.flags.set(.noslices) }
-	return &WorkStealingQueue{
-		mutex: sync.new_mutex()
+	return WorkStealingQueue{
 		items: items
 	}
 }
@@ -2025,95 +2019,67 @@ fn (mut queue WorkStealingQueue) pop_front_unlocked() ?WalkStealingWork {
 	return work
 }
 
-fn (queue &WorkStealingQueue) push(work WalkStealingWork) {
-	queue.mutex.lock()
-	unsafe { (&WorkStealingQueue(queue)).push_unlocked(work) }
-	queue.mutex.unlock()
+fn push_stealing_work(queue WorkStealingQueue, work WalkStealingWork) arc.MutexUpdate[WorkStealingQueue, bool] {
+	mut next := queue
+	next.push_unlocked(work)
+	return arc.MutexUpdate[WorkStealingQueue, bool]{ value: next, result: true }
 }
 
-fn (queue &WorkStealingQueue) pop_back() ?WalkStealingWork {
-	queue.mutex.lock()
-	defer {
-		queue.mutex.unlock()
+fn pop_stealing_work(queue WorkStealingQueue) arc.MutexUpdate[WorkStealingQueue, ?WalkStealingWork] {
+	mut next := queue
+	work := next.pop_back_unlocked()
+	return arc.MutexUpdate[WorkStealingQueue, ?WalkStealingWork]{ value: next, result: work }
+}
+
+fn steal_queued_work(owner WorkStealingQueue, victim WorkStealingQueue) arc.MutexPairUpdate[WorkStealingQueue, ?WalkStealingWork] {
+	mut receiving := owner
+	mut giving := victim
+	mut found := ?WalkStealingWork(none)
+	victim_len := giving.len_unlocked()
+	if victim_len > 0 {
+		steal_count := if victim_len == 1 { 1 } else { victim_len / 2 }
+		found = giving.pop_front_unlocked()
+		for _ in 1 .. steal_count {
+			stolen := giving.pop_front_unlocked() or { break }
+			receiving.push_unlocked(stolen)
+		}
 	}
-	unsafe {
-		return (&WorkStealingQueue(queue)).pop_back_unlocked()
+	return arc.MutexPairUpdate[WorkStealingQueue, ?WalkStealingWork]{
+		first:  receiving
+		second: giving
+		result: found
 	}
 }
 
-fn (queue &WorkStealingQueue) free() {
-	unsafe {
-		mut owned := &WorkStealingQueue(queue)
-		owned.items.free()
-		owned.items = []WalkStealingWork{}
-		owned.head = 0
-		owned.mutex.destroy()
-		free(owned.mutex)
-		free(owned)
-	}
-}
-
-fn WorkStealingStacks.new(worker_count int, mut initial []WalkStealingWork) &WorkStealingStacks {
-	mut queues := []&WorkStealingQueue{cap: worker_count}
+fn WorkStealingStacks.new(worker_count int, mut initial []WalkStealingWork) arc.Arc[WorkStealingStacks] {
+	mut queues := []arc.Mutex[WorkStealingQueue]{cap: worker_count}
 	for _ in 0 .. worker_count {
-		queues << WorkStealingQueue.new()
+		queues << arc.new_mutex(WorkStealingQueue.new())
 	}
 	mut worker_index := 0
 	for initial.len > 0 {
-		unsafe { (&WorkStealingQueue(queues[worker_index])).push_unlocked(initial.pop()) }
+		queues[worker_index].update_with(initial.pop(), push_stealing_work)
 		worker_index = (worker_index + 1) % worker_count
 	}
 	unsafe { initial.free() }
-	return &WorkStealingStacks{
+	return arc.new(WorkStealingStacks{
 		queues: queues
-	}
-}
-
-fn (stacks &WorkStealingStacks) free() {
-	unsafe {
-		mut owned := &WorkStealingStacks(stacks)
-		for i in 0 .. owned.queues.len {
-			owned.queues[i].free()
-		}
-		owned.queues.free()
-		free(owned)
-	}
+	})
 }
 
 fn (stacks &WorkStealingStacks) push(worker_index int, work WalkStealingWork) {
-	stacks.queues[worker_index].push(work)
+	stacks.queues[worker_index].update_with(work, push_stealing_work)
 }
 
 fn (stacks &WorkStealingStacks) take(worker_index int) ?WalkStealingWork {
-	owner := stacks.queues[worker_index]
-	if work := owner.pop_back() {
+	owner := &stacks.queues[worker_index]
+	if work := owner.update(pop_stealing_work) {
 		return work
 	}
 	for offset in 1 .. stacks.queues.len {
 		victim_index := (worker_index + offset) % stacks.queues.len
-		victim := stacks.queues[victim_index]
-		// Lock queue pairs in index order so simultaneous thieves cannot deadlock.
-		first := if worker_index < victim_index { owner } else { victim }
-		second := if worker_index < victim_index { victim } else { owner }
-		first.mutex.lock()
-		second.mutex.lock()
-		mut found := ?WalkStealingWork(none)
-		unsafe {
-			mut mutable_owner := &WorkStealingQueue(owner)
-			mut mutable_victim := &WorkStealingQueue(victim)
-			victim_len := mutable_victim.len_unlocked()
-			if victim_len > 0 {
-				steal_count := if victim_len == 1 { 1 } else { victim_len / 2 }
-				found = mutable_victim.pop_front_unlocked()
-				for _ in 1 .. steal_count {
-					stolen := mutable_victim.pop_front_unlocked() or { break }
-					mutable_owner.push_unlocked(stolen)
-				}
-			}
-		}
-		second.mutex.unlock()
-		first.mutex.unlock()
-		if work := found {
+		victim := &stacks.queues[victim_index]
+		if work := owner.update_pair(victim, steal_queued_work) {
 			return work
 		}
 	}
@@ -2140,7 +2106,8 @@ fn take_work(stacks &WorkStealingStacks, active_workers &arc.Atomic[int], stop &
 	return none
 }
 
-fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visitor_in ParallelVisitor, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
+fn walk_stealing_visit_worker(wp WalkParallel, queue_owner arc.Arc[WorkStealingStacks], visitor_in ParallelVisitor, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
+	stacks := queue_owner.get()
 	mut walk := wp.new_walk()
 	mut visitor := visitor_in
 	defer {
@@ -2157,7 +2124,8 @@ fn walk_stealing_visit_worker(wp WalkParallel, stacks &WorkStealingStacks, visit
 	return true
 }
 
-fn walk_stealing_stream_worker(wp WalkParallel, stacks &WorkStealingStacks, results chan WalkParallelStreamResult, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
+fn walk_stealing_stream_worker(wp WalkParallel, queue_owner arc.Arc[WorkStealingStacks], results chan WalkParallelStreamResult, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
+	stacks := queue_owner.get()
 	mut walk := wp.new_walk()
 	mut sender := WalkParallelStreamVisitor{
 		results: results
