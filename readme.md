@@ -18,10 +18,16 @@ from [vlang/v#32865](https://github.com/vlang/v/pull/32865) and `encoding.utf8.V
 from [vlang/v#32869](https://github.com/vlang/v/pull/32869). The additional check for
 loans held by returned view structs is in [vlang/v#32870](https://github.com/vlang/v/pull/32870).
 
-Parallel workers use Arc-owned atomics, and the regex VM reads scalars and
-pointers through borrowed bytecode. Include both changes in an ownership build.
+Parallel workers use Arc-owned atomics, and the compiled ignore cache uses an
+Arc-owned mutex. The regex VM reads scalars and pointers through borrowed
+bytecode. Include these changes in an ownership build.
 [Arc-owned atomics](https://github.com/vlang/v/pull/32883)
 [Borrowed projections](https://github.com/vlang/v/pull/32884)
+[Arc-owned mutex](https://github.com/vlang/v/pull/32885)
+
+The verified builds below use the mutex and the direct map-field move fix from
+that PR. The separate default thread checks still report the walker gaps
+described in [TRANSLATION_AUDIT.md](TRANSLATION_AUDIT.md).
 
 ```sh
 cd /path/to/ripgrep_v

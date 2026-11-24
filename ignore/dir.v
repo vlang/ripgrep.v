@@ -2,7 +2,6 @@ module ignore
 
 import encoding.utf8
 import os
-import sync
 import sync.arc
 
 // This module provides a data structure, `Ignore`, that connects "directory
@@ -139,19 +138,13 @@ mut:
 // CompiledIgnoreCache shares live parent matchers between roots of the same walk.
 struct CompiledIgnoreCache {
 mut:
-	mutex   CompiledIgnoreMutex
 	by_path map[string]arc.Weak[IgnoreNode]
 }
 
-struct CompiledIgnoreMutex implements Drop {
-mut:
-	inner &sync.Mutex = sync.new_mutex()
-}
-
-fn (mut mutex CompiledIgnoreMutex) drop() {
-	mutex.inner.destroy()
-	// sync.Mutex.destroy resets the mutex in place. Release its allocation too.
-	unsafe { free(mutex.inner) }
+struct CompiledIgnoreParent {
+	matcher   Ignore
+	has_error bool
+	err       IgnoreError
 }
 
 // parent_node returns a shared borrow of the parent node, or none at the root.
@@ -171,7 +164,7 @@ mut:
 	// immutable per-directory matcher data lives in `arc.Arc[IgnoreNode]`.
 	node arc.Arc[IgnoreNode]
 	/// The cache of compiled parent matchers, shared by all nodes in this walk.
-	compiled arc.Arc[CompiledIgnoreCache]
+	compiled arc.Mutex[CompiledIgnoreCache]
 	/// An override matcher (default is empty). Rust: `Arc<Override>`.
 	overrides arc.Arc[Override]
 	/// A file type matcher. Rust: `Arc<Types>`.
@@ -269,27 +262,37 @@ pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 }
 
 fn (ig &Ignore) add_compiled_parent(parent &string, absolute_base &arc.Arc[string]) (Ignore, bool, IgnoreError) {
-	// The strong reference keeps the cache alive. The mutex guards every map access.
-	mut cache := unsafe { ig.compiled.get() }
-	cache.mutex.inner.lock()
-	defer { cache.mutex.inner.unlock() }
-	if weak := cache.by_path[*parent] {
-		if node := weak.upgrade() {
-			return ig.with_node(node), false, IgnoreError{}
+	result := ig.compiled.update(fn [ig, parent, absolute_base] (cache_in CompiledIgnoreCache) arc.MutexUpdate[CompiledIgnoreCache, CompiledIgnoreParent] {
+		mut cache := cache_in
+		if weak := cache.by_path[*parent] {
+			if node := weak.upgrade() {
+				return arc.MutexUpdate[CompiledIgnoreCache, CompiledIgnoreParent]{
+					value:  cache
+					result: CompiledIgnoreParent{ matcher: ig.with_node(node) }
+				}
+			}
 		}
-	}
-	mut node, has_err, err := ig.add_child_path(parent.clone())
-	node.is_absolute_parent = true
-	node.absolute_base_value = absolute_base.clone()
-	node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
-		os.exists(os.join_path(parent.clone(), '.git'))
-			|| os.exists(os.join_path(parent.clone(), '.jj'))
-	} else {
-		false
-	}
-	node_arc := arc.new(node)
-	cache.by_path[parent.clone()] = node_arc.downgrade()
-	return ig.with_node(node_arc), has_err, err
+		mut node, has_err, err := ig.add_child_path(parent.clone())
+		node.is_absolute_parent = true
+		node.absolute_base_value = absolute_base.clone()
+		node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
+			os.exists(os.join_path(parent.clone(), '.git'))
+				|| os.exists(os.join_path(parent.clone(), '.jj'))
+		} else {
+			false
+		}
+		node_arc := arc.new(node)
+		cache.by_path[parent.clone()] = node_arc.downgrade()
+		return arc.MutexUpdate[CompiledIgnoreCache, CompiledIgnoreParent]{
+			value:  cache
+			result: CompiledIgnoreParent{
+				matcher:   ig.with_node(node_arc)
+				has_error: has_err
+				err:       err
+			}
+		}
+	})
+	return result.matcher, result.has_error, result.err
 }
 
 /// Create a new `Ignore` matcher for the given child directory.
@@ -478,22 +481,22 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 		if node.is_absolute_parent {
 			break
 		}
-			if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
-				m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(path,
-					is_dir, mut gitignore_matches))
-			}
-			if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
-				m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(path, is_dir,
-					mut gitignore_matches))
-			}
-			if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
-				m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(path, is_dir,
-					mut gitignore_matches))
-			}
-			if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
-				m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(path,
-					is_dir, mut gitignore_matches))
-			}
+		if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
+			m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(path,
+				is_dir, mut gitignore_matches))
+		}
+		if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
+			m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(path, is_dir,
+				mut gitignore_matches))
+		}
+		if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
+			m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(path, is_dir,
+				mut gitignore_matches))
+		}
+		if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
+			m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(path,
+				is_dir, mut gitignore_matches))
+		}
 		saw_git = saw_git || node.has_git
 		node = node.parent_node() or { break }
 	}
@@ -507,22 +510,22 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 					node = node.parent_node() or { break }
 					continue
 				}
-					if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
-						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(&absolute_path,
-							is_dir, mut gitignore_matches))
-					}
-					if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
-						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(&absolute_path,
-							is_dir, mut gitignore_matches))
-					}
-					if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
-						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(&absolute_path,
-							is_dir, mut gitignore_matches))
-					}
-					if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
-						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(&absolute_path,
-							is_dir, mut gitignore_matches))
-					}
+				if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
+					m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(&absolute_path,
+						is_dir, mut gitignore_matches))
+				}
+				if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
+					m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(&absolute_path,
+						is_dir, mut gitignore_matches))
+				}
+				if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
+					m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(&absolute_path,
+						is_dir, mut gitignore_matches))
+				}
+				if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
+					m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(&absolute_path,
+						is_dir, mut gitignore_matches))
+				}
 				saw_git = saw_git || node.has_git
 				node = node.parent_node() or { break }
 			}
@@ -532,19 +535,19 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 		if !m_explicit.is_none() {
 			break
 		}
-			explicit_ignores := ig.explicit_ignores.get()
-			explicit_ignore := unsafe { &(*explicit_ignores)[i] }
-			if !explicit_ignore.is_empty() {
-				m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
-					mut gitignore_matches))
-			}
-		}
-		m_global := if any_git && !ig.git_global_matcher.get().is_empty() {
-			match_from_gitignore(ig.git_global_matcher.get().matched_with_scratch(path, is_dir,
+		explicit_ignores := ig.explicit_ignores.get()
+		explicit_ignore := unsafe { &(*explicit_ignores)[i] }
+		if !explicit_ignore.is_empty() {
+			m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
 				mut gitignore_matches))
-		} else {
-			Match[IgnoreMatch[^a]]{}
 		}
+	}
+	m_global := if any_git && !ig.git_global_matcher.get().is_empty() {
+		match_from_gitignore(ig.git_global_matcher.get().matched_with_scratch(path, is_dir,
+			mut gitignore_matches))
+	} else {
+		Match[IgnoreMatch[^a]]{}
+	}
 	if !m_custom_ignore.is_none() {
 		return m_custom_ignore
 	}
@@ -645,13 +648,13 @@ mut:
 /// abstraction and it's annoying to update tests.
 pub fn IgnoreBuilder.new() IgnoreBuilder {
 	return IgnoreBuilder{
-		dir:                         ''.to_owned()
-		overrides_value:             arc.new(Override.empty())
-		types_value:                 arc.new(Types.empty())
-		explicit_ignores:            []Gitignore{}
-		custom_ignore_filenames:     []string{}
+		dir:                           ''.to_owned()
+		overrides_value:               arc.new(Override.empty())
+		types_value:                   arc.new(Types.empty())
+		explicit_ignores:              []Gitignore{}
+		custom_ignore_filenames:       []string{}
 		global_gitignores_relative_to: none
-		opts:                        IgnoreOptions{}
+		opts:                          IgnoreOptions{}
 	}
 }
 
@@ -697,7 +700,7 @@ pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 			is_absolute_parent:    true
 			absolute_base_value:   none_absolute_base()
 		})
-		compiled:                      arc.new(CompiledIgnoreCache{})
+		compiled:                      arc.new_mutex(CompiledIgnoreCache{})
 		overrides:                     builder.overrides_value.clone()
 		types:                         builder.types_value.clone()
 		global_gitignores_relative_to: global_gitignores_relative_to

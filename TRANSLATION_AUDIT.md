@@ -55,10 +55,12 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   check rejects the two-worker mutable-counter probe. A follow-up permits a direct
   scalar borrow with a lexical deferred join. Worker cancellation flags and counters now
   move reference-counted atomic handles. Regex clones share their immutable program
-  through `sync.arc.Arc`. The strict compiler stack still rejects transfers involving
-  the locked ignore cache, work-stealing queues, and the visitor interface. The
-  walker needs scoped aggregate loans or owned synchronized queues, together with
-  static transfer bounds for callbacks and visitors.
+  through `sync.arc.Arc`. The compiled ignore cache uses `sync.arc.Mutex`, which
+  moves the map into each protected update and keeps the allocation alive across
+  workers. The strict compiler stack now accepts that cache. The walker still
+  needs scoped aggregate loans or owned synchronized queues, together with static
+  transfer bounds for its filter callback and visitor interface.
+  [Arc-owned mutex](https://github.com/vlang/v/pull/32885)
   [Transfer checks](https://github.com/vlang/v/pull/32872)
   [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
