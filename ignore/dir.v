@@ -481,22 +481,22 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 		if node.is_absolute_parent {
 			break
 		}
-		if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
-			m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(path,
-				is_dir, mut gitignore_matches))
-		}
-		if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
-			m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(path, is_dir,
-				mut gitignore_matches))
-		}
-		if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
-			m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(path, is_dir,
-				mut gitignore_matches))
-		}
-		if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
-			m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(path,
-				is_dir, mut gitignore_matches))
-		}
+			if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
+				m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(path,
+					is_dir, mut gitignore_matches))
+			}
+			if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
+				m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(path, is_dir,
+					mut gitignore_matches))
+			}
+			if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
+				m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(path, is_dir,
+					mut gitignore_matches))
+			}
+			if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
+				m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(path,
+					is_dir, mut gitignore_matches))
+			}
 		saw_git = saw_git || node.has_git
 		node = node.parent_node() or { break }
 	}
@@ -510,22 +510,22 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 					node = node.parent_node() or { break }
 					continue
 				}
-				if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
-					m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(&absolute_path,
-						is_dir, mut gitignore_matches))
-				}
-				if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
-					m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(&absolute_path,
-						is_dir, mut gitignore_matches))
-				}
-				if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
-					m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(&absolute_path,
-						is_dir, mut gitignore_matches))
-				}
-				if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
-					m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(&absolute_path,
-						is_dir, mut gitignore_matches))
-				}
+					if m_custom_ignore.is_none() && !node.custom_ignore_matcher.is_empty() {
+						m_custom_ignore = match_from_gitignore(node.custom_ignore_matcher.matched_with_scratch(&absolute_path,
+							is_dir, mut gitignore_matches))
+					}
+					if m_ignore.is_none() && !node.ignore_matcher.is_empty() {
+						m_ignore = match_from_gitignore(node.ignore_matcher.matched_with_scratch(&absolute_path,
+							is_dir, mut gitignore_matches))
+					}
+					if any_git && !saw_git && m_gi.is_none() && !node.git_ignore_matcher.is_empty() {
+						m_gi = match_from_gitignore(node.git_ignore_matcher.matched_with_scratch(&absolute_path,
+							is_dir, mut gitignore_matches))
+					}
+					if any_git && !saw_git && m_gi_exclude.is_none() && !node.git_exclude_matcher.is_empty() {
+						m_gi_exclude = match_from_gitignore(node.git_exclude_matcher.matched_with_scratch(&absolute_path,
+							is_dir, mut gitignore_matches))
+					}
 				saw_git = saw_git || node.has_git
 				node = node.parent_node() or { break }
 			}
@@ -535,19 +535,19 @@ fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mu
 		if !m_explicit.is_none() {
 			break
 		}
-		explicit_ignores := ig.explicit_ignores.get()
-		explicit_ignore := unsafe { &(*explicit_ignores)[i] }
-		if !explicit_ignore.is_empty() {
-			m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
-				mut gitignore_matches))
+			explicit_ignores := ig.explicit_ignores.get()
+			explicit_ignore := unsafe { &(*explicit_ignores)[i] }
+			if !explicit_ignore.is_empty() {
+				m_explicit = match_from_gitignore(explicit_ignore.matched_with_scratch(path, is_dir,
+					mut gitignore_matches))
+			}
 		}
-	}
-	m_global := if any_git && !ig.git_global_matcher.get().is_empty() {
-		match_from_gitignore(ig.git_global_matcher.get().matched_with_scratch(path, is_dir,
-			mut gitignore_matches))
-	} else {
-		Match[IgnoreMatch[^a]]{}
-	}
+		m_global := if any_git && !ig.git_global_matcher.get().is_empty() {
+			match_from_gitignore(ig.git_global_matcher.get().matched_with_scratch(path, is_dir,
+				mut gitignore_matches))
+		} else {
+			Match[IgnoreMatch[^a]]{}
+		}
 	if !m_custom_ignore.is_none() {
 		return m_custom_ignore
 	}
@@ -648,13 +648,13 @@ mut:
 /// abstraction and it's annoying to update tests.
 pub fn IgnoreBuilder.new() IgnoreBuilder {
 	return IgnoreBuilder{
-		dir:                           ''.to_owned()
-		overrides_value:               arc.new(Override.empty())
-		types_value:                   arc.new(Types.empty())
-		explicit_ignores:              []Gitignore{}
-		custom_ignore_filenames:       []string{}
+		dir:                         ''.to_owned()
+		overrides_value:             arc.new(Override.empty())
+		types_value:                 arc.new(Types.empty())
+		explicit_ignores:            []Gitignore{}
+		custom_ignore_filenames:     []string{}
 		global_gitignores_relative_to: none
-		opts:                          IgnoreOptions{}
+		opts:                        IgnoreOptions{}
 	}
 }
 
