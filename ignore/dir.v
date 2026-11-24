@@ -2,6 +2,7 @@ module ignore
 
 import encoding.utf8
 import os
+import sync
 import sync.arc
 
 // This module provides a data structure, `Ignore`, that connects "directory
@@ -130,6 +131,27 @@ mut:
 	has_git bool
 	/// Whether this is an absolute parent matcher, as added by add_parent.
 	is_absolute_parent bool
+	/// The absolute base path for this matcher, when parent directories have been added.
+	// An empty string represents Rust's `None`.
+	absolute_base_value arc.Arc[string]
+}
+
+// CompiledIgnoreCache shares live parent matchers between roots of the same walk.
+struct CompiledIgnoreCache {
+mut:
+	mutex   CompiledIgnoreMutex
+	by_path map[string]arc.Weak[IgnoreNode]
+}
+
+struct CompiledIgnoreMutex implements Drop {
+mut:
+	inner &sync.Mutex = sync.new_mutex()
+}
+
+fn (mut mutex CompiledIgnoreMutex) drop() {
+	mutex.inner.destroy()
+	// sync.Mutex.destroy resets the mutex in place. Release its allocation too.
+	unsafe { free(mutex.inner) }
 }
 
 // parent_node returns a shared borrow of the parent node, or none at the root.
@@ -148,22 +170,12 @@ mut:
 	// V-specific: Rust models this as `Ignore(Arc<IgnoreInner>)`; the shared,
 	// immutable per-directory matcher data lives in `arc.Arc[IgnoreNode]`.
 	node arc.Arc[IgnoreNode]
+	/// The cache of compiled parent matchers, shared by all nodes in this walk.
+	compiled arc.Arc[CompiledIgnoreCache]
 	/// An override matcher (default is empty). Rust: `Arc<Override>`.
 	overrides arc.Arc[Override]
 	/// A file type matcher. Rust: `Arc<Types>`.
 	types arc.Arc[Types]
-	/// The absolute base path of this matcher. Populated only if parent
-	/// directories are added. Rust: `Option<Arc<PathBuf>>`.
-	//
-	// V-specific: stored as a non-optional `Arc[string]` with an empty-string
-	// sentinel meaning "none" (an absent absolute base already resolves to the
-	// empty path — see `Ignore` construction). This lets every `Ignore.clone()`
-	// share it via the ordinary `Arc.clone()` (strong-count++) path used by the
-	// other `Arc` fields. Cloning it through an `?Arc` helper instead tripped a
-	// v3 ownership bug: unwrapping the optional to clone the inner produced a
-	// shallow alias that the generated code then dropped, so each clone was a net
-	// -1 to the shared strong count and prematurely freed the path (UAF).
-	absolute_base_value arc.Arc[string]
 	/// The directory that gitignores should be interpreted relative to.
 	///
 	/// Usually this is the directory containing the gitignore file. But in
@@ -189,17 +201,7 @@ mut:
 }
 
 pub fn (ig &Ignore) clone() Ignore {
-	return Ignore{
-		node:                          ig.node.clone()
-		overrides:                     ig.overrides.clone()
-		types:                         ig.types.clone()
-		absolute_base_value:           ig.absolute_base_value.clone()
-		global_gitignores_relative_to: clone_optional_string(ig.global_gitignores_relative_to)
-		explicit_ignores:              ig.explicit_ignores.clone()
-		custom_ignore_filenames:       ig.custom_ignore_filenames.clone()
-		git_global_matcher:            ig.git_global_matcher.clone()
-		opts:                          ig.opts
-	}
+	return ig.with_node(ig.node.clone())
 }
 
 pub fn (ig &^a Ignore) path[^a]() &^a string {
@@ -225,9 +227,9 @@ pub fn (ig &Ignore) parent() ?Ignore {
 fn (ig &Ignore) with_node(node arc.Arc[IgnoreNode]) Ignore {
 	return Ignore{
 		node:                          node
+		compiled:                      ig.compiled.clone()
 		overrides:                     ig.overrides.clone()
 		types:                         ig.types.clone()
-		absolute_base_value:           ig.absolute_base_value.clone()
 		global_gitignores_relative_to: clone_optional_string(ig.global_gitignores_relative_to)
 		explicit_ignores:              ig.explicit_ignores.clone()
 		custom_ignore_filenames:       ig.custom_ignore_filenames.clone()
@@ -258,24 +260,36 @@ pub fn (ig &Ignore) add_parents(path string) (Ignore, bool, IgnoreError) {
 	mut errs := PartialErrorBuilder{}
 	mut built := ig.clone()
 	for parent in ancestor_dirs(absolute_base) {
-		mut node, has_err, err := built.add_child_path(parent.clone())
+		next, has_err, err := built.add_compiled_parent(&parent, &absolute_base_arc)
 		errs.maybe_push(has_err, err)
-		// Mutate the freshly-built, still-owned node before sharing it, exactly
-		// like Rust mutates the owned `IgnoreInner` prior to `Arc::new`.
-		node.is_absolute_parent = true
-		node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
-			os.exists(os.join_path(parent.clone(), '.git'))
-				|| os.exists(os.join_path(parent.clone(), '.jj'))
-		} else {
-			false
-		}
-		node_arc := arc.new(node)
-		mut next := built.with_node(node_arc)
-		next.absolute_base_value = absolute_base_arc.clone()
-		built = next.clone()
+		built = next
 	}
 	final_has_err, final_err := errs.into_error_option()
 	return built, final_has_err, final_err
+}
+
+fn (ig &Ignore) add_compiled_parent(parent &string, absolute_base &arc.Arc[string]) (Ignore, bool, IgnoreError) {
+	// The strong reference keeps the cache alive. The mutex guards every map access.
+	mut cache := unsafe { ig.compiled.get() }
+	cache.mutex.inner.lock()
+	defer { cache.mutex.inner.unlock() }
+	if weak := cache.by_path[*parent] {
+		if node := weak.upgrade() {
+			return ig.with_node(node), false, IgnoreError{}
+		}
+	}
+	mut node, has_err, err := ig.add_child_path(parent.clone())
+	node.is_absolute_parent = true
+	node.absolute_base_value = absolute_base.clone()
+	node.has_git = if ig.opts.require_git && ig.opts.git_ignore {
+		os.exists(os.join_path(parent.clone(), '.git'))
+			|| os.exists(os.join_path(parent.clone(), '.jj'))
+	} else {
+		false
+	}
+	node_arc := arc.new(node)
+	cache.by_path[parent.clone()] = node_arc.downgrade()
+	return ig.with_node(node_arc), has_err, err
 }
 
 /// Create a new `Ignore` matcher for the given child directory.
@@ -359,6 +373,7 @@ fn (ig &Ignore) add_child_path(dir string) (IgnoreNode, bool, IgnoreError) {
 	final_has_err, final_err := errs.into_error_option()
 	return IgnoreNode{
 		parent:                [ig.node.clone()]
+		absolute_base_value:   ig.node.get().absolute_base_value.clone()
 		dir:                   normalize_path(dir).to_owned()
 		custom_ignore_matcher: custom_ig_matcher
 		ignore_matcher:        ig_matcher
@@ -569,10 +584,11 @@ pub fn (ig &Ignore) parents() Parents {
 /// one exists.
 fn (ig &^a Ignore) absolute_base[^a]() ?&^a string {
 	// The empty-string sentinel means "no absolute base".
-	if ig.absolute_base_value.get().len == 0 {
+	base := ig.node.get().absolute_base_value.get()
+	if base.len == 0 {
 		return none
 	}
-	return ig.absolute_base_value.get()
+	return base
 }
 
 /// An iterator over all parents of an ignore matcher, including itself.
@@ -671,7 +687,7 @@ pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 		}
 	}
 	return Ignore{
-		node: arc.new(IgnoreNode{
+		node:                          arc.new(IgnoreNode{
 			dir:                   builder.dir.clone()
 			custom_ignore_matcher: Gitignore.empty()
 			ignore_matcher:        Gitignore.empty()
@@ -679,10 +695,11 @@ pub fn (builder &IgnoreBuilder) build_with_cwd(cwd ?string) Ignore {
 			git_exclude_matcher:   Gitignore.empty()
 			has_git:               false
 			is_absolute_parent:    true
+			absolute_base_value:   none_absolute_base()
 		})
+		compiled:                      arc.new(CompiledIgnoreCache{})
 		overrides:                     builder.overrides_value.clone()
 		types:                         builder.types_value.clone()
-		absolute_base_value:           none_absolute_base()
 		global_gitignores_relative_to: global_gitignores_relative_to
 		explicit_ignores:              arc.new(clone_gitignores(builder.explicit_ignores))
 		custom_ignore_filenames:       arc.new(builder.custom_ignore_filenames.clone())

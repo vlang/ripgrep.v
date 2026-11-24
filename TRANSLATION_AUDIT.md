@@ -44,8 +44,9 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
 - Rust shares matcher and printer configuration through `Arc` and releases child
   processes and native matcher resources through `Drop`. The V equivalents use
   `sync.arc` and `Drop` in `ignore/dir.v`, `printer/`, `cli/process.v` and `pcre2/matcher.v`.
-  Rust's `crates/ignore/src/dir.rs` additionally caches parent matchers through `Weak`.
-  V's `sync.arc` provides strong references. The V walker rebuilds parent matchers.
+  Both walkers cache compiled parent matchers through `Weak` and recompile a matcher
+  after its last strong reference has expired. The V cache uses the `sync.arc.Weak`
+  API proposed in [vlang/v#32865](https://github.com/vlang/v/pull/32865).
 - The walker in `crates/ignore/src/walk.rs` requires Rust `Send` and `Sync` bounds for
   thread-shared callbacks and visitors. The V walker synchronizes shared state at
   runtime and joins its workers before returning. The V compiler does not enforce

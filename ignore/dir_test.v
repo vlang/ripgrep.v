@@ -1,6 +1,7 @@
 module ignore
 
 import os
+import sync.arc
 
 fn wfile(path string, contents string) {
 	os.write_file(path, contents) or { panic(err.msg()) }
@@ -376,6 +377,28 @@ fn test_absolute_parent() {
 	ig2, has_err3, _ := ig1b.add_child(os.join_path(td.path(), 'foo'))
 	assert !has_err3
 	assert ig2.matched('bar', false).is_ignore()
+}
+
+fn test_compiled_parent_cache_reuses_live_matchers_and_rebuilds_expired_ones() {
+	td := tmpdir()
+	defer { td.cleanup() }
+	path := os.join_path(td.path(), 'child')
+	mkdirp(path)
+	root := IgnoreBuilder.new().build()
+	mut first, first_has_err, _ := root.add_parents(path.clone())
+	assert !first_has_err
+	weak := first.node.downgrade()
+	mut second, second_has_err, _ := root.add_parents(path.clone())
+	assert !second_has_err
+	assert arc.ptr_eq(&first.node, &second.node)
+	first.free_nodes()
+	second.free_nodes()
+	assert weak.upgrade() == none
+
+	third, third_has_err, _ := root.add_parents(path)
+	assert !third_has_err
+	assert third.is_absolute_parent()
+	assert weak.upgrade() == none
 }
 
 fn test_absolute_parent_anchored() {

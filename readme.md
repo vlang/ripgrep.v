@@ -11,8 +11,9 @@ audit found no omitted logic or translation stubs. See
 [TRANSLATION_AUDIT.md](TRANSLATION_AUDIT.md) for the source-file inventory and
 the V mappings for functions whose names necessarily changed.
 
-Build with V `218e0d67dd` or newer. This revision includes the ownership checker
-fixes from [vlang/v#32859](https://github.com/vlang/v/pull/32859).
+Build with V including the ownership checker fixes in
+[vlang/v#32859](https://github.com/vlang/v/pull/32859) and `sync.arc.Weak`
+from [vlang/v#32865](https://github.com/vlang/v/pull/32865).
 
 ```sh
 cd /path/to/ripgrep_v
