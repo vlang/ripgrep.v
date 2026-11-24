@@ -51,17 +51,22 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   API proposed in [vlang/v#32865](https://github.com/vlang/v/pull/32865).
 - The walker in `crates/ignore/src/walk.rs` requires Rust `Send` and `Sync` bounds for
   thread-shared callbacks and visitors. The V walker synchronizes shared state at
-  runtime and joins its workers before returning. The V compiler does not enforce
-  equivalent type bounds.
+  runtime and joins its workers before returning. V's proposed default thread-transfer
+  check rejects the two-worker mutable-counter probe. A follow-up permits a direct
+  scalar borrow with a lexical deferred join. The combined compiler still rejects
+  the V walker's borrowed atomics and work queues, its visitor interface, and the raw
+  reference count inside its shared regex data. The walker needs scoped loans across
+  collections of thread handles and static transfer bounds for callbacks and visitors.
+  [Transfer checks](https://github.com/vlang/v/pull/32872)
+  [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
   mutable access to the searcher and printer state, without `RefCell`'s dynamic loan
   checks.
 - The checker change in [vlang/v#32866](https://github.com/vlang/v/pull/32866) catches
   the two `cli.Buffer.as_slice()` probes for an escaping local and a live view during
   `buffer.clear()`. The follow-up in [vlang/v#32870](https://github.com/vlang/v/pull/32870)
-  keeps the byte array borrowed while a view unwrapped from an option is live. The
-  checker still accepts passing the same mutable counter to two concurrent `spawn`
-  calls. Rust's thread safety guarantees and general aggregate borrow tracking remain open.
+  keeps the byte array borrowed while a view unwrapped from an option is live.
+  General aggregate borrow tracking remains open.
 
 ## File inventory
 
