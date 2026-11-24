@@ -20,14 +20,6 @@ mut:
 	replacement arc.Arc[?[]u8]
 }
 
-fn json_clone_u8_range(bytes []u8, start uint, end uint) []u8 {
-	mut cloned := []u8{cap: int(end - start)}
-	for i := start; i < end; i++ {
-		cloned << bytes[i]
-	}
-	return cloned
-}
-
 /// A builder for a JSON lines printer.
 ///
 /// The builder permits configuring how the printer behaves. The JSON printer
@@ -516,7 +508,7 @@ pub fn (mut json JSON[W]) sink_with_path[^p, ^s](matcher_ PrinterMatcher, path &
 
 /// Write the given message followed by a new line. The new line is
 /// determined from the configuration of the given searcher.
-fn (mut json JSON[W]) write_message(message Message) ! {
+fn (mut json JSON[W]) write_message[^p, ^b](message &Message[^p, ^b]) ! {
 	encoded := if json.config.pretty { message.to_json_pretty() } else { message.to_json() }
 	json.write(encoded.bytes())!
 	json.write([u8(`\n`)])!
@@ -673,56 +665,51 @@ fn (mut sink JSONSink[^p, ^s, W]) write_begin_message[^p, ^s]() ! {
 	msg := Message.begin(Begin{
 		path: sink.path_value()
 	})
-	sink.json.write_message(msg)!
+	sink.json.write_message(&msg)!
 	sink.begin_printed = true
 }
 
-fn (sink &JSONSink[^p, ^s, W]) path_value[^p, ^s]() ?string {
-	if path := sink.path {
-		// V-specific: the translated message representation owns its path, so
-		// materialize the borrowed sink path at the serialization boundary.
-		return (*path).to_owned()
-	}
-	return none
+fn (sink &JSONSink[^p, ^s, W]) path_value[^p, ^s]() ?&^p string {
+	return sink.path
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) matched[^b, ^p, ^s](searcher_ &searcher.Searcher, mat &searcher.SinkMatch[^b]) !bool {
+pub fn (mut sink ^a JSONSink[^p, ^s, W]) matched[^a, ^b, ^p, ^s](searcher_ &searcher.Searcher, mat &^a searcher.SinkMatch[^b]) !bool {
 	sink.match_count_++
 	sink.write_begin_message()!
 	sink.record_matches(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
 	sink.replace(searcher_, mat.buffer(), mat.bytes_range_in_buffer())!
 	sink.stats_.add_matches(u64(sink.json.matches.len))
 	sink.stats_.add_matched_lines(mat.lines().count())
-	submatches := json_submatches(mat.bytes(), sink.json.matches, sink.replacer.replacement())
-	msg := Message.match_(MatchMessage{
+	submatches := json_submatches(mat.bytes(), &sink.json.matches, sink.replacer.replacement())
+	msg := Message.match_(MatchMessage[^p, ^a]{
 		path:            sink.path_value()
 		lines:           mat.bytes()
 		line_number:     mat.line_number()
 		absolute_offset: mat.absolute_byte_offset()
 		submatches:      submatches
 	})
-	sink.json.write_message(msg)!
+	sink.json.write_message(&msg)!
 	return true
 }
 
-pub fn (mut sink JSONSink[^p, ^s, W]) context[^b, ^p, ^s](searcher_ &searcher.Searcher, ctx &searcher.SinkContext[^b]) !bool {
+pub fn (mut sink ^a JSONSink[^p, ^s, W]) context[^a, ^b, ^p, ^s](searcher_ &searcher.Searcher, ctx &^a searcher.SinkContext[^b]) !bool {
 	sink.write_begin_message()!
 	sink.json.matches.clear()
-	mut submatches := []SubMatch{}
+	mut submatches := []SubMatch[^a]{}
 	if searcher_.invert_match() {
 		full_range := matcher.Match.new(0, ctx.bytes().len)
 		sink.record_matches(searcher_, ctx.bytes(), full_range)!
 		sink.replace(searcher_, ctx.bytes(), full_range)!
-		submatches = json_submatches(ctx.bytes(), sink.json.matches, sink.replacer.replacement())
+		submatches = json_submatches(ctx.bytes(), &sink.json.matches, sink.replacer.replacement())
 	}
-	msg := Message.context(Context{
+	msg := Message.context(Context[^p, ^a]{
 		path:            sink.path_value()
 		lines:           ctx.bytes()
 		line_number:     ctx.line_number()
 		absolute_offset: ctx.absolute_byte_offset()
 		submatches:      submatches
 	})
-	sink.json.write_message(msg)!
+	sink.json.write_message(&msg)!
 	return true
 }
 
@@ -771,7 +758,7 @@ pub fn (mut sink JSONSink[^p, ^s, W]) finish[^p, ^s](_searcher &searcher.Searche
 		binary_offset: finish.binary_byte_offset()
 		stats:         sink.stats_.clone()
 	})
-	sink.json.write_message(msg)!
+	sink.json.write_message(&msg)!
 }
 
 /// SubMatches represents a set of matches in a contiguous range of bytes.
@@ -779,18 +766,25 @@ pub fn (mut sink JSONSink[^p, ^s, W]) finish[^p, ^s](_searcher &searcher.Searche
 /// A simpler representation for this would just simply be `Vec<SubMatch>`,
 /// but the common case is exactly one match per range of bytes, which we
 /// specialize here using a fixed size array without any allocation.
-// V-specific: the translated wire message owns its submatches, so this helper
-// materializes the dynamic representation expected by `Message`.
-fn json_submatches[^a](bytes []u8, matches []matcher.Match, replacement ?Replacement[^a]) []SubMatch {
-	mut submatches := []SubMatch{cap: matches.len}
-	for i, mat in matches {
-		mut repl := ?[]u8(none)
+// V-specific: this array owns its range descriptors. The bytes are borrowed.
+fn json_submatches[^a](bytes &^a []u8, matches &[]matcher.Match, replacement ?Replacement[^a]) []SubMatch[^a] {
+	mut submatches := []SubMatch[^a]{cap: matches.len}
+	for i, mat in *matches {
+		mut repl := ?JsonBytes[^a](none)
 		if r := replacement {
 			rmat := (*r.matches)[i]
-			repl = json_clone_u8_range(r.bytes, rmat.start(), rmat.end())
+			repl = JsonBytes[^a]{
+				buffer: r.bytes
+				start:  rmat.start()
+				end:    rmat.end()
+			}
 		}
-		submatches << SubMatch{
-			m:           json_clone_u8_range(bytes, mat.start(), mat.end())
+		submatches << SubMatch[^a]{
+			m:           JsonBytes[^a]{
+				buffer: bytes
+				start:  mat.start()
+				end:    mat.end()
+			}
 			replacement: repl
 			start:       mat.start()
 			end:         mat.end()

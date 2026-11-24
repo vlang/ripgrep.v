@@ -1,6 +1,7 @@
 module printer
 
 import encoding.utf8
+import strings
 import time
 
 // This module defines the types we use for JSON serialization. We specifically
@@ -18,44 +19,46 @@ pub enum MessageKind {
 	context
 }
 
-pub struct Message {
+const empty_json_bytes = []u8{}
+
+pub struct Message[^p, ^b] {
 pub:
 	kind    MessageKind
-	begin   Begin
-	end     End
-	match_  MatchMessage
-	context Context
+	begin   Begin[^p]
+	end     End[^p]
+	match_  MatchMessage[^p, ^b]
+	context Context[^p, ^b]
 }
 
-pub fn Message.begin(msg Begin) Message {
-	return Message{
+pub fn Message.begin[^p, ^b](msg Begin[^p]) Message[^p, ^b] {
+	return Message[^p, ^b]{
 		kind:  .begin
 		begin: msg
 	}
 }
 
-pub fn Message.end(msg End) Message {
-	return Message{
+pub fn Message.end[^p, ^b](msg End[^p]) Message[^p, ^b] {
+	return Message[^p, ^b]{
 		kind: .end
 		end:  msg
 	}
 }
 
-pub fn Message.match_(msg MatchMessage) Message {
-	return Message{
+pub fn Message.match_[^p, ^b](msg MatchMessage[^p, ^b]) Message[^p, ^b] {
+	return Message[^p, ^b]{
 		kind:   .match_
 		match_: msg
 	}
 }
 
-pub fn Message.context(msg Context) Message {
-	return Message{
+pub fn Message.context[^p, ^b](msg Context[^p, ^b]) Message[^p, ^b] {
+	return Message[^p, ^b]{
 		kind:    .context
 		context: msg
 	}
 }
 
-pub fn (msg Message) to_json() string {
+pub fn (msg &Message[^p, ^b]) to_json[^p, ^b]() string {
 	return match msg.kind {
 		.begin { '{"type":"begin","data":${msg.begin.to_json()}}' }
 		.end { '{"type":"end","data":${msg.end.to_json()}}' }
@@ -66,7 +69,7 @@ pub fn (msg Message) to_json() string {
 
 // V-specific: the translated JSON printer serializes its wire types directly,
 // so pretty formatting is applied to the compact encoding here.
-pub fn (msg Message) to_json_pretty() string {
+pub fn (msg &Message[^p, ^b]) to_json_pretty[^p, ^b]() string {
 	compact := msg.to_json()
 	mut out := []u8{cap: compact.len + 64}
 	mut empty := []bool{}
@@ -132,76 +135,89 @@ fn json_pretty_newline(mut out []u8, depth int) {
 	}
 }
 
-pub struct Begin {
+pub struct Begin[^p] {
 pub:
-	path ?string
+	path ?&^p string
 }
 
-pub fn (msg Begin) to_json() string {
+pub fn (msg &Begin[^p]) to_json[^p]() string {
 	return '{"path":${path_to_json(msg.path)}}'
 }
 
-pub struct End {
+pub struct End[^p] {
 pub:
-	path          ?string
+	path          ?&^p string
 	binary_offset ?u64
 	stats         Stats
 }
 
-pub fn (msg End) to_json() string {
+pub fn (msg &End[^p]) to_json[^p]() string {
 	binary := if offset := msg.binary_offset { offset.str() } else { 'null' }
 	return '{"path":${path_to_json(msg.path)},"binary_offset":${binary},"stats":${stats_to_json(msg.stats)}}'
 }
 
-pub struct MatchMessage {
+pub struct MatchMessage[^p, ^b] {
 pub:
-	path            ?string
-	lines           []u8
+	path            ?&^p string
+	lines           &^b []u8 = &empty_json_bytes
 	line_number     ?u64
 	absolute_offset u64
-	submatches      []SubMatch
+	submatches      []SubMatch[^b]
 }
 
-pub fn (msg MatchMessage) to_json() string {
+pub fn (msg &MatchMessage[^p, ^b]) to_json[^p, ^b]() string {
 	line_number := if n := msg.line_number { n.str() } else { 'null' }
-	return '{"path":${path_to_json(msg.path)},"lines":${data_from_bytes_json(msg.lines)},"line_number":${line_number},"absolute_offset":${msg.absolute_offset},"submatches":${submatches_to_json(msg.submatches)}}'
+	return '{"path":${path_to_json(msg.path)},"lines":${data_from_buffer_json(msg.lines)},"line_number":${line_number},"absolute_offset":${msg.absolute_offset},"submatches":${submatches_to_json(&msg.submatches)}}'
 }
 
-pub struct Context {
+pub struct Context[^p, ^b] {
 pub:
-	path            ?string
-	lines           []u8
+	path            ?&^p string
+	lines           &^b []u8 = &empty_json_bytes
 	line_number     ?u64
 	absolute_offset u64
-	submatches      []SubMatch
+	submatches      []SubMatch[^b]
 }
 
-pub fn (msg Context) to_json() string {
+pub fn (msg &Context[^p, ^b]) to_json[^p, ^b]() string {
 	line_number := if n := msg.line_number { n.str() } else { 'null' }
-	return '{"path":${path_to_json(msg.path)},"lines":${data_from_bytes_json(msg.lines)},"line_number":${line_number},"absolute_offset":${msg.absolute_offset},"submatches":${submatches_to_json(msg.submatches)}}'
+	return '{"path":${path_to_json(msg.path)},"lines":${data_from_buffer_json(msg.lines)},"line_number":${line_number},"absolute_offset":${msg.absolute_offset},"submatches":${submatches_to_json(&msg.submatches)}}'
 }
 
-pub struct SubMatch {
+// JsonBytes keeps the byte range inline and borrows its backing storage.
+pub struct JsonBytes[^b] {
+	buffer &^b []u8
+	start  uint
+	end    uint
+}
+
+fn (bytes &JsonBytes[^b]) to_json[^b]() string {
+	// The source buffer stays borrowed throughout serialization of the range.
+	view := unsafe { (*bytes.buffer)[bytes.start..bytes.end] }
+	return data_from_buffer_json(&view)
+}
+
+pub struct SubMatch[^b] {
 pub:
-	m           []u8
-	replacement ?[]u8
+	m           JsonBytes[^b]
+	replacement ?JsonBytes[^b]
 	start       uint
 	end         uint
 }
 
-pub fn (sm &SubMatch) to_json() string {
-	mut fields := '"match":${data_from_bytes_json(sm.m)}'
+pub fn (sm &SubMatch[^b]) to_json[^b]() string {
+	mut fields := '"match":${sm.m.to_json()}'
 	if replacement := sm.replacement {
-		fields += ',"replacement":${data_from_bytes_json(replacement)}'
+		fields += ',"replacement":${replacement.to_json()}'
 	}
 	fields += ',"start":${sm.start},"end":${sm.end}'
 	return '{${fields}}'
 }
 
-fn submatches_to_json(submatches []SubMatch) string {
+fn submatches_to_json[^b](submatches &[]SubMatch[^b]) string {
 	mut out := '['
 	for i in 0 .. submatches.len {
-		sm := &submatches[i]
+		sm := &(*submatches)[i]
 		if i > 0 {
 			out += ','
 		}
@@ -219,14 +235,25 @@ fn submatches_to_json(submatches []SubMatch) string {
 /// it is natively supported by JSON. When invalid UTF-8 is found, then it is
 /// represented as arbitrary bytes and base64 encoded.
 pub fn data_from_bytes_json(bytes []u8) string {
-	if bytes.len == 0 || utf8.validate(&bytes[0], bytes.len) {
-		return '{"text":${json_quote(bytes.bytestr())}}'
-	}
-	return '{"bytes":${json_quote(base64_standard(bytes))}}'
+	return data_from_buffer_json(&bytes)
 }
 
-fn path_to_json(path ?string) string {
+fn data_from_buffer_json(bytes &[]u8) string {
+	if bytes.len == 0 {
+		return '{"text":""}'
+	}
+	data := &(*bytes)[0]
+	if utf8.validate(data, bytes.len) {
+		return '{"text":${json_quote_buffer(data, bytes.len)}}'
+	}
+	return '{"bytes":${json_quote(encode_base64(bytes))}}'
+}
+
+fn path_to_json[^p](path ?&^p string) string {
 	if p := path {
+		if p.len == 0 || utf8.validate(p.str, p.len) {
+			return '{"text":${json_quote_buffer(p.str, p.len)}}'
+		}
 		return data_from_bytes_json(p.bytes())
 	}
 	return 'null'
@@ -243,45 +270,54 @@ fn stats_to_json(stats Stats) string {
 }
 
 fn json_quote(text string) string {
-	mut out := '"'
-	for byte in text.bytes() {
+	return json_quote_buffer(text.str, text.len)
+}
+
+fn json_quote_buffer(bytes &u8, len int) string {
+	mut out := strings.new_builder(len + 2)
+	out.write_u8(`"`)
+	for i in 0 .. len {
+		// The caller keeps these len bytes alive throughout encoding.
+		byte := unsafe { bytes[i] }
 		match byte {
 			`"` {
-				out += '\\"'
+				out.write_string('\\"')
 			}
 			`\\` {
-				out += '\\\\'
+				out.write_string('\\\\')
 			}
 			`\b` {
-				out += '\\b'
+				out.write_string('\\b')
 			}
 			`\f` {
-				out += '\\f'
+				out.write_string('\\f')
 			}
 			`\n` {
-				out += '\\n'
+				out.write_string('\\n')
 			}
 			`\r` {
-				out += '\\r'
+				out.write_string('\\r')
 			}
 			`\t` {
-				out += '\\t'
+				out.write_string('\\t')
 			}
 			else {
 				if byte < 0x20 {
-					out += '\\u00${hex_digit(byte >> 4)}${hex_digit(byte & 0x0f)}'
+					out.write_string('\\u00')
+					out.write_u8(hex_digit(byte >> 4))
+					out.write_u8(hex_digit(byte & 0x0f))
 				} else {
-					out += byte.ascii_str()
+					out.write_u8(byte)
 				}
 			}
 		}
 	}
-	out += '"'
-	return out
+	out.write_u8(`"`)
+	return out.str()
 }
 
-fn hex_digit(n u8) string {
-	return if n < 10 { (u8(`0`) + n).ascii_str() } else { (u8(`a`) + n - 10).ascii_str() }
+fn hex_digit(n u8) u8 {
+	return if n < 10 { `0` + n } else { `a` + n - 10 }
 }
 
 /// Implements "standard" base64 encoding as described in RFC 3548[1].
@@ -293,11 +329,15 @@ fn hex_digit(n u8) string {
 ///
 /// [1]: https://tools.ietf.org/html/rfc3548#section-3
 pub fn base64_standard(bytes []u8) string {
+	return encode_base64(&bytes)
+}
+
+fn encode_base64(bytes &[]u8) string {
 	alphabet := 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
 	mut out := ''
 	mut i := 0
 	for i + 3 <= bytes.len {
-		group24 := (uint(bytes[i]) << 16) | (uint(bytes[i + 1]) << 8) | uint(bytes[i + 2])
+		group24 := (uint((*bytes)[i]) << 16) | (uint((*bytes)[i + 1]) << 8) | uint((*bytes)[i + 2])
 		index1 := (group24 >> 18) & 0b111111
 		index2 := (group24 >> 12) & 0b111111
 		index3 := (group24 >> 6) & 0b111111
@@ -310,14 +350,14 @@ pub fn base64_standard(bytes []u8) string {
 	}
 	remaining := bytes.len - i
 	if remaining == 1 {
-		group8 := uint(bytes[i])
+		group8 := uint((*bytes)[i])
 		index1 := (group8 >> 2) & 0b111111
 		index2 := (group8 << 4) & 0b111111
 		out += alphabet[index1].ascii_str()
 		out += alphabet[index2].ascii_str()
 		out += '=='
 	} else if remaining == 2 {
-		group16 := (uint(bytes[i]) << 8) | uint(bytes[i + 1])
+		group16 := (uint((*bytes)[i]) << 8) | uint((*bytes)[i + 1])
 		index1 := (group16 >> 10) & 0b111111
 		index2 := (group16 >> 4) & 0b111111
 		index3 := (group16 << 2) & 0b111111

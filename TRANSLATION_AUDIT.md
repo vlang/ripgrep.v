@@ -39,8 +39,9 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   used by the Rust CLI.
 - Rust's `PrinterPath` uses `Cow` and caches hyperlink resolution in `OnceCell`. The V
   path wrapper borrows the ordinary path bytes, owns a copy for separator replacement,
-  and caches both successful and unsuccessful hyperlink lookups. Other `Cow` sites,
-  including UTF-8 sink conversion and JSON serialization, still materialize V strings.
+  and caches both successful and unsuccessful hyperlink lookups. JSON message paths,
+  lines and submatches borrow their source through serialization. UTF-8 sink conversion
+  still materializes V strings for callbacks.
 - Rust shares matcher and printer configuration through `Arc` and releases child
   processes and native matcher resources through `Drop`. The V equivalents use
   `sync.arc` and `Drop` in `ignore/dir.v`, `printer/`, `cli/process.v` and `pcre2/matcher.v`.

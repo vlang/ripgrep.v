@@ -1,5 +1,6 @@
 module printer
 
+import matcher
 import time
 
 fn test_base64_basic() {
@@ -28,4 +29,25 @@ fn test_stats_json_preserves_subsecond_nanoseconds() {
 
 fn test_json_quote_uses_standard_short_control_escapes() {
 	assert json_quote('\b\f\n\r\t') == r'"\b\f\n\r\t"'
+}
+
+fn test_json_bytes_preserve_utf8_and_escape_embedded_nulls() {
+	assert data_from_bytes_json('café\x00"'.bytes()) == r'{"text":"café\u0000\""}'
+	assert data_from_bytes_json([u8(0xff)]) == '{"bytes":"/w=="}'
+}
+
+fn test_json_submatches_borrow_original_and_replacement_buffers() {
+	input := 'a Doctor'.bytes()
+	replacement := 'a Dr.'.bytes()
+	matches := [matcher.Match.new(2, 8)]
+	replaced_matches := [matcher.Match.new(2, 5)]
+	views := json_submatches(&input, &matches, Replacement{
+		bytes:   &replacement
+		matches: &replaced_matches
+	})
+	matched := &views[0]
+	assert matched.m.buffer.data == input.data
+	replaced := matched.replacement or { panic('missing replacement') }
+	assert replaced.buffer.data == replacement.data
+	assert matched.to_json() == '{"match":{"text":"Doctor"},"replacement":{"text":"Dr."},"start":2,"end":8}'
 }
