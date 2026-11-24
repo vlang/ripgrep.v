@@ -19,18 +19,39 @@ fn test_trim_ascii_prefix_stops_at_crlf_bytes() {
 		3)
 }
 
+fn test_sunk_uses_the_search_buffers_without_copying() {
+	input := 'Doctor Watson\n'.bytes()
+	mat := searcher.SinkMatch.new(&input, matcher.Match.new(0, uint(input.len)))
+	matches := [matcher.Match.new(0, 6)]
+	sunk := Sunk.from_sink_match(&mat, &matches, none)
+
+	assert sunk.bytes().data == input.data
+	assert sunk.matches().data == matches.data
+	assert sunk.original_matches().data == matches.data
+}
+
 fn test_replacer_returns_borrowed_replacement() {
 	regex_matcher := regex.RegexMatcher.new(r'Doctor (\w+)')!
 	matcher_ := PrinterMatcher.rust_regex(&regex_matcher)
 	searcher_ := searcher.Searcher.new()
 	haystack := 'Doctor Watson\n'.bytes()
+	pattern := r'doctah $1 MD'.bytes()
 	mut replacer := Replacer.new()
-	replacer.replace_all(&searcher_, &matcher_, haystack, matcher.Match.new(0, uint(haystack.len)),
-		r'doctah $1 MD'.bytes())!
+	replacer.replace_all(&searcher_, &matcher_, &haystack, matcher.Match.new(0, uint(haystack.len)),
+		&pattern)!
 	{
 		replacement := replacer.replacement() or { panic('missing replacement') }
 		assert replacement.bytes.bytestr() == 'doctah Watson MD\n'
-		assert replacement.matches == [matcher.Match.new(0, 16)]
+		assert *replacement.matches == [matcher.Match.new(0, 16)]
+		assert replacement.bytes.data == replacer.dst.data
+		assert replacement.matches.data == replacer.matches.data
+
+		original_matches := [matcher.Match.new(0, 13)]
+		mat := searcher.SinkMatch.new(&haystack, matcher.Match.new(0, uint(haystack.len)))
+		sunk := Sunk.from_sink_match(&mat, &original_matches, replacement)
+		assert sunk.bytes().data == replacer.dst.data
+		assert sunk.matches().data == replacer.matches.data
+		assert sunk.original_matches().data == original_matches.data
 	}
 	replacer.clear()
 	assert replacer.replacement() == none

@@ -658,10 +658,10 @@ fn (mut sink JSONSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher.Sea
 /// replacement, lazily allocating memory if necessary.
 ///
 /// To access the result of a replacement, use `replacer.replacement()`.
-fn (mut sink JSONSink[^p, ^s, W]) replace[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
+fn (mut sink JSONSink[^p, ^s, W]) replace[^b, ^p, ^s](searcher_ &searcher.Searcher, bytes &^b []u8, range matcher.Match) ! {
 	sink.replacer.clear()
 	if replacement := (*sink.json.config.replacement.get()) {
-		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, replacement)!
+		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, &replacement)!
 	}
 }
 
@@ -786,7 +786,7 @@ fn json_submatches[^a](bytes []u8, matches []matcher.Match, replacement ?Replace
 	for i, mat in matches {
 		mut repl := ?[]u8(none)
 		if r := replacement {
-			rmat := r.matches[i]
+			rmat := (*r.matches)[i]
 			repl = json_clone_u8_range(r.bytes, rmat.start(), rmat.end())
 		}
 		submatches << SubMatch{

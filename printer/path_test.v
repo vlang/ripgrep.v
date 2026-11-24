@@ -4,10 +4,13 @@ import cli
 import os
 
 fn test_printer_path_as_bytes() {
-	path := 'alpha/beta.txt'
+	path := 'alpha/beta.txt'.to_owned()
 	ppath := PrinterPath.new(&path)
+	copy := ppath.clone()
 
 	assert ppath.as_bytes().bytestr() == 'alpha/beta.txt'
+	assert ppath.as_bytes().data == voidptr(path.str)
+	assert copy.as_bytes().data == voidptr(path.str)
 	assert *ppath.as_path() == path
 }
 
@@ -16,6 +19,10 @@ fn test_printer_path_separator() {
 	ppath := PrinterPath.new(&path).with_separator(u8(92))
 
 	assert ppath.as_bytes().bytestr() == 'alpha\\beta\\gamma.txt'
+	assert ppath.as_bytes().data != voidptr(path.str)
+	copy := ppath.clone()
+	assert copy.as_bytes().bytestr() == 'alpha\\beta\\gamma.txt'
+	assert copy.as_bytes().data != ppath.as_bytes().data
 	$if unix {
 		assert *ppath.as_path() == 'alpha\\beta\\gamma.txt'
 	} $else {

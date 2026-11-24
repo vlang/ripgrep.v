@@ -2848,15 +2848,13 @@ pub fn (finish SinkFinish) with_binary_byte_offset(binary_byte_offset ?u64) Sink
 ///
 /// `'b` refers to the lifetime of the underlying bytes.
 pub struct LineIter[^b] {
-	// V-specific: Rust stores this as a borrowed `&'b [u8]`; V's slice value is
-	// the corresponding non-owning view into the active search buffer.
-	bytes   []u8
+	bytes   &^b []u8
 	stepper LineStep
 }
 
 /// Create a new line iterator that yields lines in the given bytes that
 /// are terminated by `line_term`.
-pub fn LineIter.new[^b](line_term u8, bytes []u8) LineIter[^b] {
+pub fn LineIter.new[^b](line_term u8, bytes &^b []u8) LineIter[^b] {
 	return LineIter[^b]{
 		bytes:   bytes
 		stepper: LineStep.new(line_term, 0, uint(bytes.len))
@@ -2875,73 +2873,73 @@ pub fn (iter &LineIter[^b]) count[^b]() u64 {
 	return count
 }
 
-pub fn (mut iter LineIter[^b]) next[^b]() ?[]u8 {
+// next returns the next line, including its terminator if present.
+pub fn (mut iter LineIter[^b]) next[^b]() ?&^b []u8 {
 	m := iter.stepper.next_match(iter.bytes) or { return none }
-	return iter.bytes[m.start()..m.end()]
+	return &(*iter.bytes)[m.start()..m.end()]
 }
 
 /// A type that describes a match reported by a searcher.
 pub struct SinkMatch[^b] implements IClone {
-	line_term_             matcher.LineTerminator = matcher.LineTerminator.default()
-	// V-specific: V slices are already borrowed descriptors, while `^b` keeps
-	// the Rust lifetime relationship explicit in the type and API.
+	// V keeps the range descriptor inline to avoid allocating one for every match.
 	bytes_                 []u8
-	absolute_byte_offset_  u64
-	line_number_           ?u64
-	buffer_                []u8
+	buffer_                &^b []u8
 	bytes_range_in_buffer_ matcher.Match
+mut:
+	line_term_            matcher.LineTerminator = matcher.LineTerminator.default()
+	absolute_byte_offset_ u64
+	line_number_          ?u64
 }
 
 // V-specific constructor used where Rust initializes crate-private fields.
 pub fn SinkMatch.new[^b](buffer &^b []u8, bytes_range_in_buffer matcher.Match) SinkMatch[^b] {
 	return SinkMatch[^b]{
-		bytes_:                 buffer[bytes_range_in_buffer.start()..bytes_range_in_buffer.end()]
+		// Suppress the implicit copy so the inline slice borrows buffer_.
+		bytes_:                 unsafe {
+			(*buffer)[bytes_range_in_buffer.start()..bytes_range_in_buffer.end()]
+		}
 		buffer_:                buffer
 		bytes_range_in_buffer_: bytes_range_in_buffer
 	}
 }
 
-// V-specific builder used where Rust initializes crate-private fields.
-pub fn (mat SinkMatch[^b]) with_absolute_byte_offset[^b](absolute_byte_offset u64) SinkMatch[^b] {
+// clone copies the match metadata and shares the search buffer.
+pub fn (mat &SinkMatch[^b]) clone[^b]() SinkMatch[^b] {
 	return SinkMatch[^b]{
 		line_term_:             mat.line_term_
-		bytes_:                 mat.bytes_
-		absolute_byte_offset_:  absolute_byte_offset
+		// Copy the borrowed descriptor without cloning its bytes.
+		bytes_:                 unsafe { mat.bytes_ }
+		absolute_byte_offset_:  mat.absolute_byte_offset_
 		line_number_:           mat.line_number_
 		buffer_:                mat.buffer_
 		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
 	}
+}
+
+// V-specific builder used where Rust initializes crate-private fields.
+pub fn (mat SinkMatch[^b]) with_absolute_byte_offset[^b](absolute_byte_offset u64) SinkMatch[^b] {
+	mut result := mat
+	result.absolute_byte_offset_ = absolute_byte_offset
+	return result
 }
 
 // V-specific builder used where Rust initializes crate-private fields.
 pub fn (mat SinkMatch[^b]) with_line_number[^b](line_number ?u64) SinkMatch[^b] {
-	return SinkMatch[^b]{
-		line_term_:             mat.line_term_
-		bytes_:                 mat.bytes_
-		absolute_byte_offset_:  mat.absolute_byte_offset_
-		line_number_:           line_number
-		buffer_:                mat.buffer_
-		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
-	}
+	mut result := mat
+	result.line_number_ = line_number
+	return result
 }
 
 // V-specific builder used where Rust initializes crate-private fields.
 pub fn (mat SinkMatch[^b]) with_line_term[^b](line_term matcher.LineTerminator) SinkMatch[^b] {
-	return SinkMatch[^b]{
-		line_term_:             line_term
-		bytes_:                 mat.bytes_
-		absolute_byte_offset_:  mat.absolute_byte_offset_
-		line_number_:           mat.line_number_
-		buffer_:                mat.buffer_
-		bytes_range_in_buffer_: mat.bytes_range_in_buffer_
-	}
+	mut result := mat
+	result.line_term_ = line_term
+	return result
 }
 
 /// Exposes as much of the underlying buffer that was search as possible.
-pub fn (mat &SinkMatch[^b]) buffer[^b]() []u8 {
-	// V-specific: these getters return a Rust borrow (`&[u8]`, `&[Match]`) as an
-	// explicit view of the field rather than an ownership copy.
-	return unsafe { mat.buffer_ }
+pub fn (mat &SinkMatch[^b]) buffer[^b]() &^b []u8 {
+	return mat.buffer_
 }
 
 /// Returns a range that corresponds to where [`SinkMatch::bytes`] appears
@@ -2952,8 +2950,9 @@ pub fn (mat &SinkMatch[^b]) bytes_range_in_buffer[^b]() matcher.Match {
 
 /// Returns the bytes for all matching lines, including the line
 /// terminators, if they exist.
-pub fn (mat &SinkMatch[^b]) bytes[^b]() []u8 {
-	return unsafe { mat.bytes_ }
+/// The view borrows the inline range descriptor from the match.
+pub fn (mat &^a SinkMatch[^b]) bytes[^a, ^b]() &^a []u8 {
+	return &mat.bytes_
 }
 
 /// Returns the absolute byte offset of the start of this match. This
@@ -2980,7 +2979,7 @@ pub fn (mat &SinkMatch[^b]) line_number[^b]() ?u64 {
 /// the line terminator).
 ///
 /// Lines yielded by this iterator include their terminators.
-pub fn (mat &SinkMatch[^b]) lines[^b]() LineIter[^b] {
+pub fn (mat &^a SinkMatch[^b]) lines[^a, ^b]() LineIter[^a] {
 	return LineIter.new(mat.line_term_.as_byte(), mat.bytes())
 }
 
@@ -3163,13 +3162,11 @@ pub struct SinkContext[^b] implements IClone {
 	// V-specific: Rust only stores this under `#[cfg(test)]` for
 	// `SinkContext::lines`, but translated V tests compile as normal module
 	// files and still need it.
-	line_term_             matcher.LineTerminator = matcher.LineTerminator.default()
-	// V-specific: V slices are already borrowed descriptors, while `^b` keeps
-	// the Rust lifetime relationship explicit in the type and API.
-	bytes_                 []u8
-	kind_                  SinkContextKind
-	absolute_byte_offset_  u64
-	line_number_           ?u64
+	line_term_            matcher.LineTerminator = matcher.LineTerminator.default()
+	bytes_                &^b []u8
+	kind_                 SinkContextKind
+	absolute_byte_offset_ u64
+	line_number_          ?u64
 }
 
 // V-specific constructor used where Rust initializes crate-private fields.
@@ -3184,8 +3181,8 @@ fn SinkContext.new[^b](line_term matcher.LineTerminator, bytes &^b []u8, kind Si
 }
 
 /// Returns the context bytes, including line terminators.
-pub fn (ctx &SinkContext[^b]) bytes[^b]() []u8 {
-	return unsafe { ctx.bytes_ }
+pub fn (ctx &SinkContext[^b]) bytes[^b]() &^b []u8 {
+	return ctx.bytes_
 }
 
 /// Returns the type of context.

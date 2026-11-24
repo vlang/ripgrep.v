@@ -151,14 +151,13 @@ fn printer_matcher_multi_line(searcher_ &searcher.Searcher, matcher_ &PrinterMat
 /// It can then be written to any writer implementation using the `as_bytes`
 /// method.
 ///
-/// V-specific: V strings replace Rust's `Path` and `Cow` representation, so
-/// path bytes are materialized eagerly.
+/// V-specific: the untransformed bytes borrow the input V string.
 pub struct PrinterPath[^a] implements IClone {
 	path &^a string
 mut:
 	bytes                 []u8
 	rendered_path         string
-	has_rendered_path     bool
+	has_transformed_path  bool
 	hyperlink             HyperlinkPath
 	hyperlink_initialized bool
 	has_hyperlink         bool
@@ -169,7 +168,7 @@ fn (mut pp PrinterPath[^a]) free[^a]() {
 	// v3 ownership; a manual `.free()` first would double-free.
 	pp.bytes = []u8{}
 	pp.rendered_path = ''
-	pp.has_rendered_path = false
+	pp.has_transformed_path = false
 	pp.hyperlink = HyperlinkPath{}
 	pp.hyperlink_initialized = false
 	pp.has_hyperlink = false
@@ -177,9 +176,27 @@ fn (mut pp PrinterPath[^a]) free[^a]() {
 
 /// Create a new path suitable for printing.
 pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
+	// View the string's bytes without copying them. The path field keeps the
+	// borrow, and array cleanup skips the string's backing allocation.
+	mut bytes := unsafe { path.str.vbytes(path.len) }
+	unsafe { bytes.flags |= .nofree }
 	return PrinterPath[^a]{
 		path:  path
-		bytes: path.bytes()
+		bytes: bytes
+	}
+}
+
+// clone shares untransformed bytes and copies transformed bytes and cached state.
+pub fn (pp &PrinterPath[^a]) clone[^a]() PrinterPath[^a] {
+	bytes := if pp.has_transformed_path { pp.bytes.clone() } else { unsafe { pp.bytes } }
+	return PrinterPath[^a]{
+		path:                  pp.path
+		bytes:                 bytes
+		rendered_path:         pp.rendered_path.clone()
+		has_transformed_path:  pp.has_transformed_path
+		hyperlink:             pp.hyperlink.clone()
+		hyperlink_initialized: pp.hyperlink_initialized
+		has_hyperlink:         pp.has_hyperlink
 	}
 }
 
@@ -189,30 +206,30 @@ pub fn PrinterPath.new[^a](path &^a string) PrinterPath[^a] {
 /// with its separator replaced with the one given.
 pub fn (pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
 	sep_value := sep or { return pp }
-	mut result := pp.clone()
-	for i, byte in result.bytes {
+	mut bytes := pp.bytes.clone()
+	for i, byte in bytes {
 		$if windows {
 			if byte == `/` || byte == `\\` {
-				result.bytes[i] = sep_value
+				bytes[i] = sep_value
 			}
 		} $else {
 			if byte == `/` {
-				result.bytes[i] = sep_value
+				bytes[i] = sep_value
 			}
 		}
 	}
+	mut result := pp
 	$if unix {
-		result.rendered_path = result.bytes.bytestr()
-		result.has_rendered_path = true
+		result.rendered_path = (&bytes).bytestr()
 	}
+	result.bytes = bytes
+	result.has_transformed_path = true
 	return result
 }
 
 /// Return the raw bytes for this path.
-pub fn (pp &PrinterPath[^a]) as_bytes[^a]() []u8 {
-	// V-specific: these getters return a Rust borrow (`&[u8]`, `&[Match]`) as an
-	// explicit view of the field rather than an ownership copy.
-	return unsafe { pp.bytes }
+pub fn (pp &^b PrinterPath[^a]) as_bytes[^a, ^b]() &^b []u8 {
+	return &pp.bytes
 }
 
 /// Return this path as a hyperlink.
@@ -224,7 +241,7 @@ pub fn (pp &PrinterPath[^a]) as_bytes[^a]() []u8 {
 ///
 /// V-specific: the initialized bit plus optional cached value implement
 /// Rust's `OnceCell<Option<HyperlinkPath>>` behavior.
-pub fn (mut pp PrinterPath[^a]) as_hyperlink[^a]() ?&HyperlinkPath {
+pub fn (mut pp ^b PrinterPath[^a]) as_hyperlink[^a, ^b]() ?&^b HyperlinkPath {
 	if !pp.hyperlink_initialized {
 		if hyperlink := HyperlinkPath.from_path(pp.as_path()) {
 			pp.hyperlink = hyperlink
@@ -239,9 +256,9 @@ pub fn (mut pp PrinterPath[^a]) as_hyperlink[^a]() ?&HyperlinkPath {
 }
 
 /// Return this path as an actual path string.
-pub fn (pp &PrinterPath[^a]) as_path[^a]() &string {
+pub fn (pp &^b PrinterPath[^a]) as_path[^a, ^b]() &^b string {
 	$if unix {
-		if pp.has_rendered_path {
+		if pp.has_transformed_path {
 			return &pp.rendered_path
 		}
 	}
@@ -460,23 +477,25 @@ pub fn Replacer.new() Replacer {
 /// replacement, use the `replacement` method.
 ///
 /// This can fail if the underlying matcher reports an error.
-pub fn (mut replacer Replacer) replace_all(searcher_ &searcher.Searcher, matcher_ &PrinterMatcher, haystack_in []u8, range matcher.Match, replacement []u8) ! {
-	mut haystack := haystack_in
-	mut line_terminator := []u8{}
+pub fn (mut replacer Replacer) replace_all[^b, ^r](searcher_ &searcher.Searcher, matcher_ &PrinterMatcher, haystack_in &^b []u8, range matcher.Match, replacement &^r []u8) ! {
+	mut end := uint(haystack_in.len)
 	is_multi_line := printer_matcher_multi_line(searcher_, matcher_)
-	if is_multi_line {
-		if range.end() <= haystack.len && haystack[range.end()..].len >= max_look_ahead {
-			haystack = haystack[..range.end() + max_look_ahead]
+	line_terminator := if is_multi_line {
+		if range.end() <= end && end - range.end() >= max_look_ahead {
+			end = range.end() + max_look_ahead
 		}
+		[]u8{}
 	} else {
 		mut m := matcher.Match.new(0, range.end())
-		trimmed := trim_line_terminator(searcher_, &haystack, mut m)
-		line_terminator = trimmed.bytes
-		haystack = haystack[..m.end()]
+		trimmed := trim_line_terminator(searcher_, haystack_in, mut m)
+		end = m.end()
+		trimmed.bytes
 	}
+	// Keep the bounded view on the stack while haystack_in is borrowed.
+	haystack := unsafe { (*haystack_in)[..end] }
 	replacer.dst.clear()
 	replacer.matches.clear()
-	replace_with_captures_in_context(matcher_, haystack, line_terminator, range, replacement,
+	replace_with_captures_in_context(matcher_, &haystack, &line_terminator, range, replacement,
 		mut replacer.dst, mut replacer.matches)!
 	replacer.active = replacer.matches.len > 0
 }
@@ -490,8 +509,8 @@ pub fn (replacer &^a Replacer) replacement[^a]() ?Replacement[^a] {
 		return none
 	}
 	return Replacement[^a]{
-		bytes:   replacer.dst[0..replacer.dst.len]
-		matches: replacer.matches[0..replacer.matches.len]
+		bytes:   &replacer.dst
+		matches: &replacer.matches
 	}
 }
 
@@ -508,8 +527,8 @@ pub fn (mut replacer Replacer) clear() {
 // V-specific: this lifetime-only wrapper represents Rust's
 // `Option<(&[u8], &[Match])`; its slices are borrowed views into `Replacer`.
 pub struct Replacement[^a] {
-	bytes   []u8
-	matches []matcher.Match
+	bytes   &^a []u8
+	matches &^a []matcher.Match
 }
 
 /// A simple layer of abstraction over either a match or a contextual line
@@ -525,66 +544,56 @@ pub struct Replacement[^a] {
 /// results of the replacement instead of the bytes reported directly by the
 /// searcher.
 pub struct Sunk[^a] {
-	// V-specific: V slice descriptors carry the borrowed views represented by
-	// the explicit lifetime parameter.
-	bytes_                []u8
+	bytes_                &^a []u8
 	absolute_byte_offset_ u64
 	line_number_          ?u64
 	context_kind_         ?&^a searcher.SinkContextKind
-	matches_              []matcher.Match
-	original_matches_     []matcher.Match
+	matches_              &^a []matcher.Match
+	original_matches_     &^a []matcher.Match
 }
+
+const empty_sunk_bytes = []u8{}
+const empty_sunk_matches = []matcher.Match{}
 
 @[inline]
 pub fn Sunk.empty[^a]() Sunk[^a] {
-	return Sunk[^a]{}
+	return Sunk[^a]{
+		bytes_:            &empty_sunk_bytes
+		matches_:          &empty_sunk_matches
+		original_matches_: &empty_sunk_matches
+	}
 }
 
 @[inline]
 pub fn Sunk.from_sink_match[^a, ^b](sunk &^a searcher.SinkMatch[^b], original_matches &^a []matcher.Match, replacement ?Replacement[^a]) Sunk[^a] {
-	if repl := replacement {
-		return Sunk[^a]{
-			bytes_:                repl.bytes[0..repl.bytes.len]
-			absolute_byte_offset_: sunk.absolute_byte_offset()
-			line_number_:          sunk.line_number()
-			matches_:              repl.matches[0..repl.matches.len]
-			original_matches_:     unsafe {
-				(*original_matches)[0..original_matches.len]
-			}
-		}
+	bytes, matches := if repl := replacement {
+		repl.bytes, repl.matches
+	} else {
+		sunk.bytes(), original_matches
 	}
-	bytes := sunk.bytes()
 	return Sunk[^a]{
-		bytes_:                bytes[0..bytes.len]
+		bytes_:                bytes
 		absolute_byte_offset_: sunk.absolute_byte_offset()
 		line_number_:          sunk.line_number()
-		matches_:              unsafe { (*original_matches)[0..original_matches.len] }
-		original_matches_:     unsafe { (*original_matches)[0..original_matches.len] }
+		matches_:              matches
+		original_matches_:     original_matches
 	}
 }
 
 @[inline]
 pub fn Sunk.from_sink_context[^a, ^b](sunk &^a searcher.SinkContext[^b], original_matches &^a []matcher.Match, replacement ?Replacement[^a]) Sunk[^a] {
-	if repl := replacement {
-		return Sunk[^a]{
-			bytes_:                repl.bytes[0..repl.bytes.len]
-			absolute_byte_offset_: sunk.absolute_byte_offset()
-			line_number_:          sunk.line_number()
-			context_kind_:         sunk.kind()
-			matches_:              repl.matches[0..repl.matches.len]
-			original_matches_:     unsafe {
-				(*original_matches)[0..original_matches.len]
-			}
-		}
+	bytes, matches := if repl := replacement {
+		repl.bytes, repl.matches
+	} else {
+		sunk.bytes(), original_matches
 	}
-	bytes := sunk.bytes()
 	return Sunk[^a]{
-		bytes_:                bytes[0..bytes.len]
+		bytes_:                bytes
 		absolute_byte_offset_: sunk.absolute_byte_offset()
 		line_number_:          sunk.line_number()
 		context_kind_:         sunk.kind()
-		matches_:              unsafe { (*original_matches)[0..original_matches.len] }
-		original_matches_:     unsafe { (*original_matches)[0..original_matches.len] }
+		matches_:              matches
+		original_matches_:     original_matches
 	}
 }
 
@@ -594,18 +603,18 @@ pub fn (sunk &^a Sunk[^a]) context_kind[^a]() ?&^a searcher.SinkContextKind {
 }
 
 @[inline]
-pub fn (sunk &Sunk[^a]) bytes[^a]() []u8 {
-	return unsafe { sunk.bytes_ }
+pub fn (sunk &Sunk[^a]) bytes[^a]() &^a []u8 {
+	return sunk.bytes_
 }
 
 @[inline]
-pub fn (sunk &Sunk[^a]) matches[^a]() []matcher.Match {
-	return unsafe { sunk.matches_ }
+pub fn (sunk &Sunk[^a]) matches[^a]() &^a []matcher.Match {
+	return sunk.matches_
 }
 
 @[inline]
-pub fn (sunk &Sunk[^a]) original_matches[^a]() []matcher.Match {
-	return unsafe { sunk.original_matches_ }
+pub fn (sunk &Sunk[^a]) original_matches[^a]() &^a []matcher.Match {
+	return sunk.original_matches_
 }
 
 @[inline]

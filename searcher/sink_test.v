@@ -34,10 +34,15 @@ fn test_sink_defaults_supply_optional_behavior() {
 
 fn test_sink_match_accessors_borrow_the_search_buffer() {
 	input := [u8(`a`), `x`, `y`, `\n`]
-	mat := SinkMatch.new(&input, matcher.Match.new(1, 3))
+	mat := SinkMatch.new(&input, matcher.Match.new(1, 3)).with_line_number(u64(4))
+	copy := mat.clone()
 
 	assert mat.buffer().bytestr() == 'axy\n'
 	assert mat.bytes().bytestr() == 'xy'
+	assert mat.buffer().data == input.data
+	assert unsafe { mat.bytes().data == &u8(input.data) + 1 }
+	assert copy.bytes().data == mat.bytes().data
+	assert copy.line_number() == ?u64(4)
 }
 
 fn test_sink_context_accessors_borrow_the_search_buffer() {
@@ -47,10 +52,24 @@ fn test_sink_context_accessors_borrow_the_search_buffer() {
 		u64(2))
 
 	assert ctx.bytes().bytestr() == 'xc\n'
+	assert ctx.bytes().data == input_tail.data
 	assert *ctx.kind() == .before
 	assert ctx.absolute_byte_offset() == 9
 	assert ctx.line_number() == ?u64(2)
 	assert ctx.lines().count() == 1
+}
+
+fn test_line_iterator_yields_borrowed_views() {
+	input := 'x\nyz'.bytes()
+	mut lines := LineIter.new(`\n`, &input)
+	first := lines.next() or { panic('missing first line') }
+	second := lines.next() or { panic('missing second line') }
+
+	assert first.bytestr() == 'x\n'
+	assert second.bytestr() == 'yz'
+	assert first.data == input.data
+	assert unsafe { second.data == &u8(input.data) + 2 }
+	assert lines.next() == none
 }
 
 fn test_utf8_sink_reports_utf8_match() {

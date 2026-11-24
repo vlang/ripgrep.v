@@ -177,10 +177,8 @@ pub fn (mut wtr BufferWriter) print(buffer &Buffer) ! {
 }
 
 /// Returns the contents of this buffer.
-pub fn (buffer &Buffer) as_slice() []u8 {
-	// V-specific: these getters return a Rust borrow (`&[u8]`, `&[Match]`) as an
-	// explicit view of the field rather than an ownership copy.
-	return unsafe { buffer.bytes }
+pub fn (buffer &^a Buffer) as_slice[^a]() &^a []u8 {
+	return &buffer.bytes
 }
 
 /// Returns true when this buffer is empty.

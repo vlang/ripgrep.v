@@ -9,11 +9,11 @@ fn test_buffer_records_plain_bytes_and_clear() {
 
 	n := buffer.write('abc'.bytes()) or { panic(err.msg()) }
 	assert n == 3
-	assert buffer.as_slice() == 'abc'.bytes()
+	assert *buffer.as_slice() == 'abc'.bytes()
 
 	buffer.clear()
 	assert buffer.is_empty()
-	assert buffer.as_slice() == []u8{}
+	assert *buffer.as_slice() == []u8{}
 }
 
 fn test_buffer_clear_releases_oversized_file_output() {

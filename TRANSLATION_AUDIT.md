@@ -26,6 +26,38 @@ find . -type f -name '*.v' | sort
 find . -type f -name '*.v' -print0 | xargs -0 wc -l
 ```
 
+## Ownership comparison
+
+- `crates/searcher/src/{sink,lines}.rs` borrows match, context and line bytes from the
+  input. The corresponding V APIs in `searcher/lib.v` return lifetime-bearing references.
+  Cloning a match shares its input. A V match stores its range descriptor inline to avoid
+  a per-match allocation, so a view of that range borrows the match as well as its bytes.
+- `crates/printer/src/util.rs` borrows replacement bytes and offsets from the replacer,
+  and original bytes and offsets from the search. `printer/support.v` borrows the
+  haystack and replacement pattern and carries the output borrows through `Replacement`
+  and `Sunk`. `cli.Buffer.as_slice` borrows its bytes, matching the `termcolor::Buffer`
+  used by the Rust CLI.
+- Rust's `PrinterPath` uses `Cow` and caches hyperlink resolution in `OnceCell`. The V
+  path wrapper borrows the ordinary path bytes, owns a copy for separator replacement,
+  and caches both successful and unsuccessful hyperlink lookups. Other `Cow` sites,
+  including UTF-8 sink conversion and JSON serialization, still materialize V strings.
+- Rust shares matcher and printer configuration through `Arc` and releases child
+  processes and native matcher resources through `Drop`. The V equivalents use
+  `sync.arc` and `Drop` in `ignore/dir.v`, `printer/`, `cli/process.v` and `pcre2/matcher.v`.
+  Rust's `crates/ignore/src/dir.rs` additionally caches parent matchers through `Weak`.
+  V's `sync.arc` provides strong references. The V walker rebuilds parent matchers.
+- The walker in `crates/ignore/src/walk.rs` requires Rust `Send` and `Sync` bounds for
+  thread-shared callbacks and visitors. The V walker synchronizes shared state at
+  runtime and joins its workers before returning. The V compiler does not enforce
+  equivalent type bounds.
+- Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
+  mutable access to the searcher and printer state, without `RefCell`'s dynamic loan
+  checks.
+- V `17004a4` accepts both a return of `cli.Buffer.as_slice()` from a local buffer and a
+  call to `buffer.clear()` before the returned view's last use. Rust rejects both loan
+  patterns. V also allocates a descriptor for a returned array range reference, such as
+  the one from `LineIter.next()`. These compiler differences limit ownership parity.
+
 ## File inventory
 
 Every upstream Rust file belongs to one of the mappings below. A basename

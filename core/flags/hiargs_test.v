@@ -164,7 +164,7 @@ fn test_hiargs_buffer_writer_returns_configured_buffer() {
 	mut buffer := wtr.buffer()
 	assert buffer.supports_color()
 	buffer.write('needle'.bytes()) or { panic(err.msg()) }
-	assert buffer.as_slice() == 'needle'.bytes()
+	assert *buffer.as_slice() == 'needle'.bytes()
 }
 
 fn test_hiargs_builds_search_worker_components() {

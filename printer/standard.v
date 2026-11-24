@@ -679,10 +679,10 @@ fn (mut sink StandardSink[^p, ^s, W]) record_matches[^p, ^s](searcher_ &searcher
 /// replacement, lazily allocating memory if necessary.
 ///
 /// To access the result of a replacement, use `replacer.replacement()`.
-fn (mut sink StandardSink[^p, ^s, W]) replace[^p, ^s](searcher_ &searcher.Searcher, bytes []u8, range matcher.Match) ! {
+fn (mut sink StandardSink[^p, ^s, W]) replace[^b, ^p, ^s](searcher_ &searcher.Searcher, bytes &^b []u8, range matcher.Match) ! {
 	sink.replacer.clear()
 	if replacement := (*sink.standard.config.replacement.get()) {
-		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, replacement)!
+		sink.replacer.replace_all(searcher_, sink.matcher, bytes, range, &replacement)!
 	}
 }
 
