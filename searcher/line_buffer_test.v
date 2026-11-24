@@ -38,18 +38,18 @@ fn (mut rdr LineBufferReader[^r, ^b]) consume_all[^r, ^b]() {
 ///
 /// This is a convenience function for `consume(buffer.len())`.
 fn (mut lb LineBuffer) consume_all() {
-	amt := usize(lb.buffer().len)
+	amt := uint(lb.buffer().len)
 	lb.consume(amt)
 }
 
-fn assert_replace(slice string, src u8, replacement u8, expected string, expected_pos ?usize) {
+fn assert_replace(slice string, src u8, replacement u8, expected string, expected_pos ?uint) {
 	mut dst := slice.bytes()
 	pos := replace_bytes(mut dst, src, replacement)
 	assert dst.bytestr() == expected
 	assert_optional_usize(pos, expected_pos)
 }
 
-fn assert_optional_usize(got ?usize, expected ?usize) {
+fn assert_optional_usize(got ?uint, expected ?uint) {
 	if expected_value := expected {
 		got_value := got or {
 			assert false
@@ -83,11 +83,11 @@ fn test_replace() {
 	assert_replace('', `b`, `z`, '', none)
 	assert_replace('a', `a`, `a`, 'a', none)
 	assert_replace('a', `b`, `z`, 'a', none)
-	assert_replace('abc', `b`, `z`, 'azc', usize(1))
-	assert_replace('abb', `b`, `z`, 'azz', usize(1))
-	assert_replace('aba', `a`, `z`, 'zbz', usize(0))
-	assert_replace('bbb', `b`, `z`, 'zzz', usize(0))
-	assert_replace('bac', `b`, `z`, 'zac', usize(0))
+	assert_replace('abc', `b`, `z`, 'azc', uint(1))
+	assert_replace('abb', `b`, `z`, 'azz', uint(1))
+	assert_replace('aba', `a`, `z`, 'zbz', uint(0))
+	assert_replace('bbb', `b`, `z`, 'zzz', uint(0))
+	assert_replace('bac', `b`, `z`, 'zac', uint(0))
 }
 
 fn test_line_buffer_builder_build_is_reusable() {
@@ -299,7 +299,7 @@ fn test_buffer_binary_none() {
 	assert rdr.fill()!
 	got := rdr.buffer()
 	expected := bytes.bytes()
-	assert got == expected
+	assert *got == expected
 	rdr.consume_all()
 
 	assert !rdr.fill()!

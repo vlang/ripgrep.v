@@ -23,7 +23,7 @@ $if pcre2 ? {
 		#flag -lpcre2-8
 	}
 	#include "@VMODROOT/pcre2/pcre2_shim.h"
-	fn C.rg_pcre2_version(buf &char, len usize) &char
+	fn C.rg_pcre2_version(buf &char, len uint) &char
 	fn C.rg_pcre2_jit_available() int
 }
 
@@ -112,7 +112,7 @@ fn pcre2_major_minor() string {
 fn pcre2_version() string {
 	$if pcre2 ? {
 		mut buf := []u8{len: 128}
-		C.rg_pcre2_version(&char(buf.data), usize(buf.len))
+		C.rg_pcre2_version(unsafe { &char(buf.data) }, uint(buf.len))
 		mut end := 0
 		for end < buf.len && buf[end] != 0 {
 			end++

@@ -20,7 +20,7 @@ mut:
 	pos   int
 }
 
-fn JsonByteSliceReader.new(bytes []u8) JsonByteSliceReader {
+fn JsonByteSliceReader.new(bytes &[]u8) JsonByteSliceReader {
 	return JsonByteSliceReader{
 		bytes: bytes.clone()
 	}
@@ -132,7 +132,7 @@ and exhibited clearly, with a label attached.'
 	mut printer_ := JSONBuilder.new().build(json_buffer())
 	mut builder := searcher.SearcherBuilder.new()
 	builder.binary_detection(searcher.BinaryDetection.quit(`\x00`))
-	builder.heap_limit(usize(80))
+	builder.heap_limit(uint(80))
 	mut built := builder.build()
 	mut rdr := JsonByteSliceReader.from_string(binary)
 	mut sink := printer_.sink(PrinterMatcher.rust_regex(matcher_))
@@ -240,8 +240,7 @@ fn test_json_missing_crlf() {
 	built.search_reader(matcher_, mut rdr, &sink)!
 	mut got := json_printer_contents(mut printer_)
 	assert json_line_count(got) == 3
-	assert json_nth_line(got, 1).contains(r'test\r\n'), 'missing \'test\\r\\n\' in \'${json_nth_line(got,
-		1)}\''
+	assert json_nth_line(got, 1).contains(r'test\r\n'), "missing 'test\\r\\n' in '${json_nth_line(got, 1)}'"
 
 	mut crlf_matcher_builder := regex.RegexMatcherBuilder.new()
 	crlf_matcher_builder.crlf(true)
@@ -255,6 +254,5 @@ fn test_json_missing_crlf() {
 	crlf_searcher.search_reader(crlf_matcher, mut crlf_rdr, &crlf_sink)!
 	got = json_printer_contents(mut crlf_printer)
 	assert json_line_count(got) == 3
-	assert json_nth_line(got, 1).contains(r'test\r\n'), 'missing \'test\\r\\n\' in \'${json_nth_line(got,
-		1)}\''
+	assert json_nth_line(got, 1).contains(r'test\r\n'), "missing 'test\\r\\n' in '${json_nth_line(got, 1)}'"
 }

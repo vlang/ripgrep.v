@@ -928,8 +928,8 @@ fn is_valid_scheme_char(byte u8) bool {
 		|| (byte >= `a` && byte <= `z`) || byte == `+` || byte == `-` || byte == `.`
 }
 
-fn index_byte(haystack []u8, needle u8) ?int {
-	for i, byte in haystack {
+fn index_byte(haystack &[]u8, needle u8) ?int {
+	for i, byte in *haystack {
 		if byte == needle {
 			return i
 		}
@@ -945,9 +945,9 @@ fn hex_upper(value u8) u8 {
 // for the byte-backed text representation used by hyperlink parts.
 fn hyperlink_text_lossy(text []u8) string {
 	mut runes := []rune{cap: text.len}
-	mut at := usize(0)
+	mut at := uint(0)
 	for at < text.len {
-		r, width := decode_utf8_lossy(text, at, text.len)
+		r, width := decode_utf8_lossy(text, at, uint(text.len))
 		runes << r
 		at += width
 	}

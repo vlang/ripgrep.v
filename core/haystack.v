@@ -35,6 +35,9 @@ pub fn HaystackBuilder.new() HaystackBuilder {
 pub fn (builder HaystackBuilder) build_from_result(result ignore.WalkResult) ?Haystack {
 	if result.is_error {
 		err_message(result.err.msg())
+		// V-specific: release the consumed walk result, as Rust drops it here.
+		mut consumed := result
+		consumed.free()
 		return none
 	}
 	return builder.build(result.entry)
@@ -68,7 +71,7 @@ fn (builder HaystackBuilder) build(dent ignore.DirEntry) ?Haystack {
 	if !hay.is_dir() {
 		debug_message('rg::haystack', '${*hay.path()}: ignored because it is not a file')
 	}
-	hay.free_path_cache()
+	hay.free_owned()
 	return none
 }
 
@@ -117,16 +120,15 @@ pub fn (hay &^a Haystack) path[^a]() &^a string {
 	return &hay.path_value
 }
 
-// V-specific: releases the path cache while leaving the borrowed walk entry
-// owned by the caller's WalkResult.
+// V-specific: releases the path cache while leaving the walk entry in place.
 pub fn (mut hay Haystack) free_path_cache() {
 	// Assigning '' auto-drops (frees) the old owned path once under v3 ownership;
 	// a manual `.free()` first would double-free.
 	hay.path_value = ''
 }
 
-// V-specific: release a haystack that received ownership of a walk entry,
-// as in the parallel search job queue.
+// V-specific: release a haystack and the walk entry it received ownership of,
+// where Rust drops the haystack.
 pub fn (mut hay Haystack) free_owned() {
 	hay.dent.free()
 	hay.free_path_cache()

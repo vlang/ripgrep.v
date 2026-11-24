@@ -13,12 +13,12 @@ fn is_reader_eof(err IError) bool {
 /// patterns written by end users that are not valid UTF-8.
 pub struct InvalidPatternError implements IClone {
 	original    string
-	valid_up_to usize
+	valid_up_to uint
 }
 
 /// Returns the index in the given string up to which valid UTF-8 was
 /// verified.
-pub fn (err &InvalidPatternError) valid_up_to() usize {
+pub fn (err &InvalidPatternError) valid_up_to() uint {
 	return err.valid_up_to
 }
 
@@ -172,7 +172,7 @@ fn push_pattern_line(mut patterns []string, line []u8, line_number int) ! {
 	patterns << pattern.to_owned()
 }
 
-fn utf8_valid_up_to(bytes []u8) (usize, bool) {
+fn utf8_valid_up_to(bytes []u8) (uint, bool) {
 	mut i := 0
 	for i < bytes.len {
 		b0 := bytes[i]
@@ -182,7 +182,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		}
 		if b0 >= 0xc2 && b0 <= 0xdf {
 			if i + 1 >= bytes.len || !is_utf8_continuation(bytes[i + 1]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 2
 			continue
@@ -190,7 +190,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		if b0 == 0xe0 {
 			if i + 2 >= bytes.len || bytes[i + 1] < 0xa0 || bytes[i + 1] > 0xbf
 				|| !is_utf8_continuation(bytes[i + 2]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 3
 			continue
@@ -198,7 +198,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		if b0 >= 0xe1 && b0 <= 0xec {
 			if i + 2 >= bytes.len || !is_utf8_continuation(bytes[i + 1])
 				|| !is_utf8_continuation(bytes[i + 2]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 3
 			continue
@@ -206,7 +206,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		if b0 == 0xed {
 			if i + 2 >= bytes.len || bytes[i + 1] < 0x80 || bytes[i + 1] > 0x9f
 				|| !is_utf8_continuation(bytes[i + 2]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 3
 			continue
@@ -214,7 +214,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		if b0 >= 0xee && b0 <= 0xef {
 			if i + 2 >= bytes.len || !is_utf8_continuation(bytes[i + 1])
 				|| !is_utf8_continuation(bytes[i + 2]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 3
 			continue
@@ -222,7 +222,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		if b0 == 0xf0 {
 			if i + 3 >= bytes.len || bytes[i + 1] < 0x90 || bytes[i + 1] > 0xbf
 				|| !is_utf8_continuation(bytes[i + 2]) || !is_utf8_continuation(bytes[i + 3]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 4
 			continue
@@ -231,7 +231,7 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 			if i + 3 >= bytes.len || !is_utf8_continuation(bytes[i + 1])
 				|| !is_utf8_continuation(bytes[i + 2])
 				|| !is_utf8_continuation(bytes[i + 3]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 4
 			continue
@@ -239,12 +239,12 @@ fn utf8_valid_up_to(bytes []u8) (usize, bool) {
 		if b0 == 0xf4 {
 			if i + 3 >= bytes.len || bytes[i + 1] < 0x80 || bytes[i + 1] > 0x8f
 				|| !is_utf8_continuation(bytes[i + 2]) || !is_utf8_continuation(bytes[i + 3]) {
-				return usize(i), false
+				return uint(i), false
 			}
 			i += 4
 			continue
 		}
-		return usize(i), false
+		return uint(i), false
 	}
-	return usize(i), true
+	return uint(i), true
 }

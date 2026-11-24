@@ -54,8 +54,8 @@ implementations.
 /// A `Match` can be used to slice a `&[u8]`, `&mut [u8]` or `&str` using
 /// range notation in Rust.
 pub struct Match implements IClone {
-	start usize
-	end   usize
+	start uint
+	end   uint
 }
 
 /// Create a new match.
@@ -63,7 +63,7 @@ pub struct Match implements IClone {
 /// # Panics
 ///
 /// This function panics if `start > end`.
-pub fn Match.new(start usize, end usize) Match {
+pub fn Match.new(start uint, end uint) Match {
 	if start > end {
 		panic('${start} is not <= ${end}')
 	}
@@ -74,7 +74,7 @@ pub fn Match.new(start usize, end usize) Match {
 }
 
 /// Creates a zero width match at the given offset.
-pub fn Match.zero(offset usize) Match {
+pub fn Match.zero(offset uint) Match {
 	return Match{
 		start: offset
 		end:   offset
@@ -82,12 +82,12 @@ pub fn Match.zero(offset usize) Match {
 }
 
 /// Return the start offset of this match.
-pub fn (m Match) start() usize {
+pub fn (m Match) start() uint {
 	return m.start
 }
 
 /// Return the end offset of this match.
-pub fn (m Match) end() usize {
+pub fn (m Match) end() uint {
 	return m.end
 }
 
@@ -97,7 +97,7 @@ pub fn (m Match) end() usize {
 /// # Panics
 ///
 /// This method panics if `start > self.end`.
-pub fn (m Match) with_start(start usize) Match {
+pub fn (m Match) with_start(start uint) Match {
 	if start > m.end {
 		panic('${start} is not <= ${m.end}')
 	}
@@ -113,7 +113,7 @@ pub fn (m Match) with_start(start usize) Match {
 /// # Panics
 ///
 /// This method panics if `self.start > end`.
-pub fn (m Match) with_end(end usize) Match {
+pub fn (m Match) with_end(end uint) Match {
 	if m.start > end {
 		panic('${m.start} is not <= ${end}')
 	}
@@ -132,7 +132,7 @@ pub fn (m Match) with_end(end usize) Match {
 ///
 /// This panics if adding the given amount to either the start or end
 /// offset would result in an overflow.
-pub fn (m Match) offset(amount usize) Match {
+pub fn (m Match) offset(amount uint) Match {
 	new_start := m.start + amount
 	if new_start < m.start {
 		panic('Match.offset overflow at start')
@@ -148,7 +148,7 @@ pub fn (m Match) offset(amount usize) Match {
 }
 
 /// Returns the number of bytes in this match.
-pub fn (m Match) len() usize {
+pub fn (m Match) len() uint {
 	return m.end - m.start
 }
 
@@ -299,7 +299,7 @@ pub fn ByteSet.full() ByteSet {
 ///
 /// If the given byte already belongs to this set, then this is a no-op.
 pub fn (mut set ByteSet) add(byte u8) {
-	bucket := usize(byte / 64)
+	bucket := uint(byte / 64)
 	bit := u32(byte % 64)
 	set.bits.bits[bucket] |= u64(1) << bit
 }
@@ -323,7 +323,7 @@ pub fn (mut set ByteSet) add_all(start u8, end u8) {
 ///
 /// If the given byte is not in this set, then this is a no-op.
 pub fn (mut set ByteSet) remove(byte u8) {
-	bucket := usize(byte / 64)
+	bucket := uint(byte / 64)
 	bit := u32(byte % 64)
 	set.bits.bits[bucket] &= ~(u64(1) << bit)
 }
@@ -346,14 +346,14 @@ pub fn (mut set ByteSet) remove_all(start u8, end u8) {
 /// Return true if and only if the given byte is in this set.
 @[markused]
 pub fn (set ByteSet) contains(byte u8) bool {
-	bucket := usize(byte / 64)
+	bucket := uint(byte / 64)
 	bit := u32(byte % 64)
 	return (set.bits.bits[bucket] & (u64(1) << bit)) > 0
 }
 
 @[markused]
 pub fn byte_set_contains(set &ByteSet, byte u8) bool {
-	bucket := usize(byte / 64)
+	bucket := uint(byte / 64)
 	bit := u32(byte % 64)
 	return (set.bits.bits[bucket] & (u64(1) << bit)) > 0
 }
@@ -376,14 +376,14 @@ pub fn byte_set_contains(set &ByteSet, byte u8) bool {
 pub interface Captures {
 	/// Return the total number of capturing groups. This includes capturing
 	/// groups that have not matched anything.
-	len() usize
+	len() uint
 	/// Return the capturing group match at the given index. If no match of
 	/// that capturing group exists, then this returns `none`.
 	///
 	/// When a matcher reports a match with capturing groups, then the first
 	/// capturing group (at index `0`) must always correspond to the offsets
 	/// for the overall match.
-	get(i usize) ?Match
+	get(i uint) ?Match
 }
 
 /// Return the overall match for the capture.
@@ -432,8 +432,8 @@ pub fn (caps Captures) is_empty() bool {
 /// the given `haystack`. Generally, this means that `haystack` should be
 /// the same slice that was searched to get the current capture group
 /// matches.
-pub fn (caps Captures) interpolate(name_to_index fn (string) ?usize, haystack []u8, replacement []u8, mut dst []u8) {
-	interpolate(replacement, fn [caps, haystack] (i usize, mut dst []u8) {
+pub fn (caps Captures) interpolate(name_to_index fn (string) ?uint, haystack []u8, replacement []u8, mut dst []u8) {
+	interpolate(replacement, fn [caps, haystack] (i uint, mut dst []u8) {
 		range := caps.get(i) or {
 			return
 		}
@@ -455,12 +455,12 @@ pub fn NoCaptures.new() NoCaptures {
 	return NoCaptures{}
 }
 
-pub fn (caps NoCaptures) len() usize {
+pub fn (caps NoCaptures) len() uint {
 	_ = caps
 	return 0
 }
 
-pub fn (caps NoCaptures) get(i usize) ?Match {
+pub fn (caps NoCaptures) get(i uint) ?Match {
 	_ = caps
 	_ = i
 	return none
@@ -495,14 +495,14 @@ enum LineMatchKindTag {
 /// representation for the position associated with each variant.
 pub struct LineMatchKind implements IClone {
 	kind LineMatchKindTag
-	pos  usize
+	pos  uint
 }
 
 /// A position inside a line that is known to contain a match.
 ///
 /// This position can be anywhere in the line. It does not need to point
 /// at the location of the match.
-pub fn LineMatchKind.confirmed(pos usize) LineMatchKind {
+pub fn LineMatchKind.confirmed(pos uint) LineMatchKind {
 	return LineMatchKind{
 		kind: .confirmed
 		pos:  pos
@@ -514,7 +514,7 @@ pub fn LineMatchKind.confirmed(pos usize) LineMatchKind {
 ///
 /// This position can be anywhere in the line. It does not need to point
 /// at the location of the match.
-pub fn LineMatchKind.candidate(pos usize) LineMatchKind {
+pub fn LineMatchKind.candidate(pos uint) LineMatchKind {
 	return LineMatchKind{
 		kind: .candidate
 		pos:  pos
@@ -529,7 +529,7 @@ pub fn (kind LineMatchKind) is_candidate() bool {
 	return kind.kind == .candidate
 }
 
-pub fn (kind LineMatchKind) position() usize {
+pub fn (kind LineMatchKind) position() uint {
 	return kind.pos
 }
 
@@ -592,10 +592,10 @@ pub fn (opt FallibleLineMatchKind) get() ?LineMatchKind {
 
 pub struct FallibleUsize {
 	has_value bool
-	value     usize
+	value     uint
 }
 
-pub fn FallibleUsize.some(value usize) FallibleUsize {
+pub fn FallibleUsize.some(value uint) FallibleUsize {
 	return FallibleUsize{
 		has_value: true
 		value:     value
@@ -606,7 +606,7 @@ pub fn FallibleUsize.absent() FallibleUsize {
 	return FallibleUsize{}
 }
 
-pub fn (opt FallibleUsize) get() ?usize {
+pub fn (opt FallibleUsize) get() ?uint {
 	if !opt.has_value {
 		return none
 	}
@@ -638,7 +638,7 @@ pub interface Matcher {
 	/// The significance of the starting point is that it takes the surrounding
 	/// context into consideration. For example, the `\A` anchor can only
 	/// match when `at == 0`.
-	find_at(haystack &[]u8, at usize) !FallibleMatch
+	find_at(haystack &[]u8, at uint) !FallibleMatch
 	/// Returns an end location of the first match in `haystack` starting at
 	/// the given position. If no match exists, then `none` is returned.
 	///
@@ -657,7 +657,7 @@ pub interface Matcher {
 	/// The significance of the starting point is that it takes the surrounding
 	/// context into consideration. For example, the `\A` anchor can only
 	/// match when `at == 0`.
-	shortest_match_at(haystack &[]u8, at usize) !FallibleUsize
+	shortest_match_at(haystack &[]u8, at uint) !FallibleUsize
 	/// Creates an empty group of captures suitable for use with the capturing
 	/// APIs of this interface.
 	///
@@ -676,7 +676,7 @@ pub interface Matcher {
 	///
 	/// By default, capturing groups are not supported, so this always
 	/// returns 0.
-	capture_count() usize
+	capture_count() uint
 	/// Maps the given capture group name to its corresponding capture group
 	/// index, if one exists. If one does not exist, then `none` is returned.
 	///
@@ -686,7 +686,7 @@ pub interface Matcher {
 	///
 	/// By default, capturing groups are not supported, so this always returns
 	/// `none`.
-	capture_index(name string) ?usize
+	capture_index(name string) ?uint
 	/// Populates the first set of capture group matches from `haystack`
 	/// into `caps` after `at`, where the byte offsets in each capturing
 	/// group are relative to the start of `haystack` (and not `at`). If no
@@ -710,7 +710,7 @@ pub interface Matcher {
 	/// Note that if implementors seek to support capturing groups, then they
 	/// should implement this method. Other methods that match based on
 	/// captures will then work automatically.
-	captures_at(haystack &[]u8, at usize, mut caps NoCaptures) !bool
+	captures_at(haystack &[]u8, at uint, mut caps NoCaptures) !bool
 	/// If available, return a set of bytes that will never appear in a match
 	/// produced by an implementation.
 	///
@@ -789,31 +789,31 @@ pub interface Matcher {
 /// V-specific helper interface for Rust trait default methods that only need
 /// `Matcher::find_at`.
 pub interface MatchFinder {
-	find_at(haystack &[]u8, at usize) !FallibleMatch
+	find_at(haystack &[]u8, at uint) !FallibleMatch
 }
 
 /// V-specific helper interface for Rust trait default methods that only need
 /// `Matcher::captures_at`.
 pub interface CaptureFinder[T] {
-	captures_at(haystack &[]u8, at usize, mut caps T) !bool
+	captures_at(haystack &[]u8, at uint, mut caps T) !bool
 }
 
 /// By default, capturing groups are not supported, so this always
 /// returns 0.
-pub fn default_capture_count() usize {
+pub fn default_capture_count() uint {
 	return 0
 }
 
 /// By default, capturing groups are not supported, so this always returns
 /// `none`.
-pub fn default_capture_index(name string) ?usize {
+pub fn default_capture_index(name string) ?uint {
 	_ = name
 	return none
 }
 
 /// By default, capturing groups aren't supported, and this implementation
 /// will always behave as if a match were impossible.
-pub fn default_captures_at[T](haystack &[]u8, at usize, mut caps T) !bool {
+pub fn default_captures_at[T](haystack &[]u8, at uint, mut caps T) !bool {
 	_ = haystack
 	_ = at
 	_ = caps
@@ -860,7 +860,7 @@ pub fn find_iter(matcher_ &MatchFinder, haystack &[]u8, matched fn (Match) bool)
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn find_iter_at(matcher_ &MatchFinder, haystack &[]u8, at usize, matched fn (Match) bool) ! {
+pub fn find_iter_at(matcher_ &MatchFinder, haystack &[]u8, at uint, matched fn (Match) bool) ! {
 	try_find_iter_at(matcher_, haystack, at, fn [matched] (mat Match) !bool {
 		return matched(mat)
 	})!
@@ -888,10 +888,10 @@ pub fn try_find_iter(matcher_ &MatchFinder, haystack &[]u8, matched fn (Match) !
 /// match when `at == 0`.
 ///
 /// In this port, callback errors and matcher errors share V's `!` channel.
-pub fn try_find_iter_at(matcher_ &MatchFinder, haystack &[]u8, at usize, matched fn (Match) !bool) ! {
+pub fn try_find_iter_at(matcher_ &MatchFinder, haystack &[]u8, at uint, matched fn (Match) !bool) ! {
 	mut last_end := at
 	mut has_last_match := false
-	mut last_match_end := usize(0)
+	mut last_match_end := uint(0)
 	for {
 		if last_end > haystack.len {
 			return
@@ -944,8 +944,8 @@ pub fn captures_iter[T](matcher_ &CaptureFinder[T], haystack &[]u8, mut caps T, 
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn captures_iter_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at usize, mut caps T, matched fn (&T) bool) ! {
-	try_captures_iter_at(matcher_, haystack, at, mut caps, fn [matched] (caps &T) !bool {
+pub fn captures_iter_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at uint, mut caps T, matched fn (&T) bool) ! {
+	try_captures_iter_at(matcher_, haystack, at, mut caps, fn [matched] [T](caps &T) !bool {
 		return matched(caps)
 	})!
 }
@@ -972,10 +972,10 @@ pub fn try_captures_iter[T](matcher_ &CaptureFinder[T], haystack &[]u8, mut caps
 /// match when `at == 0`.
 ///
 /// In this port, callback errors and matcher errors share V's `!` channel.
-pub fn try_captures_iter_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at usize, mut caps T, matched fn (&T) !bool) ! {
+pub fn try_captures_iter_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at uint, mut caps T, matched fn (&T) !bool) ! {
 	mut last_end := at
 	mut has_last_match := false
-	mut last_match_end := usize(0)
+	mut last_match_end := uint(0)
 	for {
 		if last_end > haystack.len {
 			return
@@ -1011,16 +1011,17 @@ pub fn try_captures_iter_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at us
 ///
 /// If the given `append` function returns `false`, then replacement stops.
 pub fn replace(matcher_ &MatchFinder, haystack &[]u8, mut dst []u8, append fn (Match, mut []u8) bool) ! {
-	mut last_match := usize(0)
-	// V mutable closure captures own a copy, so use an explicit reference for
-	// Rust's `&mut last_match` capture.
+	mut last_match := uint(0)
+	// V mutable closure captures own a copy, so use explicit references for
+	// Rust's mutable captures.
 	last_match_ptr := &last_match
-	find_iter(matcher_, haystack, fn [haystack, mut dst, append, last_match_ptr] (mat Match) bool {
+	dst_ptr := &dst
+	find_iter(matcher_, haystack, fn [haystack, dst_ptr, append, last_match_ptr] (mat Match) bool {
 		unsafe {
-			append_slice(mut dst, haystack[*last_match_ptr..mat.start()])
+			append_slice(mut *dst_ptr, haystack[*last_match_ptr..mat.start()])
 			*last_match_ptr = mat.end()
+			return append(mat, mut *dst_ptr)
 		}
-		return append(mat, mut dst)
 	})!
 	unsafe {
 		append_slice(mut dst, haystack[*last_match_ptr..])
@@ -1043,18 +1044,19 @@ pub fn replace_with_captures[T](matcher_ &CaptureFinder[T], haystack &[]u8, mut 
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn replace_with_captures_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at usize, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
+pub fn replace_with_captures_at[T](matcher_ &CaptureFinder[T], haystack &[]u8, at uint, mut caps T, mut dst []u8, append fn (&T, mut []u8) bool) ! {
 	mut last_match := at
-	// V mutable closure captures own a copy, so use an explicit reference for
-	// Rust's `&mut last_match` capture.
+	// V mutable closure captures own a copy, so use explicit references for
+	// Rust's mutable captures.
 	last_match_ptr := &last_match
-	captures_iter_at(matcher_, haystack, at, mut caps, fn [haystack, mut dst, append, last_match_ptr] (caps &T) bool {
+	dst_ptr := &dst
+	captures_iter_at(matcher_, haystack, at, mut caps, fn [haystack, dst_ptr, append, last_match_ptr] [T](caps &T) bool {
 		mat := capture_match_or_panic(caps, 0)
 		unsafe {
-			append_slice(mut dst, haystack[*last_match_ptr..mat.start()])
+			append_slice(mut *dst_ptr, haystack[*last_match_ptr..mat.start()])
 			*last_match_ptr = mat.end()
+			return append(caps, mut *dst_ptr)
 		}
-		return append(caps, mut dst)
 	})!
 	unsafe {
 		append_slice(mut dst, haystack[*last_match_ptr..])
@@ -1065,12 +1067,12 @@ fn missing_overall_capture_match() Match {
 	panic('captures missing overall match at index 0')
 }
 
-fn capture_match_or_panic(caps Captures, i usize) Match {
+fn capture_match_or_panic(caps Captures, i uint) Match {
 	return caps.get(i) or { missing_overall_capture_match() }
 }
 
-fn append_slice(mut dst []u8, bytes []u8) {
-	for byte in bytes {
+fn append_slice(mut dst []u8, bytes &[]u8) {
+	for byte in *bytes {
 		dst << byte
 	}
 }
@@ -1090,7 +1092,7 @@ pub fn is_match(matcher_ &MatchFinder, haystack &[]u8) !bool {
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn is_match_at(matcher_ &MatchFinder, haystack &[]u8, at usize) !bool {
+pub fn is_match_at(matcher_ &MatchFinder, haystack &[]u8, at uint) !bool {
 	return shortest_match_at(matcher_, haystack, at)!.has_value
 }
 
@@ -1136,7 +1138,7 @@ pub fn shortest_match(matcher_ &MatchFinder, haystack &[]u8) !FallibleUsize {
 /// The significance of the starting point is that it takes the surrounding
 /// context into consideration. For example, the `\A` anchor can only
 /// match when `at == 0`.
-pub fn shortest_match_at(matcher_ &MatchFinder, haystack &[]u8, at usize) !FallibleUsize {
+pub fn shortest_match_at(matcher_ &MatchFinder, haystack &[]u8, at uint) !FallibleUsize {
 	maybe_mat := matcher_.find_at(haystack, at)!
 	if !maybe_mat.has_value {
 		return FallibleUsize.absent()

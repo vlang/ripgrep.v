@@ -26,6 +26,7 @@ Provides the definition of high level arguments from CLI flags.
 ///
 /// So while low level arguments are collected during parsing itself, high
 /// level arguments aren't created until parsing has completely finished.
+@[heap]
 pub struct HiArgs {
 	binary                       BinaryDetection
 	boundary                     ?BoundaryMode
@@ -39,7 +40,7 @@ pub struct HiArgs {
 	context_separator            ContextSeparator
 	crlf                         bool
 	cwd                          string
-	dfa_size_limit               ?usize
+	dfa_size_limit               ?uint
 	encoding                     EncodingMode
 	engine                       EngineChoice
 	field_context_separator      FieldContextSeparator
@@ -60,7 +61,7 @@ pub struct HiArgs {
 	max_columns                  ?u64
 	max_columns_preview          bool
 	max_count                    ?u64
-	max_depth                    ?usize
+	max_depth                    ?uint
 	max_filesize                 ?u64
 	mmap_choice                  searcher.MmapChoice
 	mode                         Mode
@@ -85,13 +86,13 @@ pub struct HiArgs {
 	pre_globs                    ignore.Override
 	quiet                        bool
 	quit_after_match             bool
-	regex_size_limit             ?usize
+	regex_size_limit             ?uint
 	replace                      ?string
 	search_zip                   bool
 	sort                         ?SortMode
 	stats                        ?printer.Stats
 	stop_on_nonmatch             bool
-	threads                      usize
+	threads                      uint
 	trim                         bool
 	types                        ignore.Types
 	vimgrep                      bool
@@ -150,7 +151,7 @@ pub fn HiArgs.from_low_args(mut low LowArgs) !HiArgs {
 	path_terminator := if low.null { ?u8(`\0`) } else { ?u8(none) }
 	quit_after_match := stats_value == none && low.quiet
 	threads := if low.sort != none || paths.is_one_file {
-		usize(1)
+		uint(1)
 	} else if thread_count := low.threads {
 		thread_count
 	} else {
@@ -896,7 +897,7 @@ pub fn (args &HiArgs) stdout() cli.StandardStream {
 /// the available number of cores) and whether ripgrep's mode supports
 /// parallelism. It is intended that this number be used to directly
 /// determine how many threads to spawn.
-pub fn (args &HiArgs) threads() usize {
+pub fn (args &HiArgs) threads() uint {
 	return args.threads
 }
 
@@ -934,7 +935,7 @@ pub fn (args &HiArgs) walk_builder() !ignore.WalkBuilder {
 		}
 	}
 	if depth := args.max_depth {
-		builder.max_depth(usize(depth))
+		builder.max_depth(uint(depth))
 	} else {
 		builder.max_depth(none)
 	}
@@ -1488,7 +1489,7 @@ fn add_pattern(mut seen map[string]bool, mut patterns []string, pat string) {
 	patterns << pat
 }
 
-fn default_thread_count() usize {
+fn default_thread_count() uint {
 	cpus := runtime.nr_cpus()
 	if cpus <= 0 {
 		return 1
@@ -1496,7 +1497,7 @@ fn default_thread_count() usize {
 	if cpus > 12 {
 		return 12
 	}
-	return usize(cpus)
+	return uint(cpus)
 }
 
 fn compute_mmap_choice(mode MmapMode, paths &Paths) searcher.MmapChoice {
@@ -1557,7 +1558,7 @@ fn sort_key_for_haystack(hay &core.Haystack, kind SortModeKind) ?i64 {
 			return stat.atime
 		}
 		.created {
-			return creation_time_for_path(*hay.path())
+			return creation_time_for_path(hay.path()) or { return none }
 		}
 	}
 }

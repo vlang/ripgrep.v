@@ -103,7 +103,7 @@ fn test_case_smart_fast_line_candidate() {
 	builder.line_terminator(`\n`)
 	matcher_ := builder.build(r'sherlock') or { panic(err) }
 	found := matcher_.find_candidate_line('Sherlock\n'.bytes()) or { panic(err) }
-	assert found.has_value
+	assert found.get() != none
 }
 
 fn test_case_insensitive_unicode_literal() {
@@ -234,8 +234,8 @@ fn test_capture_groups() {
 	assert mat.end() == 13
 	assert groups == ['Doctor', 'Watson']
 	assert matcher_.capture_count() == 3
-	assert matcher_.capture_index('first') == ?usize(1)
-	assert matcher_.capture_index('last') == ?usize(2)
+	assert matcher_.capture_index('first') == ?uint(1)
+	assert matcher_.capture_index('last') == ?uint(2)
 	mut caps := matcher_.new_captures()!
 	assert matcher.captures(matcher_, 'Doctor Watson'.bytes(), mut caps)!
 	assert caps.len() == 3
@@ -660,16 +660,16 @@ fn test_default_regex_skips_malformed_utf8_in_unicode_mode() {
 		`E`, 0xf4, 0x90, 0x80, 0x80, `F`, 0xc2, 0xa2, `G`]
 	unicode_dot := RegexMatcherBuilder.new().build('.') or { panic(err.msg()) }
 	expected := [
-		matcher.Match.new(usize(0), usize(1)),
-		matcher.Match.new(usize(2), usize(3)),
-		matcher.Match.new(usize(5), usize(6)),
-		matcher.Match.new(usize(9), usize(10)),
-		matcher.Match.new(usize(13), usize(14)),
-		matcher.Match.new(usize(18), usize(19)),
-		matcher.Match.new(usize(19), usize(21)),
-		matcher.Match.new(usize(21), usize(22)),
+		matcher.Match.new(uint(0), uint(1)),
+		matcher.Match.new(uint(2), uint(3)),
+		matcher.Match.new(uint(5), uint(6)),
+		matcher.Match.new(uint(9), uint(10)),
+		matcher.Match.new(uint(13), uint(14)),
+		matcher.Match.new(uint(18), uint(19)),
+		matcher.Match.new(uint(19), uint(21)),
+		matcher.Match.new(uint(21), uint(22)),
 	]
-	mut at := usize(0)
+	mut at := uint(0)
 	for expected_match in expected {
 		actual := unicode_dot.find_at(haystack, at)!.get() or {
 			panic('expected Unicode dot match')
@@ -680,7 +680,7 @@ fn test_default_regex_skips_malformed_utf8_in_unicode_mode() {
 	assert (unicode_dot.find_at(haystack, at)!).is_none()
 
 	non_x := RegexMatcherBuilder.new().build('[^x]') or { panic(err.msg()) }
-	for start in [usize(1), 3, 6, 10, 14] {
+	for start in [uint(1), 3, 6, 10, 14] {
 		actual := non_x.find_at(haystack, start)!.get() or {
 			panic('expected valid match after malformed UTF-8')
 		}
@@ -689,7 +689,7 @@ fn test_default_regex_skips_malformed_utf8_in_unicode_mode() {
 
 	byte_dot := RegexMatcherBuilder.new().build(r'(?-u:.)') or { panic(err.msg()) }
 	invalid := byte_dot.find_at(haystack, 1)!.get() or { panic('expected byte-mode dot match') }
-	assert invalid == matcher.Match.new(usize(1), usize(2))
+	assert invalid == matcher.Match.new(uint(1), uint(2))
 }
 
 fn test_regex_vm_grows_backtracking_workspace_without_false_negative() {
@@ -769,7 +769,7 @@ fn test_rust_regex_empty_alternatives_and_byte_offset_empty_matches() {
 fn test_rust_regex_named_capture_angle_syntax() {
 	matcher_ := RegexMatcherBuilder.new().build(r'(?<name>a)') or { panic(err.msg()) }
 	assert matcher.is_match(matcher_, 'abc'.bytes())!
-	assert matcher_.capture_index('name') == ?usize(1)
+	assert matcher_.capture_index('name') == ?uint(1)
 }
 
 fn test_rust_regex_word_boundary_variants() {

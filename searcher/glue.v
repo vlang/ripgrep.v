@@ -60,7 +60,7 @@ fn (mut search ReadByLine[^s, ^r, ^b]) fill[^s, ^r, ^b]() !bool {
 	// our buffer is leftover context, which we no longer need since there
 	// is nothing left to search. So forcefully quit.
 	if consumed == 0 && old_buf_len == search.rdr.buffer().len {
-		search.rdr.consume(old_buf_len)
+		search.rdr.consume(uint(old_buf_len))
 		return false
 	}
 	return true
@@ -93,7 +93,7 @@ fn (mut search SliceByLine[^s]) run[^s]() ! {
 		} else {
 			int(default_buffer_capacity)
 		}
-		binary_range := matcher.Match.new(0, usize(binary_upto))
+		binary_range := matcher.Match.new(0, uint(binary_upto))
 		if !search.core.detect_binary(search.slice, binary_range)! {
 			for search.core.pos() < search.slice.len && search.core.match_by_line(search.slice)! {}
 		}
@@ -138,7 +138,7 @@ fn (mut search MultiLine[^s]) run[^s]() ! {
 		} else {
 			int(default_buffer_capacity)
 		}
-		binary_range := matcher.Match.new(0, usize(binary_upto))
+		binary_range := matcher.Match.new(0, uint(binary_upto))
 		if !search.core.detect_binary(search.slice, binary_range)! {
 			mut keepgoing := true
 			for search.core.pos() < search.slice.len && keepgoing {
@@ -155,9 +155,9 @@ fn (mut search MultiLine[^s]) run[^s]() ! {
 			// Take care of any remaining context after the last match.
 			if keepgoing {
 				if search.config.passthru {
-					search.core.other_context_by_line(search.slice, search.slice.len)!
+					search.core.other_context_by_line(search.slice, uint(search.slice.len))!
 				} else {
-					search.core.after_context_by_line(search.slice, search.slice.len)!
+					search.core.after_context_by_line(search.slice, uint(search.slice.len))!
 				}
 			}
 		}
@@ -173,7 +173,7 @@ fn (mut search MultiLine[^s]) sink[^s]() !bool {
 	}
 	maybe_mat := search.find()!
 	mat := maybe_mat.get() or {
-		search.core.set_pos(search.slice.len)
+		search.core.set_pos(uint(search.slice.len))
 		return true
 	}
 	search.advance(mat)
@@ -221,7 +221,7 @@ fn (mut search MultiLine[^s]) sink_matched_inverted[^s]() !bool {
 		search.advance(line)
 		range
 	} else {
-		range := matcher.Match.new(search.core.pos(), search.slice.len)
+		range := matcher.Match.new(search.core.pos(), uint(search.slice.len))
 		search.core.set_pos(range.end())
 		range
 	}

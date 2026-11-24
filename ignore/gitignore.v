@@ -176,7 +176,7 @@ fn (mut gi Gitignore) free_empty() {
 
 /// Returns the total number of globs, which should be equivalent to
 /// `num_ignores + num_whitelists`.
-pub fn (gi &Gitignore) len() usize {
+pub fn (gi &Gitignore) len() uint {
 	return gi.set.len()
 }
 
@@ -205,11 +205,11 @@ pub fn (gi &^a Gitignore) matched[^a](path string, is_dir bool) Match[GitignoreG
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
-	mut matches := []usize{}
+	mut matches := []uint{}
 	return gi.matched_with_scratch(&path, is_dir, mut matches)
 }
 
-fn (gi &^a Gitignore) matched_with_scratch[^a](path &string, is_dir bool, mut matches []usize) Match[GitignoreGlobRef[^a]] {
+fn (gi &^a Gitignore) matched_with_scratch[^a](path &string, is_dir bool, mut matches []uint) Match[GitignoreGlobRef[^a]] {
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
@@ -253,9 +253,9 @@ pub fn (gi &^a Gitignore) matched_path_or_any_parents[^a](path string, is_dir bo
 		if parent == '' || parent == '.' || parent == stripped {
 			break
 		}
-		matched := gi.matched_stripped(parent.clone(), true)
-		if !matched.is_none() {
-			return matched
+		parent_match := gi.matched_stripped(parent.clone(), true)
+		if !parent_match.is_none() {
+			return parent_match
 		}
 		stripped = parent
 	}
@@ -267,11 +267,11 @@ fn (gi &^a Gitignore) matched_stripped[^a](path string, is_dir bool) Match[Gitig
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}
-	mut matches := []usize{}
+	mut matches := []uint{}
 	return gi.matched_stripped_with_scratch(path, is_dir, mut matches)
 }
 
-fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool, mut matches []usize) Match[GitignoreGlobRef[^a]] {
+fn (gi &^a Gitignore) matched_stripped_with_scratch[^a](path string, is_dir bool, mut matches []uint) Match[GitignoreGlobRef[^a]] {
 	if gi.is_empty() {
 		return Match[GitignoreGlobRef[^a]]{}
 	}

@@ -16,8 +16,8 @@ fn test_glob_set_works() {
 
 	matches := set.matches('src/lib.rs')
 	assert matches.len == 2
-	assert matches[0] == usize(0)
-	assert matches[1] == usize(2)
+	assert matches[0] == uint(0)
+	assert matches[1] == uint(2)
 }
 
 fn test_empty_glob_set_works() {
@@ -63,8 +63,8 @@ fn test_set_does_not_remember_previous_searches() {
 
 	matches := set.matches('ZfooZquuxZ')
 	assert matches.len == 2
-	assert matches[0] == usize(0)
-	assert matches[1] == usize(2)
+	assert matches[0] == uint(0)
+	assert matches[1] == uint(2)
 
 	no_matches := set.matches('nada')
 	assert no_matches.len == 0
@@ -84,9 +84,9 @@ fn test_matches_into_clears_destination() {
 	builder.add(Glob.new('*bar*') or { panic(err) })
 	set := builder.build() or { panic(err) }
 
-	mut matches := [usize(99), 100]
+	mut matches := [uint(99), 100]
 	set.matches_into('ZfooZ', mut matches)
-	assert matches == [usize(0)]
+	assert matches == [uint(0)]
 	set.matches_into('nada', mut matches)
 	assert matches.len == 0
 }

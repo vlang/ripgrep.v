@@ -178,7 +178,9 @@ pub fn (mut wtr BufferWriter) print(buffer &Buffer) ! {
 
 /// Returns the contents of this buffer.
 pub fn (buffer &Buffer) as_slice() []u8 {
-	return buffer.bytes
+	// V-specific: these getters return a Rust borrow (`&[u8]`, `&[Match]`) as an
+	// explicit view of the field rather than an ownership copy.
+	return unsafe { buffer.bytes }
 }
 
 /// Returns true when this buffer is empty.
@@ -303,7 +305,7 @@ fn write_all_fd(fd int, buf []u8) ! {
 	}
 	mut written_total := 0
 	for written_total < buf.len {
-		ptr := unsafe { voidptr(usize(buf.data) + usize(written_total)) }
+		ptr := unsafe { voidptr(uint(buf.data) + uint(written_total)) }
 		C.errno = 0
 		written := $if windows {
 			int(C._write(fd, ptr, buf.len - written_total))
@@ -334,7 +336,7 @@ fn write_all_fd(fd int, buf []u8) ! {
 }
 
 /// Returns true when the given error represents a broken pipe.
-pub fn is_broken_pipe_error(err IError) bool {
+pub fn is_broken_pipe_error(err &IError) bool {
 	if err.code() == errno_epipe {
 		return true
 	}

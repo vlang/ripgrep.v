@@ -148,10 +148,10 @@ fn MaybeRegex.none() MaybeRegex {
 /// regex-syntax. The main difference is that we try to identify a "best" set
 /// of required literals while traversing the HIR.
 struct Extractor {
-	limit_class       usize
-	limit_repeat      usize
-	limit_literal_len usize
-	limit_total       usize
+	limit_class       uint
+	limit_repeat      uint
+	limit_literal_len uint
+	limit_total       uint
 	mut:
 	// V-specific state corresponding to case-folded regex-syntax HIR nodes.
 	case_insensitive bool
@@ -160,10 +160,10 @@ struct Extractor {
 /// Create a new inner literal extractor with a default configuration.
 fn Extractor.new() Extractor {
 	return Extractor{
-		limit_class:       usize(10)
-		limit_repeat:      usize(10)
-		limit_literal_len: usize(100)
-		limit_total:       usize(64)
+		limit_class:       uint(10)
+		limit_repeat:      uint(10)
+		limit_literal_len: uint(100)
+		limit_total:       uint(64)
 	}
 }
 
@@ -490,7 +490,7 @@ fn (mut seq TSeq) sort() {
 	seq.seq.sort()
 }
 
-fn (mut seq TSeq) keep_first_bytes(len usize) {
+fn (mut seq TSeq) keep_first_bytes(len uint) {
 	seq.seq.keep_first_bytes(len)
 }
 
@@ -502,7 +502,7 @@ fn (seq &TSeq) is_empty() bool {
 	return seq.seq.is_empty()
 }
 
-fn (seq &TSeq) len() ?usize {
+fn (seq &TSeq) len() ?uint {
 	return seq.seq.len()
 }
 
@@ -514,20 +514,20 @@ fn (seq &TSeq) is_inexact() bool {
 	return seq.seq.is_inexact()
 }
 
-fn (seq &TSeq) max_union_len(other &TSeq) ?usize {
+fn (seq &TSeq) max_union_len(other &TSeq) ?uint {
 	return seq.seq.max_union_len(other.seq)
 }
 
-fn (seq &TSeq) max_cross_len(other &TSeq) ?usize {
+fn (seq &TSeq) max_cross_len(other &TSeq) ?uint {
 	assert other.prefix
 	return seq.seq.max_cross_len(other.seq)
 }
 
-fn (seq &TSeq) min_literal_len() ?usize {
+fn (seq &TSeq) min_literal_len() ?uint {
 	return seq.seq.min_literal_len()
 }
 
-fn (seq &TSeq) max_literal_len() ?usize {
+fn (seq &TSeq) max_literal_len() ?uint {
 	return seq.seq.max_literal_len()
 }
 
@@ -633,8 +633,8 @@ fn Literal.inexact(bytes []u8) Literal {
 	}
 }
 
-fn (lit &Literal) len() usize {
-	return usize(lit.bytes.len)
+fn (lit &Literal) len() uint {
+	return uint(lit.bytes.len)
 }
 
 struct Seq implements IClone {
@@ -773,7 +773,7 @@ fn (mut seq Seq) sort() {
 	}
 }
 
-fn (mut seq Seq) keep_first_bytes(len usize) {
+fn (mut seq Seq) keep_first_bytes(len uint) {
 	if seq.infinite {
 		return
 	}
@@ -793,11 +793,11 @@ fn (seq &Seq) is_empty() bool {
 	return !seq.infinite && seq.lits.len == 0
 }
 
-fn (seq &Seq) len() ?usize {
+fn (seq &Seq) len() ?uint {
 	if seq.infinite {
 		return none
 	}
-	return usize(seq.lits.len)
+	return uint(seq.lits.len)
 }
 
 fn (seq &Seq) is_inexact() bool {
@@ -827,21 +827,21 @@ fn (seq &Seq) is_exact() bool {
 	return true
 }
 
-fn (seq &Seq) max_union_len(other &Seq) ?usize {
+fn (seq &Seq) max_union_len(other &Seq) ?uint {
 	if seq.infinite || other.infinite {
 		return none
 	}
-	return saturating_add_usize(usize(seq.lits.len), usize(other.lits.len))
+	return saturating_add_usize(uint(seq.lits.len), uint(other.lits.len))
 }
 
-fn (seq &Seq) max_cross_len(other &Seq) ?usize {
+fn (seq &Seq) max_cross_len(other &Seq) ?uint {
 	if seq.infinite || other.infinite {
 		return none
 	}
-	return saturating_mul_usize(usize(seq.lits.len), usize(other.lits.len))
+	return saturating_mul_usize(uint(seq.lits.len), uint(other.lits.len))
 }
 
-fn (seq &Seq) min_literal_len() ?usize {
+fn (seq &Seq) min_literal_len() ?uint {
 	if seq.infinite || seq.lits.len == 0 {
 		return none
 	}
@@ -854,7 +854,7 @@ fn (seq &Seq) min_literal_len() ?usize {
 	return min
 }
 
-fn (seq &Seq) max_literal_len() ?usize {
+fn (seq &Seq) max_literal_len() ?uint {
 	if seq.infinite || seq.lits.len == 0 {
 		return none
 	}
@@ -888,7 +888,7 @@ fn (mut seq Seq) optimize_for_prefix_by_preference() {
 		isfast := seq.is_exact() && seq.lits.len <= 16
 		usefix := prefix.len > 4 || (prefix.len > 1 && !isfast)
 		if usefix {
-			seq.keep_first_bytes(usize(prefix.len))
+			seq.keep_first_bytes(uint(prefix.len))
 			seq.dedup()
 		}
 	}
@@ -942,16 +942,16 @@ fn literal_less(left &Literal, right &Literal) bool {
 	return !left.exact && right.exact
 }
 
-fn saturating_add_usize(left usize, right usize) usize {
-	if left > ~usize(0) - right {
-		return ~usize(0)
+fn saturating_add_usize(left uint, right uint) uint {
+	if left > ~uint(0) - right {
+		return ~uint(0)
 	}
 	return left + right
 }
 
-fn saturating_mul_usize(left usize, right usize) usize {
-	if left != 0 && right > ~usize(0) / left {
-		return ~usize(0)
+fn saturating_mul_usize(left uint, right uint) uint {
+	if left != 0 && right > ~uint(0) / left {
+		return ~uint(0)
 	}
 	return left * right
 }
@@ -1531,7 +1531,7 @@ fn class_end(pattern string, start int) int {
 	return -1
 }
 
-fn class_is_ascii(body string) bool {
+fn class_is_ascii(body &string) bool {
 	for b in body.bytes() {
 		if b >= 0x80 {
 			return false

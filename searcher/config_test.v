@@ -2,6 +2,12 @@ module searcher
 
 import matcher
 
+// V-specific: a string literal cannot be passed to the `&string` label
+// parameter, so the tests bind the label to a parameter first.
+fn encoding_for(label string) !Encoding {
+	return Encoding.new(label)
+}
+
 fn assert_no_u64_config(got ?u64) {
 	if _ := got {
 		assert false
@@ -72,7 +78,7 @@ fn test_searcher_builder_passthru_clears_context() {
 }
 
 fn test_searcher_builder_sets_and_clears_encoding() {
-	encoding := Encoding.new('utf-16')!
+	encoding := encoding_for('utf-16')!
 	mut builder := SearcherBuilder.new()
 	builder.encoding(encoding)
 	searcher_ := builder.build()
@@ -88,18 +94,18 @@ fn test_searcher_builder_sets_and_clears_encoding() {
 }
 
 fn test_searcher_encoding_normalizes_labels() {
-	assert (Encoding.new('utf8')!).label == 'UTF-8'
-	assert (Encoding.new(' UTF-8 ')!).label == 'UTF-8'
-	assert (Encoding.new('latin1')!).label == 'windows-1252'
-	assert (Encoding.new('us-ascii')!).label == 'windows-1252'
-	assert (Encoding.new('unicodefffe')!).label == 'UTF-16BE'
-	assert (Encoding.new('ucs-2')!).label == 'UTF-16LE'
-	assert (Encoding.new('cp1251')!).label == 'windows-1251'
-	assert (Encoding.new('latin5')!).label == 'windows-1254'
-	assert (Encoding.new('tis-620')!).label == 'windows-874'
-	assert (Encoding.new('x-mac-roman')!).label == 'macintosh'
-	assert (Encoding.new('x-mac-ukrainian')!).label == 'x-mac-cyrillic'
-	assert (Encoding.new('x-user-defined')!).label == 'x-user-defined'
+	assert (encoding_for('utf8')!).label == 'UTF-8'
+	assert (encoding_for(' UTF-8 ')!).label == 'UTF-8'
+	assert (encoding_for('latin1')!).label == 'windows-1252'
+	assert (encoding_for('us-ascii')!).label == 'windows-1252'
+	assert (encoding_for('unicodefffe')!).label == 'UTF-16BE'
+	assert (encoding_for('ucs-2')!).label == 'UTF-16LE'
+	assert (encoding_for('cp1251')!).label == 'windows-1251'
+	assert (encoding_for('latin5')!).label == 'windows-1254'
+	assert (encoding_for('tis-620')!).label == 'windows-874'
+	assert (encoding_for('x-mac-roman')!).label == 'macintosh'
+	assert (encoding_for('x-mac-ukrainian')!).label == 'x-mac-cyrillic'
+	assert (encoding_for('x-user-defined')!).label == 'x-user-defined'
 }
 
 fn test_searcher_encoding_rejects_non_encoding_rs_labels() {
@@ -114,14 +120,14 @@ fn test_searcher_encoding_rejects_non_encoding_rs_labels() {
 			panic('for_label_no_replacement rejects label ${replacement_label}')
 		}
 	}
-	if _ := Encoding.new('\u00a0utf-8\u00a0') {
+	if _ := encoding_for('\u00a0utf-8\u00a0') {
 		panic('encoding_rs trims ASCII whitespace only')
 	}
-	assert (Encoding.new('\fUTF-8\r')!).label == 'UTF-8'
+	assert (encoding_for('\fUTF-8\r')!).label == 'UTF-8'
 }
 
 fn test_searcher_encoding_rejects_unknown_label() {
-	Encoding.new('not-an-encoding') or {
+	encoding_for('not-an-encoding') or {
 		assert err.msg() == 'grep config error: unknown encoding: not-an-encoding'
 		return
 	}
@@ -135,7 +141,7 @@ fn test_searcher_unknown_encoding_error_replaces_invalid_utf8() {
 
 fn test_searcher_builder_heap_limit_configures_line_buffer() {
 	mut builder := SearcherBuilder.new()
-	builder.heap_limit(usize(12))
+	builder.heap_limit(uint(12))
 	builder.binary_detection(BinaryDetection.convert(0))
 	searcher_ := builder.build()
 

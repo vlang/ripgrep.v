@@ -525,15 +525,15 @@ fn test_max_depth() {
 		'a/b/foo', 'a/b/c/foo'])
 
 	mut builder0 := WalkBuilder.new(td.path())
-	builder0.max_depth(usize(0))
+	builder0.max_depth(uint(0))
 	assert_paths(td.path(), builder0, []string{})
 
 	mut builder1 := WalkBuilder.new(td.path())
-	builder1.max_depth(usize(1))
+	builder1.max_depth(uint(1))
 	assert_paths(td.path(), builder1, ['a', 'foo'])
 
 	mut builder2 := WalkBuilder.new(td.path())
-	builder2.max_depth(usize(2))
+	builder2.max_depth(uint(2))
 	assert_paths(td.path(), builder2, ['a', 'a/b', 'foo', 'a/foo'])
 }
 
@@ -544,7 +544,7 @@ fn test_serial_max_depth_releases_child_ignore_node() {
 	}
 	mkdirp(os.join_path(td.path(), 'child'))
 	mut builder := WalkBuilder.new(td.path())
-	builder.max_depth(usize(0))
+	builder.max_depth(uint(0))
 	mut walk := builder.build()
 	root_refs := walk.ig_root.node.strong_count()
 	mut dent, err := prepare_root_entry(td.path(), false)
@@ -571,28 +571,28 @@ fn test_min_depth() {
 		'a/b/foo', 'a/b/c/foo'])
 
 	mut builder0 := WalkBuilder.new(td.path())
-	builder0.min_depth(usize(0))
+	builder0.min_depth(uint(0))
 	assert_paths(td.path(), builder0, ['a', 'a/b', 'a/b/c', 'foo', 'a/foo', 'a/b/foo', 'a/b/c/foo'])
 
 	mut builder1 := WalkBuilder.new(td.path())
-	builder1.min_depth(usize(1))
+	builder1.min_depth(uint(1))
 	assert_paths(td.path(), builder1, ['a', 'a/b', 'a/b/c', 'foo', 'a/foo', 'a/b/foo', 'a/b/c/foo'])
 
 	mut builder2 := WalkBuilder.new(td.path())
-	builder2.min_depth(usize(2))
+	builder2.min_depth(uint(2))
 	assert_paths(td.path(), builder2, ['a/b', 'a/b/c', 'a/b/c/foo', 'a/b/foo', 'a/foo'])
 
 	mut builder3 := WalkBuilder.new(td.path())
-	builder3.min_depth(usize(3))
+	builder3.min_depth(uint(3))
 	assert_paths(td.path(), builder3, ['a/b/c', 'a/b/c/foo', 'a/b/foo'])
 
 	mut builder10 := WalkBuilder.new(td.path())
-	builder10.min_depth(usize(10))
+	builder10.min_depth(uint(10))
 	assert_paths(td.path(), builder10, []string{})
 
 	mut builder21 := WalkBuilder.new(td.path())
-	builder21.min_depth(usize(2))
-	builder21.max_depth(usize(1))
+	builder21.min_depth(uint(2))
+	builder21.max_depth(uint(1))
 	assert_paths(td.path(), builder21, ['a/b', 'a/foo'])
 }
 

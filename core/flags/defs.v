@@ -3524,7 +3524,7 @@ In some shells on Windows '/' is automatically expanded. Use '//' instead.")
 		}
 		.unrestricted {
 			assert v.unwrap_switch()
-			if args.unrestricted < ~usize(0) {
+			if args.unrestricted < ~uint(0) {
 				args.unrestricted++
 			}
 			if args.unrestricted > 3 {

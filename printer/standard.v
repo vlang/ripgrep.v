@@ -912,7 +912,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_line[^a, ^p, ^s]() ! {
 	line_term := imp.searcher.line_terminator().as_byte()
 	bytes := imp.sunk.bytes()
 	matches := imp.sunk.matches()
-	mut midx := usize(0)
+	mut midx := uint(0)
 	mut count := u64(0)
 	mut stepper := searcher.LineStep.new(line_term, 0, bytes.len)
 	for {
@@ -936,7 +936,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_line_only_matching[^a, 
 	spec := imp.config().colors.matched()
 	bytes := imp.sunk.bytes()
 	matches := imp.sunk.matches()
-	mut midx := usize(0)
+	mut midx := uint(0)
 	mut count := u64(0)
 	mut stepper := searcher.LineStep.new(line_term, 0, bytes.len)
 	for {
@@ -997,7 +997,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) sink_slow_multi_per_match[^a, ^p, ^s]()
 			imp.trim_line_terminator(bytes, mut line)
 			imp.trim_ascii_prefix(bytes, mut line)
 			if imp.exceeds_max_columns(bytes[line.start()..line.end()]) {
-				mut zero := usize(0)
+				mut zero := uint(0)
 				imp.write_exceeded_line(bytes, line, [m], &zero)!
 				continue
 			}
@@ -1094,15 +1094,15 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_prelude_separator[^a, ^p, ^s](mut
 }
 
 fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_line[^a, ^p, ^s](line []u8) ! {
-	mut range := matcher.Match.new(0, line.len)
+	mut range := matcher.Match.new(0, uint(line.len))
 	if imp.config().trim_ascii {
 		lineterm := imp.searcher.line_terminator()
 		range = trim_ascii_prefix(lineterm, line, range)
 	}
 	trimmed := line[range.start()..range.end()]
 	if imp.exceeds_max_columns(trimmed) {
-		full_range := matcher.Match.new(0, trimmed.len)
-		mut zero := usize(0)
+		full_range := matcher.Match.new(0, uint(trimmed.len))
+		mut zero := uint(0)
 		imp.write_exceeded_line(trimmed, full_range, imp.sunk.matches(), &zero)!
 	} else {
 		imp.write(trimmed)!
@@ -1119,13 +1119,13 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_line[^a, ^p, ^s](matches 
 		imp.write_line(bytes)!
 		return
 	}
-	mut line := matcher.Match.new(0, bytes.len)
+	mut line := matcher.Match.new(0, uint(bytes.len))
 	imp.trim_ascii_prefix(bytes, mut line)
 	if imp.exceeds_max_columns(bytes) {
-		mut zero := usize(0)
+		mut zero := uint(0)
 		imp.write_exceeded_line(bytes, line, matches, &zero)!
 	} else {
-		mut zero := usize(0)
+		mut zero := uint(0)
 		imp.write_colored_matches(bytes, line, matches, &zero)!
 		imp.write_line_term()!
 	}
@@ -1137,7 +1137,7 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_line[^a, ^p, ^s](matches 
 /// This accounts for trimming any whitespace prefix and will *never* print
 /// a line terminator. If a match exceeds the range specified by `line`,
 /// then only the part of the match within `line` (if any) is printed.
-fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, match_index &usize) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, match_index &uint) ! {
 	imp.trim_line_terminator(bytes, mut line)
 	if matches.len == 0 {
 		imp.write(bytes[line.start()..line.end()])!
@@ -1176,10 +1176,10 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_colored_matches[^a, ^p, ^s](bytes
 	imp.end_line_highlight()!
 }
 
-fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_exceeded_line[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, match_index &usize) ! {
+fn (mut imp StandardImpl[^a, ^p, ^s, W]) write_exceeded_line[^a, ^p, ^s](bytes []u8, mut line matcher.Match, matches []matcher.Match, match_index &uint) ! {
 	if imp.config().max_columns_preview {
 		original_end := line.end()
-		limit := usize(imp.config().max_columns or { 0 })
+		limit := uint(imp.config().max_columns or { 0 })
 		preview_end := grapheme_preview_end(bytes, line, limit)
 		line = line.with_end(preview_end)
 		imp.write_colored_matches(bytes, line, matches, match_index)!
@@ -1371,13 +1371,13 @@ fn (mut imp StandardImpl[^a, ^p, ^s, W]) end_line_highlight[^a, ^p, ^s]() ! {
 }
 
 fn (mut imp StandardImpl[^a, ^p, ^s, W]) write[^a, ^p, ^s](buf []u8) ! {
-	mut written := usize(0)
+	mut written := uint(0)
 	for written < buf.len {
 		n := imp.sink.standard.wtr.write(buf[written..])!
 		if n <= 0 {
 			return error('failed to write all bytes')
 		}
-		written += usize(n)
+		written += uint(n)
 	}
 }
 
@@ -1464,11 +1464,11 @@ fn add_line_number(line ?u64, add u64) ?u64 {
 	return none
 }
 
-fn min_usize(a usize, b usize) usize {
+fn min_usize(a uint, b uint) uint {
 	return if a < b { a } else { b }
 }
 
-fn saturating_sub_usize(a usize, b usize) usize {
+fn saturating_sub_usize(a uint, b uint) uint {
 	if a < b {
 		return 0
 	}
@@ -1478,12 +1478,12 @@ fn saturating_sub_usize(a usize, b usize) usize {
 // V-specific: `bstr::ByteSlice::grapheme_indices` treats invalid UTF-8
 // lossily. Decode the original byte range while retaining each rune's byte
 // width so the grapheme boundary maps back to the correct byte offset.
-fn grapheme_preview_end(bytes []u8, line matcher.Match, limit usize) usize {
+fn grapheme_preview_end(bytes []u8, line matcher.Match, limit uint) uint {
 	if limit == 0 || line.is_empty() {
 		return line.start()
 	}
 	mut runes := []rune{cap: int(line.end() - line.start())}
-	mut widths := []usize{cap: int(line.end() - line.start())}
+	mut widths := []uint{cap: int(line.end() - line.start())}
 	mut at := line.start()
 	for at < line.end() {
 		r, width := decode_utf8_lossy(bytes, at, line.end())
@@ -1493,7 +1493,7 @@ fn grapheme_preview_end(bytes []u8, line matcher.Match, limit usize) usize {
 	}
 	mut end := line.start()
 	mut rune_index := 0
-	mut taken := usize(0)
+	mut taken := uint(0)
 	graphemes := runes.string().graphemes()
 	for grapheme in graphemes {
 		if taken >= limit {
@@ -1508,7 +1508,7 @@ fn grapheme_preview_end(bytes []u8, line matcher.Match, limit usize) usize {
 	return end
 }
 
-fn decode_utf8_lossy(bytes []u8, at usize, end usize) (rune, usize) {
+fn decode_utf8_lossy(bytes []u8, at uint, end uint) (rune, uint) {
 	b0 := bytes[at]
 	if b0 < 0x80 {
 		return rune(b0), 1

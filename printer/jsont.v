@@ -185,8 +185,8 @@ pub struct SubMatch {
 pub:
 	m           []u8
 	replacement ?[]u8
-	start       usize
-	end         usize
+	start       uint
+	end         uint
 }
 
 pub fn (sm &SubMatch) to_json() string {
@@ -297,7 +297,7 @@ pub fn base64_standard(bytes []u8) string {
 	mut out := ''
 	mut i := 0
 	for i + 3 <= bytes.len {
-		group24 := (usize(bytes[i]) << 16) | (usize(bytes[i + 1]) << 8) | usize(bytes[i + 2])
+		group24 := (uint(bytes[i]) << 16) | (uint(bytes[i + 1]) << 8) | uint(bytes[i + 2])
 		index1 := (group24 >> 18) & 0b111111
 		index2 := (group24 >> 12) & 0b111111
 		index3 := (group24 >> 6) & 0b111111
@@ -310,14 +310,14 @@ pub fn base64_standard(bytes []u8) string {
 	}
 	remaining := bytes.len - i
 	if remaining == 1 {
-		group8 := usize(bytes[i])
+		group8 := uint(bytes[i])
 		index1 := (group8 >> 2) & 0b111111
 		index2 := (group8 << 4) & 0b111111
 		out += alphabet[index1].ascii_str()
 		out += alphabet[index2].ascii_str()
 		out += '=='
 	} else if remaining == 2 {
-		group16 := (usize(bytes[i]) << 8) | usize(bytes[i + 1])
+		group16 := (uint(bytes[i]) << 8) | uint(bytes[i + 1])
 		index1 := (group16 >> 10) & 0b111111
 		index2 := (group16 >> 4) & 0b111111
 		index3 := (group16 << 2) & 0b111111

@@ -125,7 +125,7 @@ fn test_buffer_writer_reports_closed_fd_error() {
 	buffer.write('data'.bytes()) or { panic(err.msg()) }
 	wtr.print(&buffer) or {
 		assert err.code() != 0
-		assert !is_broken_pipe_error(err)
+		assert !is_broken_pipe_error(&err)
 		return
 	}
 	panic('expected write to closed fd to fail')
@@ -150,12 +150,13 @@ fn test_buffer_writer_reports_broken_pipe() {
 	mut buffer := wtr.buffer()
 	buffer.write('data'.bytes()) or { panic(err.msg()) }
 	wtr.print(&buffer) or {
-		assert is_broken_pipe_error(err)
+		assert is_broken_pipe_error(&err)
 		return
 	}
 	panic('expected write to broken pipe to fail')
 }
 
 fn test_empty_error_is_not_broken_pipe() {
-	assert !is_broken_pipe_error(error(''))
+	empty := error('')
+	assert !is_broken_pipe_error(&empty)
 }

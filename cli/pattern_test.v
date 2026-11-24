@@ -6,7 +6,7 @@ fn test_pattern_from_bytes_reports_valid_prefix() {
 	pat := [u8(`a`), `b`, `c`, 0xff, `x`, `y`, `z`]
 	pattern_from_bytes(pat) or {
 		perr := err as InvalidPatternError
-		assert perr.valid_up_to() == usize(3)
+		assert perr.valid_up_to() == uint(3)
 		assert perr.msg().contains(r'abc\xFFxyz')
 		return
 	}
@@ -17,7 +17,7 @@ fn test_pattern_from_os_reports_valid_prefix() {
 	pat := [u8(`a`), `b`, `c`, 0xff, `x`, `y`, `z`].bytestr()
 	pattern_from_os(pat) or {
 		perr := err as InvalidPatternError
-		assert perr.valid_up_to() == usize(3)
+		assert perr.valid_up_to() == uint(3)
 		return
 	}
 	assert false, 'expected invalid UTF-8 pattern'

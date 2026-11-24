@@ -93,7 +93,7 @@ fn (mut parser AstAnalysisParser) parse() ?AstAnalysis {
 	return parser.analysis
 }
 
-fn (mut parser AstAnalysisParser) parse_until(end byte, in_class bool) bool {
+fn (mut parser AstAnalysisParser) parse_until(end u8, in_class bool) bool {
 	for parser.pos < parser.pattern.len && !parser.analysis.done() {
 		ch := parser.pattern[parser.pos]
 		if end != 0 && ch == end {

@@ -47,7 +47,7 @@ fn test_create_gitignore_owns_glob_source_path() {
 	matched := gi.matched(os.join_path(dir, 'hit'), false)
 	glob_ref := matched.inner() or { panic('missing ignore match') }
 	from := glob_ref.glob.from() or { panic('missing glob source') }
-	assert from == ignore_path
+	assert *from == ignore_path
 }
 
 fn test_ig1() {

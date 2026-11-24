@@ -40,7 +40,7 @@ struct DirEntryRaw implements IClone {
 	file_name_value   string
 	ty                os.FileType
 	follow_link       bool
-	depth             usize
+	depth             uint
 	metadata_value    os.Stat
 	ino_value         u64
 }
@@ -177,7 +177,7 @@ pub fn (d &^a DirEntry) file_name[^a]() &^a string {
 }
 
 /// Returns the depth at which this entry was created relative to the root.
-pub fn (d &DirEntry) depth() usize {
+pub fn (d &DirEntry) depth() uint {
 	if d.stdin_value {
 		return 0
 	}
@@ -267,7 +267,7 @@ fn (raw &^a DirEntryRaw) file_name[^a]() &^a string {
 	return &raw.file_name_value
 }
 
-fn DirEntryRaw.from_path(depth usize, path string, link bool) !DirEntryRaw {
+fn DirEntryRaw.from_path(depth uint, path string, link bool) !DirEntryRaw {
 	info := followed_path_info(path) or { return err }
 	ty := entry_file_type_from_os(info.get_filetype())
 	name := file_name(path)
@@ -282,7 +282,7 @@ fn DirEntryRaw.from_path(depth usize, path string, link bool) !DirEntryRaw {
 	}
 }
 
-fn DirEntryRaw.from_child(depth usize, parent_path string, name string) !DirEntryRaw {
+fn DirEntryRaw.from_child(depth uint, parent_path string, name string) !DirEntryRaw {
 	path := join_child_path(parent_path, name)
 	info := os.lstat(path) or { return err }
 	ty := entry_file_type_from_os(info.get_filetype())
@@ -297,7 +297,7 @@ fn DirEntryRaw.from_child(depth usize, parent_path string, name string) !DirEntr
 	}
 }
 
-fn DirEntryRaw.from_child_known(depth usize, parent_path string, name string, ty os.FileType, ino u64) DirEntryRaw {
+fn DirEntryRaw.from_child_known(depth uint, parent_path string, name string, ty os.FileType, ino u64) DirEntryRaw {
 	path := join_child_path(parent_path, name)
 	return DirEntryRaw{
 		path:              path
@@ -547,15 +547,15 @@ mut:
 	// V-specific: the ownership frontend cannot inspect an optional field on a
 	// borrowed builder without consuming it, so these three `Option` fields use
 	// an explicit presence bit until optional borrowed-field reads are supported.
-	max_depth_value        usize
+	max_depth_value        uint
 	has_max_depth          bool
-	min_depth_value        usize
+	min_depth_value        uint
 	has_min_depth          bool
 	max_filesize_value     u64
 	has_max_filesize       bool
 	follow_links_value     bool
 	same_file_system_value bool
-	threads_value          usize
+	threads_value          uint
 	// V-specific: same optional borrowed-field limitation as the numeric
 	// options above.
 	skip_value       Handle
@@ -666,7 +666,7 @@ pub fn (mut builder WalkBuilder) add(path string) &WalkBuilder {
 /// The maximum depth to recurse.
 ///
 /// The default, `None`, imposes no depth restriction.
-pub fn (mut builder WalkBuilder) max_depth(depth ?usize) &WalkBuilder {
+pub fn (mut builder WalkBuilder) max_depth(depth ?uint) &WalkBuilder {
 	if value := depth {
 		builder.max_depth_value = value
 		builder.has_max_depth = true
@@ -683,7 +683,7 @@ pub fn (mut builder WalkBuilder) max_depth(depth ?usize) &WalkBuilder {
 /// The minimum depth to recurse.
 ///
 /// The default, `None`, imposes no minimum depth restriction.
-pub fn (mut builder WalkBuilder) min_depth(depth ?usize) &WalkBuilder {
+pub fn (mut builder WalkBuilder) min_depth(depth ?uint) &WalkBuilder {
 	if value := depth {
 		builder.min_depth_value = value
 		builder.has_min_depth = true
@@ -720,7 +720,7 @@ pub fn (mut builder WalkBuilder) max_filesize(filesize ?u64) &WalkBuilder {
 ///
 /// The default setting is `0`, which chooses the number of threads
 /// automatically using heuristics.
-pub fn (mut builder WalkBuilder) threads(n usize) &WalkBuilder {
+pub fn (mut builder WalkBuilder) threads(n uint) &WalkBuilder {
 	builder.threads_value = n
 	return builder
 }
@@ -1045,21 +1045,21 @@ mut:
 	// V-specific: see `WalkBuilder.filter`.
 	filter           FilterFn = unsafe { nil }
 	has_filter       bool
-	min_depth        ?usize
-	max_depth        ?usize
+	min_depth        ?uint
+	max_depth        ?uint
 	follow_links     bool
 	same_file_system bool
 	sort_by_name     NameComparator = unsafe { nil }
 	has_sort_by_name bool
 	sort_by_path     PathComparator = unsafe { nil }
 	has_sort_by_path bool
-	gitignore_matches []usize
+	gitignore_matches []uint
 }
 
 struct WalkFrame implements IClone {
 	mut:
 	parent_path     string
-	parent_depth    usize
+	parent_depth    uint
 	ig              Ignore
 	children        []DirChild
 	next_index      int
@@ -1687,11 +1687,11 @@ pub struct WalkParallel implements IClone {
 	paths            []string
 	ig_root          Ignore
 	max_filesize     ?u64
-	max_depth        ?usize
-	min_depth        ?usize
+	max_depth        ?uint
+	min_depth        ?uint
 	follow_links     bool
 	same_file_system bool
-	threads          usize
+	threads          uint
 	skip             ?Handle
 	// V-specific: see `WalkBuilder.filter`.
 	filter           FilterFn = unsafe { nil }
@@ -1703,11 +1703,11 @@ pub fn (wp &WalkParallel) clone() WalkParallel {
 	if value := wp.max_filesize {
 		max_filesize = value
 	}
-	mut max_depth := ?usize(none)
+	mut max_depth := ?uint(none)
 	if value := wp.max_depth {
 		max_depth = value
 	}
-	mut min_depth := ?usize(none)
+	mut min_depth := ?uint(none)
 	if value := wp.min_depth {
 		min_depth = value
 	}
@@ -1910,11 +1910,11 @@ fn (wp &WalkParallel) new_walk() Walk {
 	if value := wp.max_filesize {
 		max_filesize = value
 	}
-	mut max_depth := ?usize(none)
+	mut max_depth := ?uint(none)
 	if value := wp.max_depth {
 		max_depth = value
 	}
-	mut min_depth := ?usize(none)
+	mut min_depth := ?uint(none)
 	if value := wp.min_depth {
 		min_depth = value
 	}
@@ -2060,9 +2060,9 @@ fn (queue &WorkStealingQueue) free() {
 }
 
 fn WorkStealingStacks.new(worker_count int, mut initial []WalkStealingWork) &WorkStealingStacks {
-	mut queues := []&WorkStealingQueue{len: worker_count}
-	for i in 0 .. queues.len {
-		queues[i] = WorkStealingQueue.new()
+	mut queues := []&WorkStealingQueue{cap: worker_count}
+	for _ in 0 .. worker_count {
+		queues << WorkStealingQueue.new()
 	}
 	mut worker_index := 0
 	for initial.len > 0 {
@@ -2351,7 +2351,7 @@ fn sort_children(mut children []DirChild, parent_path string, has_name_cmp bool,
 	}
 }
 
-fn check_symlink_loop(ig_parent &Ignore, child_path string, child_depth usize) ?IgnoreError {
+fn check_symlink_loop(ig_parent &Ignore, child_path string, child_depth uint) ?IgnoreError {
 	hchild := Handle.from_path(child_path) or {
 		return io_error(err).with_path(child_path).with_depth(child_depth)
 	}
@@ -2379,7 +2379,7 @@ fn skip_filesize(max_filesize u64, path string, stat os.Stat) bool {
 	return false
 }
 
-fn should_skip_entry_with_scratch(ig &Ignore, dent &DirEntry, mut gitignore_matches []usize) bool {
+fn should_skip_entry_with_scratch(ig &Ignore, dent &DirEntry, mut gitignore_matches []uint) bool {
 	matched := ig.matched_dir_entry_with_scratch(dent, mut gitignore_matches)
 	if matched.is_ignore() {
 		return true

@@ -156,7 +156,7 @@ mut:
 	dense_seen_bits     []u64     // Direct state memo for bounded haystack/program products.
 	dense_touched_words []u32     // Bitmap words to clear before the next VM attempt.
 	dense_prog_len      int
-	memo_size_limit     usize
+	memo_size_limit     uint
 	seen_keys           []u64 // Lazily allocated memoization hash table keys.
 	seen_marks          []u32 // Generation stamps for occupied memoization slots.
 	seen_generation     u32
@@ -194,13 +194,13 @@ fn (mut m Machine) begin_memo(text_len int, prog_len int) {
 		}
 		m.seen_generation = 1
 	}
-	positions := usize(text_len) + 1
-	program_states := usize(prog_len)
+	positions := uint(text_len) + 1
+	program_states := uint(prog_len)
 	// V-specific: the dense state cache is the VM counterpart of regex-automata's hybrid
 	// cache. Keep a small NFA fallback budget when the configured DFA cache is
 	// zero, and cap eager dense allocation on very large limits.
-	min_fallback_bytes := usize(8 * (1 << 20))
-	max_dense_bytes := usize(64 * (1 << 20))
+	min_fallback_bytes := uint(8 * (1 << 20))
+	max_dense_bytes := uint(64 * (1 << 20))
 	cache_bytes := if m.memo_size_limit < min_fallback_bytes {
 		min_fallback_bytes
 	} else if m.memo_size_limit > max_dense_bytes {
@@ -306,7 +306,7 @@ pub:
 	has_prefix      bool           // Whether a literal prefix exists
 	anchored        bool           // True if pattern starts with '^' (optimization hint)
 	needs_memo      bool           // True when the program contains branching states.
-	memo_size_limit usize          // Maximum dense VM cache requested by the caller.
+	memo_size_limit uint          // Maximum dense VM cache requested by the caller.
 mut:
 	refs &stdatomic.AtomicVal[int] = unsafe { nil }
 }
@@ -547,18 +547,18 @@ fn set_bitmap(mut bitmap [4]u32, r rune) {
 
 // compile transforms a regex pattern string into a Regex object.
 pub fn compile(pattern string) !Regex {
-	return compile_with_limits(pattern, ~usize(0), ~usize(0))
+	return compile_with_limits(pattern, ~uint(0), ~uint(0))
 }
 
 // compile_with_size_limit rejects a compiled program whose approximate heap
 // footprint exceeds `size_limit`.
-pub fn compile_with_size_limit(pattern string, size_limit usize) !Regex {
-	return compile_with_limits(pattern, size_limit, ~usize(0))
+pub fn compile_with_size_limit(pattern string, size_limit uint) !Regex {
+	return compile_with_limits(pattern, size_limit, ~uint(0))
 }
 
 // V-specific: compile_with_limits applies both the compiled program limit and the runtime
 // memo cache capacity used by the local meta engine.
-pub fn compile_with_limits(pattern string, size_limit usize, memo_size_limit usize) !Regex {
+pub fn compile_with_limits(pattern string, size_limit uint, memo_size_limit uint) !Regex {
 	mut group_map := map[string]int{}
 	initial_flags := Flags{
 		unicode: true
@@ -583,11 +583,11 @@ pub fn compile_with_limits(pattern string, size_limit usize, memo_size_limit usi
 	// Phase 3: Optimization
 	optimized_prog := compiler.optimize()
 	compiler.free()
-	mut compiled_size := usize(optimized_prog.len) * usize(sizeof(Inst))
+	mut compiled_size := uint(optimized_prog.len) * uint(sizeof(Inst))
 	for inst in optimized_prog {
-		compiled_size += usize(inst.val_str.len)
-		compiled_size += usize(inst.char_class.len) * usize(sizeof(rune))
-		compiled_size += usize(inst.char_ranges.len) * usize(sizeof(RuneRange))
+		compiled_size += uint(inst.val_str.len)
+		compiled_size += uint(inst.char_class.len) * uint(sizeof(rune))
+		compiled_size += uint(inst.char_ranges.len) * uint(sizeof(RuneRange))
 	}
 	if compiled_size > size_limit {
 		return error('compiled regex exceeds size limit of ${size_limit}')
@@ -972,7 +972,7 @@ fn (mut c Compiler) emit_logic(node Node) {
 	}
 }
 
-fn parse_word_boundary_suffix(pattern string, pos int, negated bool) (WordBoundaryKind, bool, int) {
+fn parse_word_boundary_suffix(pattern &string, pos int, negated bool) (WordBoundaryKind, bool, int) {
 	default_kind := if negated { WordBoundaryKind.negate } else { WordBoundaryKind.boundary }
 	suffixes := [
 		'{boundary-unicode}',
@@ -1011,7 +1011,7 @@ fn parse_word_boundary_suffix(pattern string, pos int, negated bool) (WordBounda
 }
 
 // parse_nodes implements a recursive descent parser to construct the AST from the pattern string.
-fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_start int, passed_flags Flags, mut group_map map[string]int) !([]Node, int, int) {
+fn parse_nodes(pattern &string, pos_start int, terminator ?rune, group_counter_start int, passed_flags Flags, mut group_map map[string]int) !([]Node, int, int) {
 	mut pos := pos_start
 	mut group_counter := group_counter_start
 	mut current_flags := passed_flags
@@ -1074,20 +1074,20 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 				pos += char_len
 				mut idx := -1
 				mut cap := true
-				if pos < pattern.len && pattern[pos] == `?` {
+				if pos < pattern.len && (*pattern)[pos] == `?` {
 					pos++
-					if pos < pattern.len && pattern[pos] in [`a`, `i`, `m`, `s`, `u`, `-`] {
+					if pos < pattern.len && (*pattern)[pos] in [`a`, `i`, `m`, `s`, `u`, `-`] {
 						mut scoped_flags := current_flags
 						mut disabling := false
 						mut saw_flag := false
-						for pos < pattern.len && pattern[pos] in [`a`, `i`, `m`, `s`, `u`, `-`] {
-							if pattern[pos] == `-` {
+						for pos < pattern.len && (*pattern)[pos] in [`a`, `i`, `m`, `s`, `u`, `-`] {
+							if (*pattern)[pos] == `-` {
 								disabling = true
 								pos++
 								continue
 							}
 							saw_flag = true
-							match pattern[pos] {
+							match (*pattern)[pos] {
 								`a` {
 									scoped_flags.ignore_case = !disabling
 									scoped_flags.unicode_case = false
@@ -1113,7 +1113,7 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 
 							pos++
 						}
-						if saw_flag && pos < pattern.len && pattern[pos] == `:` {
+						if saw_flag && pos < pattern.len && (*pattern)[pos] == `:` {
 							cap = false
 							pos++
 							sub, new_p, new_c := parse_nodes(pattern, pos, `)`, group_counter,
@@ -1127,17 +1127,17 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 							}
 						} else if saw_flag {
 							current_flags = scoped_flags
-							if pos < pattern.len && pattern[pos] == `)` {
+							if pos < pattern.len && (*pattern)[pos] == `)` {
 								pos++
 							}
 							continue
 						}
-					} else if pos < pattern.len && pattern[pos] == `:` {
+					} else if pos < pattern.len && (*pattern)[pos] == `:` {
 						cap = false
 						pos++
-					} else if pos < pattern.len && pattern[pos] == `P` {
+					} else if pos < pattern.len && (*pattern)[pos] == `P` {
 						pos++
-						if pos >= pattern.len || pattern[pos] != `<` {
+						if pos >= pattern.len || (*pattern)[pos] != `<` {
 							return error('Invalid named group syntax')
 						}
 						pos++
@@ -1390,7 +1390,7 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 		if parsed_nodes.len > 0 {
 			mut q := Quantifier{1, 1, true}
 			if pos < pattern.len {
-				peek := pattern[pos]
+				peek := (*pattern)[pos]
 				match peek {
 					`*` {
 						q = Quantifier{0, -1, true}
@@ -1425,7 +1425,7 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 					else {}
 				}
 
-				if pos < pattern.len && pattern[pos] == `?` {
+				if pos < pattern.len && (*pattern)[pos] == `?` {
 					q.greedy = false
 					pos++
 				}
@@ -1448,14 +1448,14 @@ fn parse_nodes(pattern string, pos_start int, terminator ?rune, group_counter_st
 	return current_sequence, pos, group_counter
 }
 
-fn find_class_end(pattern string, start int) int {
+fn find_class_end(pattern &string, start int) int {
 	mut i := start
 	for i < pattern.len {
-		if pattern[i] == `\\` {
+		if (*pattern)[i] == `\\` {
 			i += if i + 1 < pattern.len { 2 } else { 1 }
 			continue
 		}
-		if pattern[i] == `]` {
+		if (*pattern)[i] == `]` {
 			return i
 		}
 		_, width := read_rune_at(pattern.str, pattern.len, i)
@@ -1464,11 +1464,11 @@ fn find_class_end(pattern string, start int) int {
 	return -1
 }
 
-fn parse_class_rune(content string, start int) !(rune, int) {
+fn parse_class_rune(content &string, start int) !(rune, int) {
 	if start >= content.len {
 		return error('Unexpected end of character class')
 	}
-	if content[start] != `\\` {
+	if (*content)[start] != `\\` {
 		value, width := read_rune_at(content.str, content.len, start)
 		if width == 0 {
 			return error('Invalid UTF-8 in character class')
@@ -1478,7 +1478,7 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 	if start + 1 >= content.len {
 		return error('Trailing backslash in character class')
 	}
-	escape := content[start + 1]
+	escape := (*content)[start + 1]
 	match escape {
 		`a` {
 			return `\a`, start + 2
@@ -1502,7 +1502,7 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 			if start + 4 > content.len {
 				return error('\\x requires exactly 2 hex digits')
 			}
-			value := strconv.parse_uint(content[start + 2..start + 4], 16, 32) or {
+			value := strconv.parse_uint((*content)[start + 2..start + 4], 16, 32) or {
 				return error('Invalid hex escape')
 			}
 			return rune(value), start + 4
@@ -1520,11 +1520,12 @@ fn parse_class_rune(content string, start int) !(rune, int) {
 @[inline]
 fn rune_ranges_contain(ranges []RuneRange, value rune, ignore_case bool, unicode_case bool) bool {
 	for range_ in ranges {
-		if if ignore_case && unicode_case {
+		matches := if ignore_case && unicode_case {
 			unicode_simple_case_in_range(value, range_.start, range_.end)
 		} else {
 			value >= range_.start && value <= range_.end
-		} {
+		}
+		if matches {
 			return true
 		}
 	}
@@ -1578,7 +1579,7 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 
 		for {
 			if r.needs_memo {
-				pc := int((usize(inst_ptr) - usize(prog_start)) / usize(sizeof(Inst)))
+				pc := int((uint(inst_ptr) - uint(prog_start)) / uint(sizeof(Inst)))
 				if m.memo_seen(sp, pc) {
 					goto backtrack
 				}
@@ -1747,11 +1748,12 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 						}
 						cl = l
 						for cr in inst_ptr.char_class {
-							if if inst_ptr.ignore_case && inst_ptr.unicode_case {
+							matches := if inst_ptr.ignore_case && inst_ptr.unicode_case {
 								unicode_simple_case_equal(rn, cr)
 							} else {
 								cr == rn
-							} {
+							}
+							if matches {
 								matched = true
 								break
 							}

@@ -33,14 +33,14 @@ fn new_reglob_many(pats []string) globset.GlobSet {
 	return builder.build() or { panic(err) }
 }
 
-fn ext_glob(iterations usize) {
+fn ext_glob(iterations uint) {
 	pat := new_glob(ext_pat)
 	for _ in 0 .. iterations {
 		assert pat.is_match(ext)
 	}
 }
 
-fn ext_regex(iterations usize) {
+fn ext_regex(iterations uint) {
 	set := new_reglob(ext_pat)
 	cand := globset.Candidate.new(&ext)
 	for _ in 0 .. iterations {
@@ -48,14 +48,14 @@ fn ext_regex(iterations usize) {
 	}
 }
 
-fn short_glob(iterations usize) {
+fn short_glob(iterations uint) {
 	pat := new_glob(short_pat)
 	for _ in 0 .. iterations {
 		assert pat.is_match(short)
 	}
 }
 
-fn short_regex(iterations usize) {
+fn short_regex(iterations uint) {
 	set := new_reglob(short_pat)
 	cand := globset.Candidate.new(&short)
 	for _ in 0 .. iterations {
@@ -63,14 +63,14 @@ fn short_regex(iterations usize) {
 	}
 }
 
-fn long_glob(iterations usize) {
+fn long_glob(iterations uint) {
 	pat := new_glob(long_pat)
 	for _ in 0 .. iterations {
 		assert pat.is_match(long)
 	}
 }
 
-fn long_regex(iterations usize) {
+fn long_regex(iterations uint) {
 	set := new_reglob(long_pat)
 	cand := globset.Candidate.new(&long)
 	for _ in 0 .. iterations {
@@ -98,7 +98,7 @@ const many_short_globs = [
 
 const many_short_search = '98m-blah.csv.idx'
 
-fn many_short_glob(iterations usize) {
+fn many_short_glob(iterations uint) {
 	mut pats := []globset.GlobMatcher{}
 	for pat in many_short_globs {
 		pats << new_glob(pat)
@@ -114,7 +114,7 @@ fn many_short_glob(iterations usize) {
 	}
 }
 
-fn many_short_regex_set(iterations usize) {
+fn many_short_regex_set(iterations uint) {
 	set := new_reglob_many(many_short_globs)
 	for _ in 0 .. iterations {
 		assert set.matches(many_short_search).len == 2

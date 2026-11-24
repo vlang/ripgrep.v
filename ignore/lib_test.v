@@ -67,7 +67,7 @@ fn test_error_classification_and_io_access() {
 	wrapped := io_error(error_with_code('permission denied', 13)).with_depth(4).with_path('/tmp/x')
 	assert wrapped.is_io()
 	assert !wrapped.is_partial()
-	assert wrapped.depth() == ?usize(4)
+	assert wrapped.depth() == ?uint(4)
 	borrowed := wrapped.io_error() or { panic('missing I/O error') }
 	assert borrowed.kind == .io
 	assert borrowed.msg() == 'permission denied'

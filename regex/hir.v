@@ -305,7 +305,7 @@ fn line_anchor_end(config &Config) HirLook {
 	return .end_lf
 }
 
-fn analyze_pattern(pattern string, config Config) HirProperties {
+fn analyze_pattern(pattern &string, config Config) HirProperties {
 	analysis := analyze_non_matching_pattern(pattern, config)
 	return HirProperties{
 		non_matching_bytes:  analysis.bytes

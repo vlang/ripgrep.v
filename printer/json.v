@@ -20,7 +20,7 @@ mut:
 	replacement arc.Arc[?[]u8]
 }
 
-fn json_clone_u8_range(bytes []u8, start usize, end usize) []u8 {
+fn json_clone_u8_range(bytes []u8, start uint, end uint) []u8 {
 	mut cloned := []u8{cap: int(end - start)}
 	for i := start; i < end; i++ {
 		cloned << bytes[i]
@@ -547,13 +547,13 @@ pub fn (json JSON[W]) into_inner() W {
 }
 
 fn (mut json JSON[W]) write(buf []u8) ! {
-	mut written := usize(0)
+	mut written := uint(0)
 	for written < buf.len {
 		n := json.wtr.write(buf[written..])!
 		if n <= 0 {
 			return error('failed to write all bytes')
 		}
-		written += usize(n)
+		written += uint(n)
 	}
 }
 

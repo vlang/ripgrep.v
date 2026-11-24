@@ -4,9 +4,9 @@ import matcher
 
 const sherlock_lines_test = 'For the Doctor Watsons of this world, as opposed to the Sherlock\nHolmeses, success in the province of detective work must always\nbe, to a very large extent, the result of luck. Sherlock Holmes\ncan extract a clew from a wisp of straw or a flake of cigar ash;\nbut Doctor Watson has to have it taken out for him and dusted,\nand exhibited clearly, with a label attached.'
 
-fn line_ranges(text string) []matcher.Match {
+fn line_ranges[^a](text &^a string) []matcher.Match {
 	mut results := []matcher.Match{}
-	mut it := LineStep.new(`\n`, 0, text.len)
+	mut it := LineStep.new(`\n`, 0, uint(text.len))
 	bytes := text.bytes()
 	for {
 		m := it.next_match(bytes) or { break }
@@ -15,23 +15,32 @@ fn line_ranges(text string) []matcher.Match {
 	return results
 }
 
-fn line_texts(text string) []string {
-	mut results := []string{}
-	mut it := LineStep.new(`\n`, 0, text.len)
+fn line_texts[^a](text &^a string) []&^a string {
+	mut results := []&^a string{}
+	mut it := LineStep.new(`\n`, 0, uint(text.len))
 	bytes := text.bytes()
 	for {
 		m := it.next_match(bytes) or { break }
-		results << text[m.start()..m.end()]
+		results << &(*text)[m.start()..m.end()]
 	}
 	return results
 }
 
-fn loc(text string, start usize, end usize) matcher.Match {
+fn loc[^a](text &^a string, start uint, end uint) matcher.Match {
 	return locate(text.bytes(), `\n`, matcher.Match.new(start, end))
 }
 
-fn prev(text string, pos usize, count usize) usize {
+fn prev[^a](text &^a string, pos uint, count uint) uint {
 	return preceding_by_pos(text.bytes(), pos, `\n`, count)
+}
+
+// Compare the borrowed strings returned by the translated Rust test helper.
+fn assert_line_texts[^a](text &^a string, expected []string) {
+	lines := line_texts(text)
+	assert lines.len == expected.len
+	for i, line in lines {
+		assert *line == expected[i]
+	}
 }
 
 fn test_line_count() {
@@ -65,20 +74,31 @@ fn test_line_locate() {
 }
 
 fn test_line_iter() {
-	assert line_texts('abc') == ['abc']
+	abc := 'abc'
+	abc_lf := 'abc\n'
+	abc_xyz := 'abc\nxyz'
+	abc_xyz_lf := 'abc\nxyz\n'
+	abc_empty := 'abc\n\n'
+	abc_empty_empty := 'abc\n\n\n'
+	abc_empty_xyz := 'abc\n\nxyz'
+	abc_empty_xyz_lf := 'abc\n\nxyz\n'
+	abc_xyz_empty := 'abc\nxyz\n\n'
+	lf := '\n'
+	empty := ''
+	assert_line_texts(abc, ['abc'])
 
-	assert line_texts('abc\n') == ['abc\n']
-	assert line_texts('abc\nxyz') == ['abc\n', 'xyz']
-	assert line_texts('abc\nxyz\n') == ['abc\n', 'xyz\n']
+	assert_line_texts(abc_lf, ['abc\n'])
+	assert_line_texts(abc_xyz, ['abc\n', 'xyz'])
+	assert_line_texts(abc_xyz_lf, ['abc\n', 'xyz\n'])
 
-	assert line_texts('abc\n\n') == ['abc\n', '\n']
-	assert line_texts('abc\n\n\n') == ['abc\n', '\n', '\n']
-	assert line_texts('abc\n\nxyz') == ['abc\n', '\n', 'xyz']
-	assert line_texts('abc\n\nxyz\n') == ['abc\n', '\n', 'xyz\n']
-	assert line_texts('abc\nxyz\n\n') == ['abc\n', 'xyz\n', '\n']
+	assert_line_texts(abc_empty, ['abc\n', '\n'])
+	assert_line_texts(abc_empty_empty, ['abc\n', '\n', '\n'])
+	assert_line_texts(abc_empty_xyz, ['abc\n', '\n', 'xyz'])
+	assert_line_texts(abc_empty_xyz_lf, ['abc\n', '\n', 'xyz\n'])
+	assert_line_texts(abc_xyz_empty, ['abc\n', 'xyz\n', '\n'])
 
-	assert line_texts('\n') == ['\n']
-	assert line_texts('') == []string{}
+	assert_line_texts(lf, ['\n'])
+	assert_line_texts(empty, []string{})
 }
 
 fn test_line_iter_empty() {
@@ -98,23 +118,27 @@ fn test_without_terminator_returns_borrowed_view() {
 }
 
 fn test_line_locate_weird() {
-	assert loc('', 0, 0) == matcher.Match.new(0, 0)
+	empty := ''
+	lf := '\n'
+	lfs := '\n\n'
+	abc := 'a\nb\nc'
+	assert loc(empty, 0, 0) == matcher.Match.new(0, 0)
 
-	assert loc('\n', 0, 1) == matcher.Match.new(0, 1)
-	assert loc('\n', 1, 1) == matcher.Match.new(1, 1)
+	assert loc(lf, 0, 1) == matcher.Match.new(0, 1)
+	assert loc(lf, 1, 1) == matcher.Match.new(1, 1)
 
-	assert loc('\n\n', 0, 0) == matcher.Match.new(0, 1)
-	assert loc('\n\n', 0, 1) == matcher.Match.new(0, 1)
-	assert loc('\n\n', 1, 1) == matcher.Match.new(1, 2)
-	assert loc('\n\n', 1, 2) == matcher.Match.new(1, 2)
-	assert loc('\n\n', 2, 2) == matcher.Match.new(2, 2)
+	assert loc(lfs, 0, 0) == matcher.Match.new(0, 1)
+	assert loc(lfs, 0, 1) == matcher.Match.new(0, 1)
+	assert loc(lfs, 1, 1) == matcher.Match.new(1, 2)
+	assert loc(lfs, 1, 2) == matcher.Match.new(1, 2)
+	assert loc(lfs, 2, 2) == matcher.Match.new(2, 2)
 
-	assert loc('a\nb\nc', 0, 1) == matcher.Match.new(0, 2)
-	assert loc('a\nb\nc', 1, 2) == matcher.Match.new(0, 2)
-	assert loc('a\nb\nc', 2, 3) == matcher.Match.new(2, 4)
-	assert loc('a\nb\nc', 3, 4) == matcher.Match.new(2, 4)
-	assert loc('a\nb\nc', 4, 5) == matcher.Match.new(4, 5)
-	assert loc('a\nb\nc', 5, 5) == matcher.Match.new(4, 5)
+	assert loc(abc, 0, 1) == matcher.Match.new(0, 2)
+	assert loc(abc, 1, 2) == matcher.Match.new(0, 2)
+	assert loc(abc, 2, 3) == matcher.Match.new(2, 4)
+	assert loc(abc, 3, 4) == matcher.Match.new(2, 4)
+	assert loc(abc, 4, 5) == matcher.Match.new(4, 5)
+	assert loc(abc, 5, 5) == matcher.Match.new(4, 5)
 }
 
 fn test_preceding_lines_doc() {

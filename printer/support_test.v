@@ -25,7 +25,7 @@ fn test_replacer_returns_borrowed_replacement() {
 	searcher_ := searcher.Searcher.new()
 	haystack := 'Doctor Watson\n'.bytes()
 	mut replacer := Replacer.new()
-	replacer.replace_all(&searcher_, &matcher_, haystack, matcher.Match.new(0, haystack.len),
+	replacer.replace_all(&searcher_, &matcher_, haystack, matcher.Match.new(0, uint(haystack.len)),
 		r'doctah $1 MD'.bytes())!
 	{
 		replacement := replacer.replacement() or { panic('missing replacement') }

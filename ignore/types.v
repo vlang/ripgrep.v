@@ -172,8 +172,8 @@ pub struct Types implements IClone {
 
 // V-specific representation of Rust's `(usize, usize)` mapping entry.
 struct GlobSelectionIndex implements IClone {
-	selection usize
-	glob      usize
+	selection uint
+	glob      uint
 }
 
 enum SelectionKind {
@@ -255,8 +255,8 @@ pub fn (types &Types) is_empty() bool {
 }
 
 /// Returns the number of selections used in this matcher.
-pub fn (types &Types) len() usize {
-	return usize(types.selections.len)
+pub fn (types &Types) len() uint {
+	return uint(types.selections.len)
 }
 
 /// Return the set of current file type definitions.
@@ -365,8 +365,8 @@ pub fn (builder &TypesBuilder) build() (Types, bool, IgnoreError) {
 			}
 			build_set.add(parsed.clone())
 			glob_to_selection << GlobSelectionIndex{
-				selection: usize(isel)
-				glob:      usize(iglob)
+				selection: uint(isel)
+				glob:      uint(iglob)
 			}
 		}
 		selections << selection_with_def(selection.clone(), def.clone())

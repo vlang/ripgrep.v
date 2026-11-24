@@ -44,7 +44,7 @@ pub mut:
 	/// The file path.
 	path       string
 	/// The directory depth.
-	depth_value ?usize
+	depth_value ?uint
 	/// The original glob that caused this error. This glob, when
 	/// available, always corresponds to the glob provided by an end user.
 	/// e.g., It is the glob as written in a `.gitignore` file.
@@ -157,7 +157,7 @@ fn (err IgnoreError) with_path(path string) IgnoreError {
 }
 
 /// Turn an error into a tagged error with the given depth.
-fn (err IgnoreError) with_depth(depth usize) IgnoreError {
+fn (err IgnoreError) with_depth(depth uint) IgnoreError {
 	return IgnoreError{
 		kind:   .with_depth
 		depth_value: depth
@@ -262,7 +262,7 @@ pub fn (err IgnoreError) into_io_error() ?IgnoreError {
 
 /// Returns a depth associated with recursively walking a directory (if
 /// this error was generated from a recursive directory iterator).
-pub fn (err &IgnoreError) depth() ?usize {
+pub fn (err &IgnoreError) depth() ?uint {
 	match err.kind {
 		.with_path {
 			if err.nested.len == 1 {

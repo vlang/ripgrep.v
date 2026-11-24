@@ -22,8 +22,8 @@ pub mut:
 	ignore_whitespace    bool
 	unicode              bool
 	octal                bool
-	size_limit           usize
-	dfa_size_limit       usize
+	size_limit           uint
+	dfa_size_limit       uint
 	nest_limit           u32
 	line_terminator      ?matcher.LineTerminator
 	ban                  ?u8
@@ -36,8 +36,8 @@ pub mut:
 pub fn Config.default() Config {
 	return Config{
 		unicode:        true
-		size_limit:     usize(100 * (1 << 20))
-		dfa_size_limit: usize(1000 * (1 << 20))
+		size_limit:     uint(100 * (1 << 20))
+		dfa_size_limit: uint(1000 * (1 << 20))
 		nest_limit:     u32(250)
 		line_terminator: none
 		ban:             none
@@ -275,8 +275,8 @@ struct InlineFlags {
 	scoped   bool
 }
 
-fn inline_flags_at(pattern string, start int) ?InlineFlags {
-	if start + 3 >= pattern.len || pattern[start] != `(` || pattern[start + 1] != `?` {
+fn inline_flags_at(pattern &string, start int) ?InlineFlags {
+	if start + 3 >= pattern.len || (*pattern)[start] != `(` || (*pattern)[start + 1] != `?` {
 		return none
 	}
 	mut i := start + 2
@@ -284,8 +284,8 @@ fn inline_flags_at(pattern string, start int) ?InlineFlags {
 	mut disabled := []u8{}
 	mut disabling := false
 	mut saw_flag := false
-	for i < pattern.len && pattern[i] !in [`:`, `)`] {
-		if pattern[i] == `-` {
+	for i < pattern.len && (*pattern)[i] !in [`:`, `)`] {
+		if (*pattern)[i] == `-` {
 			if disabling {
 				return none
 			}
@@ -293,14 +293,14 @@ fn inline_flags_at(pattern string, start int) ?InlineFlags {
 			i++
 			continue
 		}
-		if pattern[i] !in [`i`, `m`, `s`, `U`, `u`, `x`, `R`] {
+		if (*pattern)[i] !in [`i`, `m`, `s`, `U`, `u`, `x`, `R`] {
 			return none
 		}
 		saw_flag = true
 		if disabling {
-			disabled << pattern[i]
+			disabled << (*pattern)[i]
 		} else {
-			enabled << pattern[i]
+			enabled << (*pattern)[i]
 		}
 		i++
 	}
@@ -311,7 +311,7 @@ fn inline_flags_at(pattern string, start int) ?InlineFlags {
 		enabled:  enabled.bytestr()
 		disabled: disabled.bytestr()
 		next:     i + 1
-		scoped:   pattern[i] == `:`
+		scoped:   (*pattern)[i] == `:`
 	}
 }
 
@@ -643,18 +643,18 @@ struct RustBracedHexEscape {
 	next      int
 }
 
-fn rust_braced_hex_escape_at(pattern string, i int) ?RustBracedHexEscape {
-	if i + 3 >= pattern.len || pattern[i..i + 3] != r'\x{' {
+fn rust_braced_hex_escape_at(pattern &string, i int) ?RustBracedHexEscape {
+	if i + 3 >= pattern.len || (*pattern)[i..i + 3] != r'\x{' {
 		return none
 	}
 	mut end := i + 3
-	for end < pattern.len && pattern[end] != `}` {
+	for end < pattern.len && (*pattern)[end] != `}` {
 		end++
 	}
 	if end >= pattern.len || end == i + 3 {
 		return none
 	}
-	codepoint := parse_hex_u32(pattern[i + 3..end]) or { return none }
+	codepoint := parse_hex_u32((*pattern)[i + 3..end]) or { return none }
 	if codepoint > 0x10ffff || (codepoint >= 0xd800 && codepoint <= 0xdfff) {
 		return none
 	}
@@ -664,22 +664,22 @@ fn rust_braced_hex_escape_at(pattern string, i int) ?RustBracedHexEscape {
 	}
 }
 
-fn rust_unicode_escape_at(pattern string, i int) ?RustBracedHexEscape {
+fn rust_unicode_escape_at(pattern &string, i int) ?RustBracedHexEscape {
 	if escape := rust_braced_hex_escape_at(pattern, i) {
 		return escape
 	}
-	if i + 2 >= pattern.len || pattern[i] != `\\` || pattern[i + 1] !in [`u`, `U`] {
+	if i + 2 >= pattern.len || (*pattern)[i] != `\\` || (*pattern)[i + 1] !in [`u`, `U`] {
 		return none
 	}
-	if pattern[i + 1] == `u` && pattern[i + 2] == `{` {
+	if (*pattern)[i + 1] == `u` && (*pattern)[i + 2] == `{` {
 		mut end := i + 3
-		for end < pattern.len && pattern[end] != `}` {
+		for end < pattern.len && (*pattern)[end] != `}` {
 			end++
 		}
 		if end >= pattern.len || end == i + 3 {
 			return none
 		}
-		codepoint := parse_hex_u32(pattern[i + 3..end]) or { return none }
+		codepoint := parse_hex_u32((*pattern)[i + 3..end]) or { return none }
 		if !is_valid_unicode_escape_codepoint(codepoint) {
 			return none
 		}
@@ -688,11 +688,11 @@ fn rust_unicode_escape_at(pattern string, i int) ?RustBracedHexEscape {
 			next:      end + 1
 		}
 	}
-	digits := if pattern[i + 1] == `u` { 4 } else { 8 }
+	digits := if (*pattern)[i + 1] == `u` { 4 } else { 8 }
 	if i + 2 + digits > pattern.len {
 		return none
 	}
-	codepoint := parse_hex_u32(pattern[i + 2..i + 2 + digits]) or { return none }
+	codepoint := parse_hex_u32((*pattern)[i + 2..i + 2 + digits]) or { return none }
 	if !is_valid_unicode_escape_codepoint(codepoint) {
 		return none
 	}
@@ -706,12 +706,12 @@ fn is_valid_unicode_escape_codepoint(codepoint u32) bool {
 	return codepoint <= 0x10ffff && !(codepoint >= 0xd800 && codepoint <= 0xdfff)
 }
 
-fn matching_group_end(pattern string, start int) ?usize {
+fn matching_group_end(pattern &string, start int) ?uint {
 	mut depth := 0
 	mut escaped := false
 	mut in_class := false
 	for i := start; i < pattern.len; i++ {
-		ch := pattern[i]
+		ch := (*pattern)[i]
 		if escaped {
 			escaped = false
 			continue
@@ -737,7 +737,7 @@ fn matching_group_end(pattern string, start int) ?usize {
 		if ch == `)` {
 			depth--
 			if depth == 0 {
-				return usize(i)
+				return uint(i)
 			}
 		}
 	}
@@ -749,7 +749,7 @@ struct RustWordBoundaryVariant {
 	next int
 }
 
-fn rust_word_boundary_variant_at(pattern string, i int) ?RustWordBoundaryVariant {
+fn rust_word_boundary_variant_at(pattern &string, i int) ?RustWordBoundaryVariant {
 	variants := {
 		r'\b{start}':      'start'
 		r'\b{end}':        'end'
@@ -757,7 +757,7 @@ fn rust_word_boundary_variant_at(pattern string, i int) ?RustWordBoundaryVariant
 		r'\b{end-half}':   'end-half'
 	}
 	for variant, kind in variants {
-		if i + variant.len <= pattern.len && pattern[i..i + variant.len] == variant {
+		if i + variant.len <= pattern.len && (*pattern)[i..i + variant.len] == variant {
 			return RustWordBoundaryVariant{
 				kind: kind.to_owned()
 				next: i + variant.len
@@ -772,19 +772,19 @@ fn backend_word_boundary(kind string, unicode bool) string {
 	return '\\b{${kind}-${mode}}'
 }
 
-fn rust_property_escape_end(pattern string, i int) ?usize {
-	if i + 3 >= pattern.len || pattern[i] != `\\` || (pattern[i + 1] != `p`
-		&& pattern[i + 1] != `P`) || pattern[i + 2] != `{` {
+fn rust_property_escape_end(pattern &string, i int) ?uint {
+	if i + 3 >= pattern.len || (*pattern)[i] != `\\` || ((*pattern)[i + 1] != `p`
+		&& (*pattern)[i + 1] != `P`) || (*pattern)[i + 2] != `{` {
 		return none
 	}
 	mut end := i + 3
-	for end < pattern.len && pattern[end] != `}` {
+	for end < pattern.len && (*pattern)[end] != `}` {
 		end++
 	}
 	if end >= pattern.len {
 		return none
 	}
-	return usize(end + 1)
+	return uint(end + 1)
 }
 
 struct RustPropertyEscape {
@@ -792,18 +792,18 @@ struct RustPropertyEscape {
 	next     int
 }
 
-fn rust_property_escape_at(pattern string, i int) ?RustPropertyEscape {
-	if i + 2 >= pattern.len || pattern[i] != `\\` || (pattern[i + 1] != `p`
-		&& pattern[i + 1] != `P`) {
+fn rust_property_escape_at(pattern &string, i int) ?RustPropertyEscape {
+	if i + 2 >= pattern.len || (*pattern)[i] != `\\` || ((*pattern)[i + 1] != `p`
+		&& (*pattern)[i + 1] != `P`) {
 		return none
 	}
 	if end := rust_property_escape_end(pattern, i) {
 		return RustPropertyEscape{
-			property: pattern[i + 3..int(end) - 1].to_owned()
+			property: (*pattern)[i + 3..int(end) - 1].to_owned()
 			next:     int(end)
 		}
 	}
-	next := pattern[i + 2]
+	next := (*pattern)[i + 2]
 	if is_ascii_property_letter(next) {
 		return RustPropertyEscape{
 			property: next.ascii_str().to_owned()
@@ -1446,66 +1446,66 @@ fn is_extended_whitespace(b u8) bool {
 	return b == ` ` || b == `\t` || b == `\n` || b == `\r` || b == `\f`
 }
 
-fn is_possessive_single_quantifier(pattern string, i int) bool {
-	return pattern[i] in [`*`, `+`, `?`] && i + 1 < pattern.len && pattern[i + 1] == `+`
+fn is_possessive_single_quantifier(pattern &string, i int) bool {
+	return (*pattern)[i] in [`*`, `+`, `?`] && i + 1 < pattern.len && (*pattern)[i + 1] == `+`
 }
 
-fn is_standalone_single_quantifier(pattern string, i int) bool {
-	if i < 1 || pattern[i] !in [`*`, `+`, `?`] {
+fn is_standalone_single_quantifier(pattern &string, i int) bool {
+	if i < 1 || (*pattern)[i] !in [`*`, `+`, `?`] {
 		return false
 	}
-	if pattern[i] == `?` && pattern[i - 1] == `(` {
+	if (*pattern)[i] == `?` && (*pattern)[i - 1] == `(` {
 		return false
 	}
-	return pattern[i - 1] !in [`*`, `+`, `?`, `{`, `}`]
+	return (*pattern)[i - 1] !in [`*`, `+`, `?`, `{`, `}`]
 }
 
-fn braced_quantifier_end(pattern string, i int) ?usize {
-	if i >= pattern.len || pattern[i] != `{` {
+fn braced_quantifier_end(pattern &string, i int) ?uint {
+	if i >= pattern.len || (*pattern)[i] != `{` {
 		return none
 	}
 	mut j := i + 1
 	mut saw_digit := false
-	for j < pattern.len && pattern[j] >= `0` && pattern[j] <= `9` {
+	for j < pattern.len && (*pattern)[j] >= `0` && (*pattern)[j] <= `9` {
 		saw_digit = true
 		j++
 	}
 	if !saw_digit {
 		return none
 	}
-	if j < pattern.len && pattern[j] == `,` {
+	if j < pattern.len && (*pattern)[j] == `,` {
 		j++
-		for j < pattern.len && pattern[j] >= `0` && pattern[j] <= `9` {
+		for j < pattern.len && (*pattern)[j] >= `0` && (*pattern)[j] <= `9` {
 			j++
 		}
 	}
-	if j < pattern.len && pattern[j] == `}` {
-		return usize(j)
+	if j < pattern.len && (*pattern)[j] == `}` {
+		return uint(j)
 	}
 	return none
 }
 
-fn possessive_braced_quantifier_end(pattern string, i int) ?usize {
-	if pattern[i] != `{` {
+fn possessive_braced_quantifier_end(pattern &string, i int) ?uint {
+	if (*pattern)[i] != `{` {
 		return none
 	}
 	mut j := i + 1
 	mut saw_digit := false
-	for j < pattern.len && pattern[j] >= `0` && pattern[j] <= `9` {
+	for j < pattern.len && (*pattern)[j] >= `0` && (*pattern)[j] <= `9` {
 		saw_digit = true
 		j++
 	}
 	if !saw_digit {
 		return none
 	}
-	if j < pattern.len && pattern[j] == `,` {
+	if j < pattern.len && (*pattern)[j] == `,` {
 		j++
-		for j < pattern.len && pattern[j] >= `0` && pattern[j] <= `9` {
+		for j < pattern.len && (*pattern)[j] >= `0` && (*pattern)[j] <= `9` {
 			j++
 		}
 	}
-	if j + 1 < pattern.len && pattern[j] == `}` && pattern[j + 1] == `+` {
-		return usize(j)
+	if j + 1 < pattern.len && (*pattern)[j] == `}` && (*pattern)[j + 1] == `+` {
+		return uint(j)
 	}
 	return none
 }
@@ -1951,13 +1951,13 @@ fn escape_regex(literal string) string {
 	return out.bytestr()
 }
 
-fn strip_ignored_whitespace(pattern string) string {
+fn strip_ignored_whitespace(pattern &string) string {
 	mut out := []u8{cap: pattern.len}
 	mut i := 0
 	mut in_class := false
 	mut escaped := false
 	for i < pattern.len {
-		byte := pattern[i]
+		byte := (*pattern)[i]
 		if escaped {
 			out << byte
 			escaped = false
@@ -1983,7 +1983,7 @@ fn strip_ignored_whitespace(pattern string) string {
 			continue
 		}
 		if !in_class && byte == `#` {
-			for i < pattern.len && pattern[i] != `\n` {
+			for i < pattern.len && (*pattern)[i] != `\n` {
 				i++
 			}
 			continue
@@ -2052,34 +2052,34 @@ struct PatternReplacement {
 	next int
 }
 
-fn normalize_posix_alpha_class_at(pattern string, start int, config Config) ?PatternReplacement {
-	if start >= pattern.len || pattern[start] != `[` {
+fn normalize_posix_alpha_class_at(pattern &string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || (*pattern)[start] != `[` {
 		return none
 	}
 	mut i := start + 1
 	mut outer_negated := false
-	if i < pattern.len && pattern[i] == `^` {
+	if i < pattern.len && (*pattern)[i] == `^` {
 		outer_negated = true
 		i++
 	}
-	if i + 3 >= pattern.len || pattern[i] != `[` || pattern[i + 1] != `:` {
+	if i + 3 >= pattern.len || (*pattern)[i] != `[` || (*pattern)[i + 1] != `:` {
 		return none
 	}
 	i += 2
 	mut inner_negated := false
-	if i < pattern.len && pattern[i] == `^` {
+	if i < pattern.len && (*pattern)[i] == `^` {
 		inner_negated = true
 		i++
 	}
 	name_start := i
-	for i + 1 < pattern.len && !(pattern[i] == `:` && pattern[i + 1] == `]`) {
+	for i + 1 < pattern.len && !((*pattern)[i] == `:` && (*pattern)[i + 1] == `]`) {
 		i++
 	}
-	if i + 2 >= pattern.len || pattern[i] != `:` || pattern[i + 1] != `]`
-		|| pattern[i + 2] != `]` {
+	if i + 2 >= pattern.len || (*pattern)[i] != `:` || (*pattern)[i + 1] != `]`
+		|| (*pattern)[i + 2] != `]` {
 		return none
 	}
-	mut ranges := posix_class_ranges(pattern[name_start..i]) or { return none }
+	mut ranges := posix_class_ranges((*pattern)[name_start..i]) or { return none }
 	if inner_negated != outer_negated {
 		ranges = complement_unicode_ranges(ranges)
 	}
@@ -2123,12 +2123,12 @@ fn posix_class_ranges(name string) ?[]UnicodeRange {
 	}
 }
 
-fn normalize_class_set_operation_at(pattern string, start int, config Config) ?PatternReplacement {
-	if start >= pattern.len || pattern[start] != `[` {
+fn normalize_class_set_operation_at(pattern &string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || (*pattern)[start] != `[` {
 		return none
 	}
 	end := find_class_end_nested(pattern, start) or { return none }
-	body := pattern[start + 1..end]
+	body := (*pattern)[start + 1..end]
 	if !body.contains('&&') && !body.contains('--') && !body.contains('~~') {
 		return none
 	}
@@ -2152,8 +2152,8 @@ fn normalize_class_set_operation_at(pattern string, start int, config Config) ?P
 	}
 }
 
-fn normalize_unicode_class_at(pattern string, start int, config Config) ?PatternReplacement {
-	if start >= pattern.len || pattern[start] != `[` {
+fn normalize_unicode_class_at(pattern &string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || (*pattern)[start] != `[` {
 		return none
 	}
 	end := find_class_end_nested(pattern, start) or { return none }
@@ -2217,12 +2217,12 @@ fn parse_unicode_class_set_expression(pattern string, start int, end int, config
 	return ranges, true, i
 }
 
-fn parse_unicode_class_union_until_operation(pattern string, start int, end int, config Config) ([]UnicodeRange, bool, int) {
+fn parse_unicode_class_union_until_operation(pattern &string, start int, end int, config Config) ([]UnicodeRange, bool, int) {
 	mut i := start
 	mut ranges := []UnicodeRange{}
 	mut saw_atom := false
 	for i < end {
-		if i + 1 < end && pattern[i..i + 2] in ['&&', '--', '~~'] {
+		if i + 1 < end && (*pattern)[i..i + 2] in ['&&', '--', '~~'] {
 			break
 		}
 		start_atom, next_i := parse_unicode_class_atom(pattern, i, end, config)
@@ -2231,7 +2231,7 @@ fn parse_unicode_class_union_until_operation(pattern string, start int, end int,
 			return ranges, false, i
 		}
 		saw_atom = true
-		if i + 1 < end && pattern[i] == `-` && pattern[i + 1] != `-` {
+		if i + 1 < end && (*pattern)[i] == `-` && (*pattern)[i + 1] != `-` {
 			i++
 			end_atom, after_end := parse_unicode_class_atom(pattern, i, end, config)
 			i = after_end
@@ -2248,24 +2248,24 @@ fn parse_unicode_class_union_until_operation(pattern string, start int, end int,
 	return ranges, saw_atom, i
 }
 
-fn parse_unicode_class_atom(pattern string, i int, end int, config Config) (UnicodeClassAtom, int) {
+fn parse_unicode_class_atom(pattern &string, i int, end int, config Config) (UnicodeClassAtom, int) {
 	if i >= end {
 		return UnicodeClassAtom{}, i
 	}
-	if pattern[i] == `[` {
-		if i + 3 < pattern.len && pattern[i + 1] == `:` {
+	if (*pattern)[i] == `[` {
+		if i + 3 < pattern.len && (*pattern)[i + 1] == `:` {
 			mut pos := i + 2
 			mut negated := false
-			if pos < pattern.len && pattern[pos] == `^` {
+			if pos < pattern.len && (*pattern)[pos] == `^` {
 				negated = true
 				pos++
 			}
 			name_start := pos
-			for pos + 1 < pattern.len && !(pattern[pos] == `:` && pattern[pos + 1] == `]`) {
+			for pos + 1 < pattern.len && !((*pattern)[pos] == `:` && (*pattern)[pos + 1] == `]`) {
 				pos++
 			}
 			if pos + 1 < pattern.len {
-				mut ranges := posix_class_ranges(pattern[name_start..pos]) or {
+				mut ranges := posix_class_ranges((*pattern)[name_start..pos]) or {
 					return UnicodeClassAtom{}, pos + 2
 				}
 				if negated {
@@ -2285,7 +2285,7 @@ fn parse_unicode_class_atom(pattern string, i int, end int, config Config) (Unic
 			ok:     ok && next == nested_end
 		}, nested_end + 1
 	}
-	if pattern[i] == `\\` {
+	if (*pattern)[i] == `\\` {
 		return parse_unicode_escape_class(pattern, i, end, config)
 	}
 	value, width := read_pattern_rune_at(pattern, i)
@@ -2414,28 +2414,28 @@ fn read_pattern_rune_at(pattern string, index int) (rune, int) {
 	return rune(0), 0
 }
 
-fn normalize_property_class_at(pattern string, start int, config Config) ?PatternReplacement {
-	if start >= pattern.len || pattern[start] != `[` {
+fn normalize_property_class_at(pattern &string, start int, config Config) ?PatternReplacement {
+	if start >= pattern.len || (*pattern)[start] != `[` {
 		return none
 	}
 	end := find_class_end_nested(pattern, start) or { return none }
-	body := pattern[start + 1..end]
+	body := (*pattern)[start + 1..end]
 	if !body.contains(r'\p') && !body.contains(r'\P') {
 		return none
 	}
 	mut out := []u8{cap: body.len}
 	mut i := start + 1
 	mut outer_negated := false
-	if i < end && pattern[i] == `^` {
+	if i < end && (*pattern)[i] == `^` {
 		outer_negated = true
 		i++
 	}
-	if i < end && pattern[i] == `\\` && i + 1 < end
-		&& (pattern[i + 1] == `p` || pattern[i + 1] == `P`) {
+	if i < end && (*pattern)[i] == `\\` && i + 1 < end
+		&& ((*pattern)[i + 1] == `p` || (*pattern)[i + 1] == `P`) {
 		property_escape := rust_property_escape_at(pattern, i) or { return none }
 		if property_escape.next == end {
 			body_part := rust_property_class_body(property_escape.property, config) or { return none }
-			property_negated := pattern[i + 1] == `P`
+			property_negated := (*pattern)[i + 1] == `P`
 			text := if property_negated != outer_negated {
 				negated_backend_class(body_part, config)
 			} else {
@@ -2452,8 +2452,8 @@ fn normalize_property_class_at(pattern string, start int, config Config) ?Patter
 		out << `^`
 	}
 	for i < end {
-		if pattern[i] == `\\` && i + 1 < end {
-			next := pattern[i + 1]
+		if (*pattern)[i] == `\\` && i + 1 < end {
+			next := (*pattern)[i + 1]
 			if next == `p` || next == `P` {
 				property_escape := rust_property_escape_at(pattern, i) or { return none }
 				if property_escape.next > end {
@@ -2467,12 +2467,12 @@ fn normalize_property_class_at(pattern string, start int, config Config) ?Patter
 				i = property_escape.next
 				continue
 			}
-			out << pattern[i]
+			out << (*pattern)[i]
 			out << next
 			i += 2
 			continue
 		}
-		out << pattern[i]
+		out << (*pattern)[i]
 		i++
 	}
 	out << `]`
@@ -2482,26 +2482,26 @@ fn normalize_property_class_at(pattern string, start int, config Config) ?Patter
 	}
 }
 
-fn find_class_end_nested(pattern string, start int) ?int {
-	if start >= pattern.len || pattern[start] != `[` {
+fn find_class_end_nested(pattern &string, start int) ?int {
+	if start >= pattern.len || (*pattern)[start] != `[` {
 		return none
 	}
 	mut i := start + 1
-	if i < pattern.len && pattern[i] == `^` {
+	if i < pattern.len && (*pattern)[i] == `^` {
 		i++
 	}
-	if i < pattern.len && pattern[i] == `]` {
+	if i < pattern.len && (*pattern)[i] == `]` {
 		i++
 	}
 	for i < pattern.len {
-		if pattern[i] == `\\` {
+		if (*pattern)[i] == `\\` {
 			i = skip_regex_escape(pattern, i)
 			continue
 		}
-		if i + 1 < pattern.len && pattern[i] == `[` && pattern[i + 1] == `:` {
+		if i + 1 < pattern.len && (*pattern)[i] == `[` && (*pattern)[i + 1] == `:` {
 			mut posix_end := i + 2
 			for posix_end + 1 < pattern.len {
-				if pattern[posix_end] == `:` && pattern[posix_end + 1] == `]` {
+				if (*pattern)[posix_end] == `:` && (*pattern)[posix_end + 1] == `]` {
 					i = posix_end + 2
 					break
 				}
@@ -2512,12 +2512,12 @@ fn find_class_end_nested(pattern string, start int) ?int {
 			}
 			continue
 		}
-		if pattern[i] == `[` {
+		if (*pattern)[i] == `[` {
 			nested_end := find_class_end_nested(pattern, i) or { return none }
 			i = nested_end + 1
 			continue
 		}
-		if pattern[i] == `]` {
+		if (*pattern)[i] == `]` {
 			return i
 		}
 		i++
@@ -2683,16 +2683,16 @@ fn apply_class_set_operation(mut set []bool, right []bool, op string) {
 	}
 }
 
-fn parse_class_set(pattern string, start int) ([]bool, bool, int) {
+fn parse_class_set(pattern &string, start int) ([]bool, bool, int) {
 	mut i := start
 	mut negated := false
-	if i < pattern.len && pattern[i] == `^` {
+	if i < pattern.len && (*pattern)[i] == `^` {
 		negated = true
 		i++
 	}
 	mut set := empty_byte_class()
 	for i < pattern.len {
-		if pattern[i] == `]` {
+		if (*pattern)[i] == `]` {
 			i++
 			if negated {
 				invert_byte_class(mut set)
@@ -2704,7 +2704,7 @@ fn parse_class_set(pattern string, start int) ([]bool, bool, int) {
 		if !start_atom.ok {
 			return set, false, i
 		}
-		if i < pattern.len && pattern[i] == `-` && i + 1 < pattern.len && pattern[i + 1] != `]` {
+		if i < pattern.len && (*pattern)[i] == `-` && i + 1 < pattern.len && (*pattern)[i + 1] != `]` {
 			i++
 			end_atom, after_end := parse_class_atom(pattern, i)
 			i = after_end
@@ -2724,18 +2724,18 @@ fn parse_class_set(pattern string, start int) ([]bool, bool, int) {
 	return set, false, i
 }
 
-fn parse_class_atom(pattern string, i int) (ClassAtom, int) {
+fn parse_class_atom(pattern &string, i int) (ClassAtom, int) {
 	if i >= pattern.len {
 		return ClassAtom{}, i
 	}
-	if pattern[i] == `[` {
+	if (*pattern)[i] == `[` {
 		nested, ok, next := parse_class_set(pattern, i + 1)
 		return ClassAtom{
 			set: nested
 			ok:  ok
 		}, next
 	}
-	if pattern[i] == `\\` {
+	if (*pattern)[i] == `\\` {
 		set, has_single, single, ok, next := parse_escape_class(pattern, i)
 		return ClassAtom{
 			set:        set
@@ -2744,7 +2744,7 @@ fn parse_class_atom(pattern string, i int) (ClassAtom, int) {
 			ok:         ok
 		}, next
 	}
-	byte := pattern[i]
+	byte := (*pattern)[i]
 	mut set := empty_byte_class()
 	set[int(byte)] = true
 	return ClassAtom{
@@ -2755,11 +2755,11 @@ fn parse_class_atom(pattern string, i int) (ClassAtom, int) {
 	}, i + 1
 }
 
-fn parse_escape_class(pattern string, i int) ([]bool, bool, u8, bool, int) {
+fn parse_escape_class(pattern &string, i int) ([]bool, bool, u8, bool, int) {
 	if i + 1 >= pattern.len {
 		return full_byte_class(), false, u8(0), false, pattern.len
 	}
-	next := pattern[i + 1]
+	next := (*pattern)[i + 1]
 	match next {
 		`d` {
 			mut set := empty_byte_class()
@@ -2832,18 +2832,18 @@ fn parse_escape_class(pattern string, i int) ([]bool, bool, u8, bool, int) {
 	}
 }
 
-fn parse_escape_byte(pattern string, i int) (bool, u8, int) {
+fn parse_escape_byte(pattern &string, i int) (bool, u8, int) {
 	if i + 1 >= pattern.len {
 		return false, u8(0), pattern.len
 	}
-	next := pattern[i + 1]
+	next := (*pattern)[i + 1]
 	if escaped := escaped_byte(next) {
 		return true, escaped, i + 2
 	}
 	if next == `x` {
-		if i + 2 < pattern.len && pattern[i + 2] == `{` {
+		if i + 2 < pattern.len && (*pattern)[i + 2] == `{` {
 			mut end := i + 3
-			for end < pattern.len && pattern[end] != `}` {
+			for end < pattern.len && (*pattern)[end] != `}` {
 				end++
 			}
 			if end < pattern.len {
@@ -2863,9 +2863,9 @@ fn parse_escape_byte(pattern string, i int) (bool, u8, int) {
 		}
 	}
 	if next == `u` {
-		if i + 2 < pattern.len && pattern[i + 2] == `{` {
+		if i + 2 < pattern.len && (*pattern)[i + 2] == `{` {
 			mut end := i + 3
-			for end < pattern.len && pattern[end] != `}` {
+			for end < pattern.len && (*pattern)[end] != `}` {
 				end++
 			}
 			if end < pattern.len {

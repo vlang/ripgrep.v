@@ -579,13 +579,13 @@ fn (mut sink SummarySink[^p, ^s, W]) write_spec[^p, ^s](spec &ColorSpec, buf []u
 
 /// Write all of the given bytes.
 fn (mut sink SummarySink[^p, ^s, W]) write_all[^p, ^s](buf []u8) ! {
-	mut written := usize(0)
+	mut written := uint(0)
 	for written < buf.len {
 		n := sink.summary.wtr.write(buf[written..])!
 		if n <= 0 {
 			return error('failed to write all bytes')
 		}
-		written += usize(n)
+		written += uint(n)
 	}
 }
 

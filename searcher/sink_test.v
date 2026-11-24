@@ -28,7 +28,7 @@ fn exercise_sink_defaults(mut sink Sink) ! {
 }
 
 fn test_sink_defaults_supply_optional_behavior() {
-	mut sink := MinimalSink{}
+	mut sink := MinimalSink{matched_count: 0}
 	exercise_sink_defaults(mut sink)!
 }
 
@@ -81,7 +81,7 @@ fn test_utf8_sink_rejects_invalid_utf8() {
 		return true
 	})
 	bytes := [u8(`a`), 0xff, `b`]
-	mat := SinkMatch.new(&bytes, matcher.Match.new(0, bytes.len)).with_line_number(u64(1))
+	mat := SinkMatch.new(&bytes, matcher.Match.new(0, uint(bytes.len))).with_line_number(u64(1))
 	searcher_ := Searcher.new()
 
 	sink.matched(&searcher_, &mat) or {
@@ -98,7 +98,7 @@ fn test_utf8_sink_reports_incomplete_utf8() {
 		return true
 	})
 	bytes := [u8(`a`), 0xe2, 0x82]
-	mat := SinkMatch.new(&bytes, matcher.Match.new(0, bytes.len)).with_line_number(u64(1))
+	mat := SinkMatch.new(&bytes, matcher.Match.new(0, uint(bytes.len))).with_line_number(u64(1))
 	searcher_ := Searcher.new()
 
 	sink.matched(&searcher_, &mat) or {
@@ -138,7 +138,7 @@ fn test_lossy_sink_replaces_invalid_utf8() {
 		return true
 	})
 	bytes := [u8(`a`), 0xff, `b`]
-	mat := SinkMatch.new(&bytes, matcher.Match.new(0, bytes.len)).with_line_number(u64(3))
+	mat := SinkMatch.new(&bytes, matcher.Match.new(0, uint(bytes.len))).with_line_number(u64(3))
 	searcher_ := Searcher.new()
 
 	assert sink.matched(&searcher_, &mat)!
@@ -156,7 +156,7 @@ fn test_lossy_sink_replaces_incomplete_sequence_once() {
 		return true
 	})
 	bytes := [u8(`a`), 0xe2, 0x82]
-	mat := SinkMatch.new(&bytes, matcher.Match.new(0, bytes.len)).with_line_number(u64(3))
+	mat := SinkMatch.new(&bytes, matcher.Match.new(0, uint(bytes.len))).with_line_number(u64(3))
 	searcher_ := Searcher.new()
 
 	assert sink.matched(&searcher_, &mat)!
@@ -176,7 +176,7 @@ fn test_bytes_sink_reports_raw_bytes() {
 		return true
 	})
 	bytes := [u8(`a`), 0xff, `b`]
-	mat := SinkMatch.new(&bytes, matcher.Match.new(0, bytes.len)).with_line_number(u64(9))
+	mat := SinkMatch.new(&bytes, matcher.Match.new(0, uint(bytes.len))).with_line_number(u64(9))
 	searcher_ := Searcher.new()
 
 	assert sink.matched(&searcher_, &mat)!

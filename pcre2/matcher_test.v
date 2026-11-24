@@ -3,7 +3,7 @@ module pcre2
 import matcher
 
 fn pcre2_is_match(re &RegexMatcher, haystack &[]u8) !bool {
-	return re.find_at(haystack, 0)!.has_value
+	return re.find_at(haystack, 0)!.is_some()
 }
 
 fn has_pcre2_feature() bool {
@@ -35,8 +35,8 @@ fn test_word_rewrite_backtracks_at_same_start() {
 	builder.word(true)
 	matcher_ := builder.build_many(['foo', 'foobar']) or { panic(err) }
 	mat := matcher_.find_at('foobar'.bytes(), 0)!.get() or { panic('missing match') }
-	assert mat.start() == usize(0)
-	assert mat.end() == usize(6)
+	assert mat.start() == uint(0)
+	assert mat.end() == uint(6)
 }
 
 fn test_whole_line_rewrite_backtracks_at_same_start() {
@@ -47,8 +47,8 @@ fn test_whole_line_rewrite_backtracks_at_same_start() {
 	builder.whole_line(true)
 	matcher_ := builder.build_many(['foo', 'foo bar']) or { panic(err) }
 	mat := matcher_.find_at('foo bar\n'.bytes(), 0)!.get() or { panic('missing match') }
-	assert mat.start() == usize(0)
-	assert mat.end() == usize(7)
+	assert mat.start() == uint(0)
+	assert mat.end() == uint(7)
 }
 
 fn test_clone_retain_free_keeps_other_clone_alive() {
@@ -83,7 +83,7 @@ fn exercise_automatic_matcher_drop() {
 	cloned1 := matcher_.clone()
 	cloned2 := cloned1.clone()
 	found := cloned2.find_at('Sherlock Holmes'.bytes(), 0) or { panic(err) }
-	assert found.has_value
+	assert found.get() != none
 }
 
 // Test that enabling CRLF permits `$` to match at the end of a line.
@@ -213,7 +213,7 @@ fn test_capture_metadata() {
 	}
 	matcher_ := RegexMatcherBuilder.new().build(r'(?P<name>ab)(c)') or { panic(err) }
 	assert matcher_.capture_count() == 3
-	assert matcher_.capture_index('name') or { usize(0) } == usize(1)
+	assert matcher_.capture_index('name') or { uint(0) } == uint(1)
 }
 
 fn test_captures() {

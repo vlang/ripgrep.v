@@ -410,7 +410,7 @@ fn (mut reader DecompressionReader) read_impl(mut buf []u8, for_search bool) !in
 		mut cmd_reader := &inner.cmd_reader
 		if for_search {
 			return cmd_reader.read_for_search(mut buf) or {
-				if is_broken_pipe_error(err) || err.msg() == '' {
+				if is_broken_pipe_error(&err) || err.msg() == '' {
 					return io.Eof{}
 				}
 				return error(err.msg())

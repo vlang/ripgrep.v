@@ -97,11 +97,11 @@ fn (mut m RegexMatcher) every_line_is_candidate(yes bool) &RegexMatcher {
 	return m
 }
 
-fn (m &RegexMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
+fn (m &RegexMatcher) find_at(haystack &[]u8, at uint) !matcher.FallibleMatch {
 	return m.regex.find_at(haystack, at)!
 }
 
-fn (m &RegexMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
+fn (m &RegexMatcher) shortest_match_at(haystack &[]u8, at uint) !matcher.FallibleUsize {
 	return m.regex.shortest_match_at(haystack, at)!
 }
 
@@ -110,18 +110,18 @@ fn (m &RegexMatcher) new_captures() !matcher.NoCaptures {
 	return matcher.NoCaptures.new()
 }
 
-fn (m &RegexMatcher) capture_count() usize {
+fn (m &RegexMatcher) capture_count() uint {
 	_ = m
 	return 0
 }
 
-fn (m &RegexMatcher) capture_index(name string) ?usize {
+fn (m &RegexMatcher) capture_index(name string) ?uint {
 	_ = m
 	_ = name
 	return none
 }
 
-fn (m &RegexMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m &RegexMatcher) captures_at(haystack &[]u8, at uint, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	_ = haystack
 	_ = at
@@ -149,11 +149,11 @@ fn (m &RegexMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineMa
 		mut i := 0
 		for i < haystack.len {
 			if haystack[i] == line_term.as_byte() {
-				return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.candidate(usize(i)))
+				return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.candidate(uint(i)))
 			}
 			i++
 		}
-		return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.candidate(usize(haystack.len - 1)))
+		return matcher.FallibleLineMatchKind.some(matcher.LineMatchKind.candidate(uint(haystack.len - 1)))
 	}
 	maybe_mat := m.regex.find_at(haystack, 0)!
 	if mat := maybe_mat.get() {
@@ -196,7 +196,7 @@ fn (mut sink KitchenSink) matched[^b](searcher_ &Searcher, mat &SinkMatch[^b]) !
 	mut line_number := mat.line_number()
 	mut byte_offset := mat.absolute_byte_offset()
 	bytes := mat.bytes()
-	mut step := LineStep.new(mat.line_term_.as_byte(), 0, bytes.len)
+	mut step := LineStep.new(mat.line_term_.as_byte(), 0, uint(bytes.len))
 	for {
 		start, end := step.next(bytes) or { break }
 		if n := line_number {
@@ -281,8 +281,8 @@ struct SearcherTester {
 	line_number     bool
 	binary          BinaryDetection
 	auto_heap_limit bool
-	after_context   usize
-	before_context  usize
+	after_context   uint
+	before_context  uint
 	passthru        bool
 }
 
@@ -459,7 +459,7 @@ fn (mut tester SearcherTester) auto_heap_limit(yes bool) &SearcherTester {
 /// Set the number of lines to include in the "after" context.
 ///
 /// The default is `0`, which is equivalent to not printing any context.
-fn (mut tester SearcherTester) after_context(lines usize) &SearcherTester {
+fn (mut tester SearcherTester) after_context(lines uint) &SearcherTester {
 	tester.after_context = lines
 	return tester
 }
@@ -467,7 +467,7 @@ fn (mut tester SearcherTester) after_context(lines usize) &SearcherTester {
 /// Set the number of lines to include in the "before" context.
 ///
 /// The default is `0`, which is equivalent to not printing any context.
-fn (mut tester SearcherTester) before_context(lines usize) &SearcherTester {
+fn (mut tester SearcherTester) before_context(lines uint) &SearcherTester {
 	tester.before_context = lines
 	return tester
 }
@@ -493,9 +493,9 @@ fn (mut tester SearcherTester) passthru(yes bool) &SearcherTester {
 /// Note that this must account for whether the test is using multi line
 /// search or not, since multi line search requires being able to fit the
 /// entire haystack into memory.
-fn (tester &SearcherTester) minimal_heap_limit(multi_line bool) usize {
+fn (tester &SearcherTester) minimal_heap_limit(multi_line bool) uint {
 	if multi_line {
-		return usize(1 + tester.haystack.len)
+		return uint(1 + tester.haystack.len)
 	}
 	lines := testutil_string_lines(tester.haystack)
 	if tester.before_context == 0 && tester.after_context == 0 {
@@ -505,7 +505,7 @@ fn (tester &SearcherTester) minimal_heap_limit(multi_line bool) usize {
 				max_len = line.len
 			}
 		}
-		return usize(1 + max_len)
+		return uint(1 + max_len)
 	}
 	mut lens := []int{}
 	for line in lines {
@@ -531,7 +531,7 @@ fn (tester &SearcherTester) minimal_heap_limit(multi_line bool) usize {
 		sum += lens[i] + 1
 		i++
 	}
-	return usize(sum)
+	return uint(sum)
 }
 
 /// Returns true if and only if the given label should be included as part
@@ -753,7 +753,7 @@ fn glue_assert_no_match(got matcher.FallibleMatch) {
 	}
 }
 
-fn glue_m(start usize, end usize) matcher.Match {
+fn glue_m(start uint, end uint) matcher.Match {
 	return matcher.Match.new(start, end)
 }
 
@@ -1103,7 +1103,7 @@ fn test_glue_big_error_one_line() {
 	matcher_ := RegexMatcher.new('a')
 	mut sink := KitchenSink.new()
 	mut builder := SearcherBuilder.new()
-	builder.heap_limit(usize(3)) // max line length is 4, one byte short
+	builder.heap_limit(uint(3)) // max line length is 4, one byte short
 	mut searcher_ := builder.build()
 	mut rdr := GlueByteSliceReader.new(haystack)
 	searcher_.search_reader(matcher_, mut rdr, &sink) or { return }
@@ -1117,7 +1117,7 @@ fn test_glue_big_error_multi_line() {
 	mut sink := KitchenSink.new()
 	mut builder := SearcherBuilder.new()
 	builder.multi_line(true)
-	builder.heap_limit(usize(haystack.len)) // actually need one more byte
+	builder.heap_limit(uint(haystack.len)) // actually need one more byte
 	mut searcher_ := builder.build()
 	mut rdr := GlueByteSliceReader.new(haystack)
 	searcher_.search_reader(matcher_, mut rdr, &sink) or { return }

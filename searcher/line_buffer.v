@@ -4,7 +4,7 @@ import io
 
 $if !windows {
 	#include <string.h>
-	fn C.memchr(s voidptr, c i32, n usize) voidptr
+	fn C.memchr(s voidptr, c i32, n uint) voidptr
 }
 
 /// The default buffer capacity that we use for the line buffer.
@@ -25,7 +25,7 @@ enum BufferAllocationKind {
 /// The default is to eagerly allocate without a limit.
 struct BufferAllocation implements IClone {
 	kind       BufferAllocationKind
-	additional usize
+	additional uint
 }
 
 /// Attempt to expand the size of the buffer until either at least the next
@@ -41,7 +41,7 @@ fn BufferAllocation.eager() BufferAllocation {
 /// Limit the amount of additional memory allocated to the given size. If
 /// a line is found that requires more memory than is allowed here, then
 /// stop reading and return an error.
-fn BufferAllocation.error(additional usize) BufferAllocation {
+fn BufferAllocation.error(additional uint) BufferAllocation {
 	return BufferAllocation{
 		kind:       .error
 		additional: additional
@@ -50,7 +50,7 @@ fn BufferAllocation.error(additional usize) BufferAllocation {
 
 /// Create a new error to be used when a configured allocation limit has been
 /// reached.
-fn alloc_error(limit usize) IError {
+fn alloc_error(limit uint) IError {
 	return error('configured allocation limit (${limit}) exceeded')
 }
 
@@ -63,7 +63,7 @@ fn (d BinaryDetection) is_quit() bool {
 struct LineBufferConfig implements IClone {
 mut:
 	/// The number of bytes to attempt to read at a time.
-	capacity usize
+	capacity uint
 	/// The line terminator.
 	lineterm u8
 	/// The behavior for handling long lines.
@@ -82,7 +82,7 @@ mut:
 fn LineBufferBuilder.new() LineBufferBuilder {
 	return LineBufferBuilder{
 		config: LineBufferConfig{
-			capacity:     usize(default_buffer_capacity)
+			capacity:     uint(default_buffer_capacity)
 			lineterm:     `\n`
 			buffer_alloc: BufferAllocation{
 				kind: .eager
@@ -107,7 +107,7 @@ fn (builder &LineBufferBuilder) build() LineBuffer {
 ///
 /// This is set to a reasonable default and probably shouldn't be changed
 /// unless there's a specific reason to do so.
-fn (mut builder LineBufferBuilder) capacity(capacity usize) &LineBufferBuilder {
+fn (mut builder LineBufferBuilder) capacity(capacity uint) &LineBufferBuilder {
 	builder.config.capacity = capacity
 	return builder
 }
@@ -216,13 +216,13 @@ fn (mut rdr LineBufferReader[^r, ^b]) fill[^r, ^b]() !bool {
 }
 
 /// Return the contents of this buffer.
-fn (rdr &LineBufferReader[^r, ^b]) buffer[^r, ^b]() []u8 {
+fn (rdr &^a LineBufferReader[^r, ^b]) buffer[^a, ^r, ^b]() &^a []u8 {
 	return rdr.line_buffer.buffer()
 }
 
 /// Consume the number of bytes provided. This must be less than or equal
 /// to the number of bytes returned by `buffer`.
-fn (mut rdr LineBufferReader[^r, ^b]) consume[^r, ^b](amt usize) {
+fn (mut rdr LineBufferReader[^r, ^b]) consume[^r, ^b](amt uint) {
 	rdr.line_buffer.consume(amt)
 }
 
@@ -240,16 +240,16 @@ mut:
 	buf []u8
 	/// The current position of this buffer. This is always a valid sliceable
 	/// index into `buf`, and its maximum value is the length of `buf`.
-	pos usize
+	pos uint
 	/// The end position of searchable content in this buffer. This is either
 	/// set to just after the final line terminator in the buffer, or to just
 	/// after the end of the last byte emitted by the reader when the reader
 	/// has been exhausted.
-	last_lineterm usize
+	last_lineterm uint
 	/// The end position of the buffer. This is always greater than or equal to
 	/// last_lineterm. The bytes between last_lineterm and end, if any, always
 	/// correspond to a partial line.
-	end usize
+	end uint
 	/// The absolute byte offset corresponding to `pos`. This is most typically
 	/// not a valid index into addressable memory, but rather, an offset that
 	/// is relative to all data that passes through a line buffer (since
@@ -299,20 +299,20 @@ fn (lb &LineBuffer) binary_byte_offset() ?u64 {
 }
 
 /// Return the contents of this buffer.
-fn (lb &LineBuffer) buffer() []u8 {
-	return lb.buf[lb.pos..lb.last_lineterm]
+fn (lb &^a LineBuffer) buffer[^a]() &^a []u8 {
+	return &lb.buf[lb.pos..lb.last_lineterm]
 }
 
 /// Return the contents of the free space beyond the end of the buffer as
 /// a mutable slice.
-fn (mut lb LineBuffer) free_buffer() []u8 {
-	return lb.buf[lb.end..]
+fn (mut lb ^a LineBuffer) free_buffer[^a]() &^a []u8 {
+	return &lb.buf[lb.end..]
 }
 
 /// Consume the number of bytes provided. This must be less than or equal
 /// to the number of bytes returned by `buffer`.
-fn (mut lb LineBuffer) consume(amt usize) {
-	assert amt <= usize(lb.buffer().len)
+fn (mut lb LineBuffer) consume(amt uint) {
+	assert amt <= uint(lb.buffer().len)
 	lb.pos += amt
 	lb.absolute_byte_offset_ += u64(amt)
 }
@@ -365,8 +365,8 @@ fn (mut lb LineBuffer) fill(mut rdr &io.Reader) !bool {
 		// search to find the last line terminator. We need a mutable slice
 		// in the case of binary conversion.
 		oldend := lb.end
-		lb.end += usize(nread)
-		mut newbytes := lb.buf[oldend..lb.end]
+		lb.end += uint(nread)
+		mut newbytes := &lb.buf[oldend..lb.end]
 
 		// Binary detection.
 		if binary_byte := lb.config.binary.quit_byte() {
@@ -413,7 +413,7 @@ fn (mut lb LineBuffer) roll() {
 		return
 	}
 	roll_len := lb.end - lb.pos
-	mut i := usize(0)
+	mut i := uint(0)
 	for i < roll_len {
 		lb.buf[i] = lb.buf[lb.pos + i]
 		i++
@@ -433,17 +433,17 @@ fn (mut lb LineBuffer) ensure_capacity() ! {
 	}
 	// `len` is used for computing the next allocation size. The capacity
 	// is permitted to start at `0`, so we make sure it's at least `1`.
-	len := usize_max(1, usize(lb.buf.len))
+	len := usize_max(1, uint(lb.buf.len))
 	additional := match lb.config.buffer_alloc.kind {
 		.eager {
 			len * 2
 		}
 		.error {
-			used := usize(lb.buf.len) - lb.config.capacity
+			used := uint(lb.buf.len) - lb.config.capacity
 			remaining := if lb.config.buffer_alloc.additional > used {
 				lb.config.buffer_alloc.additional - used
 			} else {
-				usize(0)
+				uint(0)
 			}
 			n := usize_min(len * 2, remaining)
 			if n == 0 {
@@ -453,24 +453,24 @@ fn (mut lb LineBuffer) ensure_capacity() ! {
 		}
 	}
 	assert additional > 0
-	newlen := usize(lb.buf.len) + additional
+	newlen := uint(lb.buf.len) + additional
 	// Match Vec::resize without constructing and copying a second zero-filled
 	// array. The next read initializes the newly exposed free region.
 	unsafe { lb.buf.grow_len(int(additional)) }
-	assert usize(lb.buf.len) == newlen
-	assert lb.end < usize(lb.buf.len)
+	assert uint(lb.buf.len) == newlen
+	assert lb.end < uint(lb.buf.len)
 }
 
 /// Replaces `src` with `replacement` in bytes, and return the offset of the
 /// first replacement, if one exists.
-fn replace_bytes(mut bytes []u8, src u8, replacement u8) ?usize {
+fn replace_bytes(mut bytes []u8, src u8, replacement u8) ?uint {
 	if src == replacement {
 		return none
 	}
 	first_pos := find_byte(bytes, src)?
 	bytes[first_pos] = replacement
 	mut at := first_pos + 1
-	for at < usize(bytes.len) {
+	for at < uint(bytes.len) {
 		i := find_byte(bytes[at..], src) or { break }
 		pos := at + i
 		bytes[pos] = replacement
@@ -480,7 +480,7 @@ fn replace_bytes(mut bytes []u8, src u8, replacement u8) ?usize {
 		// Since binary data tends to have long runs of NUL terminators,
 		// it is faster to compare one-byte-at-a-time than to stop and start
 		// memchr (through `find_byte`) for every byte in a sequence.
-		for at < usize(bytes.len) && bytes[at] == src {
+		for at < uint(bytes.len) && bytes[at] == src {
 			bytes[at] = replacement
 			at++
 		}
@@ -488,43 +488,43 @@ fn replace_bytes(mut bytes []u8, src u8, replacement u8) ?usize {
 	return first_pos
 }
 
-fn find_byte(bytes []u8, byte u8) ?usize {
+fn find_byte(bytes &[]u8, byte u8) ?uint {
 	if bytes.len == 0 {
 		return none
 	}
 	$if !windows {
 		unsafe {
 			base := voidptr(bytes.data)
-			found := C.memchr(base, i32(byte), usize(bytes.len))
+			found := C.memchr(base, i32(byte), uint(bytes.len))
 			if isnil(found) {
 				return none
 			}
-			return usize(found) - usize(base)
+			return uint(found) - uint(base)
 		}
 	}
-	for i, got in bytes {
+	for i, got in *bytes {
 		if got == byte {
-			return usize(i)
+			return uint(i)
 		}
 	}
 	return none
 }
 
-fn rfind_byte(bytes []u8, byte u8) ?usize {
+fn rfind_byte(bytes &[]u8, byte u8) ?uint {
 	mut i := bytes.len
 	for i > 0 {
 		i--
 		if bytes[i] == byte {
-			return usize(i)
+			return uint(i)
 		}
 	}
 	return none
 }
 
-fn usize_min(a usize, b usize) usize {
+fn usize_min(a uint, b uint) uint {
 	return if a < b { a } else { b }
 }
 
-fn usize_max(a usize, b usize) usize {
+fn usize_max(a uint, b uint) uint {
 	return if a > b { a } else { b }
 }

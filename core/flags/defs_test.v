@@ -29,19 +29,19 @@ fn must_apply(steps []UpdateStep) LowArgs {
 	return args
 }
 
-fn after_context(lines usize) ContextMode {
+fn after_context(lines uint) ContextMode {
 	mut mode := default_context_mode()
 	mode.set_after(lines)
 	return mode
 }
 
-fn before_context(lines usize) ContextMode {
+fn before_context(lines uint) ContextMode {
 	mut mode := default_context_mode()
 	mode.set_before(lines)
 	return mode
 }
 
-fn both_context(lines usize) ContextMode {
+fn both_context(lines uint) ContextMode {
 	mut mode := default_context_mode()
 	mode.set_both(lines)
 	return mode
@@ -71,7 +71,7 @@ fn assert_opt_bool(value ?bool, expected bool) {
 	}
 }
 
-fn assert_opt_usize(value ?usize, expected usize) {
+fn assert_opt_usize(value ?uint, expected uint) {
 	if actual := value {
 		assert actual == expected
 	} else {
@@ -127,8 +127,8 @@ fn assert_opt_special(value ?SpecialMode, expected SpecialMode) {
 	}
 }
 
-fn assert_context_separator_bytes(value ContextSeparator, expected ?[]u8) {
-	if bytes := value.into_bytes() {
+fn assert_context_separator_bytes(value &ContextSeparator, expected ?[]u8) {
+	if bytes := value.clone().into_bytes() {
 		want := expected or {
 			assert false
 			return
@@ -221,7 +221,7 @@ fn test_after_context() {
 	assert args.context == after_context(5)
 
 	args = parse_low_raw(['--after-context', '18446744073709551615']) or { panic(err.msg()) }
-	assert args.context == after_context(usize(-1))
+	assert args.context == after_context(uint(-1))
 
 	if _ := parse_low_raw(['--after-context', '18446744073709551616']) {
 		assert false
@@ -286,7 +286,7 @@ fn test_before_context() {
 	assert args.context == before_context(5)
 
 	args = parse_low_raw(['--before-context', '18446744073709551615']) or { panic(err.msg()) }
-	assert args.context == before_context(usize(-1))
+	assert args.context == before_context(uint(-1))
 
 	if _ := parse_low_raw(['--before-context', '18446744073709551616']) {
 		assert false
@@ -458,7 +458,7 @@ fn test_context() {
 	assert args.context == both_context(5)
 
 	args = parse_low_raw(['--context', '18446744073709551615']) or { panic(err.msg()) }
-	assert args.context == both_context(usize(-1))
+	assert args.context == both_context(uint(-1))
 
 	if _ := parse_low_raw(['--context', '18446744073709551616']) {
 		assert false
@@ -638,10 +638,10 @@ fn test_dfa_size_limit() {
 	assert args.dfa_size_limit == none
 
 	args = parse_low_raw(['--dfa-size-limit', '9G']) or { panic(err.msg()) }
-	assert_opt_usize(args.dfa_size_limit, usize(9) * (usize(1) << 30))
+	assert_opt_usize(args.dfa_size_limit, uint(9) * (uint(1) << 30))
 
 	args = parse_low_raw(['--dfa-size-limit=9G']) or { panic(err.msg()) }
-	assert_opt_usize(args.dfa_size_limit, usize(9) * (usize(1) << 30))
+	assert_opt_usize(args.dfa_size_limit, uint(9) * (uint(1) << 30))
 
 	args = parse_low_raw(['--dfa-size-limit=9G', '--dfa-size-limit=0']) or { panic(err.msg()) }
 	assert_opt_usize(args.dfa_size_limit, 0)
@@ -690,11 +690,13 @@ fn test_encoding() {
 	assert args.encoding == encoding_disabled()
 
 	args = parse_low_raw(['-E', 'utf-16']) or { panic(err.msg()) }
-	enc := new_encoding('utf-16') or { panic(err.msg()) }
+	utf16_label := 'utf-16'
+	enc := new_encoding(utf16_label) or { panic(err.msg()) }
 	assert args.encoding == encoding_some(enc)
 
 	args = parse_low_raw(['-E', 'cp1251']) or { panic(err.msg()) }
-	cp1251 := new_encoding('cp1251') or { panic(err.msg()) }
+	cp1251_label := 'cp1251'
+	cp1251 := new_encoding(cp1251_label) or { panic(err.msg()) }
 	assert args.encoding == encoding_some(cp1251)
 
 	args = parse_low_raw(['-E', 'utf-16', '--no-encoding']) or { panic(err.msg()) }
@@ -1747,10 +1749,10 @@ fn test_regex_size_limit() {
 	assert args.regex_size_limit == none
 
 	args = parse_low_raw(['--regex-size-limit', '9G']) or { panic(err.msg()) }
-	assert_opt_usize(args.regex_size_limit, usize(9) * (usize(1) << 30))
+	assert_opt_usize(args.regex_size_limit, uint(9) * (uint(1) << 30))
 
 	args = parse_low_raw(['--regex-size-limit=9G']) or { panic(err.msg()) }
-	assert_opt_usize(args.regex_size_limit, usize(9) * (usize(1) << 30))
+	assert_opt_usize(args.regex_size_limit, uint(9) * (uint(1) << 30))
 
 	args = parse_low_raw(['--regex-size-limit=9G', '--regex-size-limit=0']) or { panic(err.msg()) }
 	assert_opt_usize(args.regex_size_limit, 0)
@@ -2287,6 +2289,8 @@ fn test_update_context_separator() {
 }
 
 fn test_update_encoding() {
+	utf16_label := 'utf-16'
+	windows1252_label := 'windows-1252'
 	assert must_apply([]UpdateStep{}).encoding == encoding_auto()
 	assert must_apply([UpdateStep{'encoding', flag_value('auto')}]).encoding == encoding_auto()
 	assert must_apply([UpdateStep{'encoding', flag_value('none')}]).encoding == encoding_disabled()
@@ -2297,8 +2301,8 @@ fn test_update_encoding() {
 	assert must_apply([
 		UpdateStep{'no-encoding', flag_switch(true)},
 		UpdateStep{'encoding', flag_value('utf-16')},
-	]).encoding == encoding_some(new_encoding('utf-16') or { panic(err.msg()) })
-	assert must_apply([UpdateStep{'encoding', flag_value('latin1')}]).encoding == encoding_some(new_encoding('windows-1252') or {
+	]).encoding == encoding_some(new_encoding(utf16_label) or { panic(err.msg()) })
+	assert must_apply([UpdateStep{'encoding', flag_value('latin1')}]).encoding == encoding_some(new_encoding(windows1252_label) or {
 		panic(err.msg())
 	})
 }
@@ -2544,9 +2548,9 @@ fn test_update_unrestricted() {
 
 fn test_update_unrestricted_saturates_at_usize_max() {
 	mut args := default_low_args()
-	args.unrestricted = ~usize(0)
+	args.unrestricted = ~uint(0)
 	FlagId.unrestricted.update(flag_switch(true), mut args) or {
-		assert args.unrestricted == ~usize(0)
+		assert args.unrestricted == ~uint(0)
 		return
 	}
 	assert false

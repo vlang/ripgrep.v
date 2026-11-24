@@ -11,36 +11,18 @@ audit found no omitted logic or translation stubs. See
 [TRANSLATION_AUDIT.md](TRANSLATION_AUDIT.md) for the source-file inventory and
 the V mappings for functions whose names necessarily changed.
 
-The current tree was built with V from the exact current `origin/master`,
-commit `45676a0799d4d86aa9bfbe9ffcfbb7bec9e564a9`, and with the profiled V3
-optimizations in [vlang/v#28117](https://github.com/vlang/v/pull/28117), commit
-`801f69f01f`. Both revisions compile the translation. A clean optimized V3
-ownership compiler can be reproduced with:
-
-```sh
-git -C /path/to/v fetch origin master
-git -C /path/to/v fetch origin v3-ripgrep-subsecond-compile
-git -C /path/to/v worktree add --detach /tmp/v-ripgrep-compiler 801f69f01f
-make -C /tmp/v-ripgrep-compiler
-/tmp/v-ripgrep-compiler/v -old-compiler -no-parallel -nocache -prod -gc none \
-  -prealloc \
-  -d ownership -o /tmp/v-ripgrep-compiler/v3 \
-  /tmp/v-ripgrep-compiler/vlib/v3/v3.v
-```
-
-Build ripgrep_v in ownership mode (the full translation currently needs the
-explicit V3 memory-limit override):
+Build with V `218e0d67dd` or newer. This revision includes the ownership checker
+fixes from [vlang/v#32859](https://github.com/vlang/v/pull/32859).
 
 ```sh
 cd /path/to/ripgrep_v
-/tmp/v-ripgrep-compiler/v3 -no-memory-limit -nocache -d ownership -ownership \
-  -prod -o /tmp/ripgrep_v_rg .
-/tmp/v-ripgrep-compiler/v3 -no-memory-limit -nocache -d ownership -ownership \
-  -prod -d pcre2 -o /tmp/ripgrep_v_pcre2_rg .
+/path/to/v/v -ownership -prod -o /tmp/ripgrep_v_rg .
+/path/to/v/v -ownership -prod -d pcre2 -o /tmp/ripgrep_v_pcre2_rg .
 ```
 
-The complete ownership test run passes 1,236 tests. The PCRE2 module and the
-333-test integration suite also pass when compiled with `-d pcre2`.
+The PCRE2 build requires the PCRE2 development library. To run an ownership
+test, pass its `_test.v` file directly to the compiler. Set `RGV_BIN` to the
+built executable when running integration tests.
 
 On macOS arm64, sorted output was byte-identical to installed Rust ripgrep
 `15.2.0` for all of these checks:
@@ -69,7 +51,8 @@ performing a byte-for-byte comparison.
 ## Clean Compile Time And Disk Use
 
 These measurements were taken on the same Apple M5 Max running macOS 26.5.
-V used V3 optimization commit `801f69f01f` above, with the V3 compiler itself
+V used [V3 optimization commit `801f69f01f`](https://github.com/vlang/v/pull/28117),
+with the V3 compiler itself
 built using `-prod -gc none -prealloc -d ownership`. Rust was `rustc 1.97.1`;
 the Rust source was ripgrep `15.1.0` at commit `4519153`. Dependencies were
 downloaded before timing. V used `-nocache`; every Rust run used a distinct
@@ -160,7 +143,7 @@ much larger than the final Rust executable.
 
 ## Benchmark Notes
 
-The optimized ownership build above was compared with installed ripgrep
+The historical optimized ownership build was compared with installed ripgrep
 `15.2.0` using `hyperfine` 1.20.0 on an Apple M5 Max running macOS 26.5. Each
 command had 10 warmup runs and 50 measured runs, with standard output sent to
 `/dev/null`.

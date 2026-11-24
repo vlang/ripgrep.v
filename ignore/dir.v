@@ -390,7 +390,7 @@ pub fn (ig &^a Ignore) matched_dir_entry[^a](dent &DirEntry) Match[IgnoreMatch[^
 	return m
 }
 
-fn (ig &^a Ignore) matched_dir_entry_with_scratch[^a](dent &DirEntry, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
+fn (ig &^a Ignore) matched_dir_entry_with_scratch[^a](dent &DirEntry, mut gitignore_matches []uint) Match[IgnoreMatch[^a]] {
 	m := ig.matched_with_scratch(dent.path().clone(), dent.is_dir(), mut gitignore_matches)
 	if m.is_none() && ig.opts.hidden && is_hidden_file_name(dent.file_name().clone()) {
 		return Match[IgnoreMatch[^a]]{
@@ -407,11 +407,11 @@ fn (ig &^a Ignore) matched_dir_entry_with_scratch[^a](dent &DirEntry, mut gitign
 ///
 /// The match contains information about its origin.
 fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] {
-	mut gitignore_matches := []usize{}
+	mut gitignore_matches := []uint{}
 	return ig.matched_with_scratch(path, is_dir, mut gitignore_matches)
 }
 
-fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
+fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []uint) Match[IgnoreMatch[^a]] {
 	mut path_value := path
 	if path_value.starts_with('./') {
 		path_value = unsafe { path_value.substr_unsafe(2, path_value.len) }
@@ -445,11 +445,11 @@ fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitign
 /// Performs matching only on the ignore files for this directory and
 /// all parent directories.
 fn (ig &^a Ignore) matched_ignore[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] {
-	mut gitignore_matches := []usize{}
+	mut gitignore_matches := []uint{}
 	return ig.matched_ignore_with_scratch(&path, is_dir, mut gitignore_matches)
 }
 
-fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mut gitignore_matches []usize) Match[IgnoreMatch[^a]] {
+fn (ig &^a Ignore) matched_ignore_with_scratch[^a](path &string, is_dir bool, mut gitignore_matches []uint) Match[IgnoreMatch[^a]] {
 	mut m_custom_ignore := ignore_match_none()
 	mut m_ignore := ignore_match_none()
 	mut m_gi := ignore_match_none()

@@ -45,7 +45,7 @@ The main entry point into ripgrep.
 pub fn main() {
 	ignore_sigpipe()
 	code := run(flags.parse()) or {
-		if cli.is_broken_pipe_error(err) {
+		if cli.is_broken_pipe_error(&err) {
 			exit(0)
 		}
 		core.eprintln_locked(err.msg())
@@ -84,27 +84,27 @@ fn run(result flags.ParseResult[flags.HiArgs]) !int {
 		.ok {}
 	}
 
-	args := result.value
+	args := &result.value
 	mode := args.mode()
 	matched := match mode.kind {
 		.search {
 			if !args.matches_possible() {
 				false
 			} else if args.threads() == 1 {
-				search(&args, mode.search)!
+				search(args, mode.search)!
 			} else {
-				search_parallel(&args, mode.search)!
+				search_parallel(args, mode.search)!
 			}
 		}
 		.files {
 			if args.threads() == 1 {
-				files(&args)!
+				files(args)!
 			} else {
-				files_parallel(&args)!
+				files_parallel(args)!
 			}
 		}
 		.types {
-			return types(&args)
+			return types(args)
 		}
 		.generate {
 			return generate(mode.generate)
@@ -151,9 +151,8 @@ fn search_stream(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	}
 	mut walk := args.walk_builder()!.build()
 	for {
-		mut result := walk.next() or { break }
+		result := walk.next() or { break }
 		state := visitor.visit(result)
-		result.free()
 		if state == .quit {
 			break
 		}
@@ -186,12 +185,12 @@ fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.Walk
 	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
 	visitor.searched = true
 	search_result := visitor.searcher.search(&haystack) or {
-		if cli.is_broken_pipe_error(err) {
-			haystack.free_path_cache()
+		if cli.is_broken_pipe_error(&err) {
+			haystack.free_owned()
 			return .quit
 		}
 		core.err_message('${*haystack.path()}: ${err.msg()}')
-		haystack.free_path_cache()
+		haystack.free_owned()
 		return .continue_
 	}
 	visitor.matched = visitor.matched || search_result.has_match()
@@ -204,7 +203,7 @@ fn (mut visitor SearchStreamVisitor) visit(result ignore.WalkResult) ignore.Walk
 	} else {
 		ignore.WalkState.continue_
 	}
-	haystack.free_path_cache()
+	haystack.free_owned()
 	return state
 }
 
@@ -227,7 +226,7 @@ fn search_sorted(args &flags.HiArgs, mode flags.SearchMode) !bool {
 	for haystack in haystacks {
 		searched = true
 		search_result := searcher.search(&haystack) or {
-			if cli.is_broken_pipe_error(err) {
+			if cli.is_broken_pipe_error(&err) {
 				break
 			}
 			core.err_message('${*haystack.path()}: ${err.msg()}')
@@ -353,11 +352,7 @@ mut:
 }
 
 fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
-	mut owned_result := result
-	mut haystack := visitor.haystack_builder.build_from_result(result) or {
-		owned_result.free()
-		return .continue_
-	}
+	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
 	visitor.state.searched.store(true)
 	visitor.worker.printer().get_mut().clear()
 	search_result := visitor.worker.search(&haystack) or {
@@ -377,7 +372,7 @@ fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.Wa
 	visitor.state.output_lock.lock()
 	worker_buffer := visitor.worker.printer().get_mut()
 	visitor.state.bufwtr.print(worker_buffer) or {
-		if cli.is_broken_pipe_error(err) {
+		if cli.is_broken_pipe_error(&err) {
 			visitor.state.output_broken_pipe.store(true)
 		} else {
 			core.err_message('${*haystack.path()}: ${err.msg()}')
@@ -401,7 +396,7 @@ fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.Walk
 	return true
 }
 
-fn parallel_worker_count(thread_setting usize) int {
+fn parallel_worker_count(thread_setting uint) int {
 	mut count := int(thread_setting)
 	if count < 1 {
 		count = 1
@@ -427,7 +422,7 @@ fn files(args &flags.HiArgs) !bool {
 			break
 		}
 		path_printer.write(haystack.path()) or {
-			if cli.is_broken_pipe_error(err) {
+			if cli.is_broken_pipe_error(&err) {
 				break
 			}
 			return err
@@ -476,7 +471,7 @@ fn files_parallel(args &flags.HiArgs) !bool {
 	}
 	producer.wait()
 	if err := output_err {
-		if !cli.is_broken_pipe_error(err) {
+		if !cli.is_broken_pipe_error(&err) {
 			return err
 		}
 	}
@@ -487,6 +482,7 @@ fn files_parallel(args &flags.HiArgs) !bool {
 }
 
 struct FilesParallelResult {
+mut:
 	done     bool
 	matched  bool
 	has_path bool
@@ -509,22 +505,17 @@ fn files_parallel_producer(walk ignore.WalkParallel, haystack_builder core.Hayst
 			event.result.free()
 			continue
 		}
-		mut haystack := haystack_builder.build_from_result(event.result) or {
-			event.result.free()
-			continue
-		}
+		mut haystack := haystack_builder.build_from_result(event.result) or { continue }
 		if quit_after_match {
 			results <- FilesParallelResult{
 				matched: true
 			}
 			stop.store(true)
-			haystack.free_path_cache()
-			event.result.free()
+			haystack.free_owned()
 			continue
 		}
 		path := (*haystack.path()).to_owned()
-		haystack.free_path_cache()
-		event.result.free()
+		haystack.free_owned()
 		results <- FilesParallelResult{
 			matched:  true
 			has_path: true
@@ -546,15 +537,14 @@ fn files_stream(args &flags.HiArgs) !bool {
 	}
 	mut walk := args.walk_builder()!.build()
 	for {
-		mut result := walk.next() or { break }
+		result := walk.next() or { break }
 		state := visitor.visit(result)
-		result.free()
 		if state == .quit {
 			break
 		}
 	}
 	if err := visitor.err {
-		if !cli.is_broken_pipe_error(err) {
+		if !cli.is_broken_pipe_error(&err) {
 			return err
 		}
 	}
@@ -576,7 +566,7 @@ mut:
 fn (mut visitor FilesParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
 	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
 	defer {
-		haystack.free_path_cache()
+		haystack.free_owned()
 	}
 	visitor.matched = true
 	if visitor.args.quit_after_match() {

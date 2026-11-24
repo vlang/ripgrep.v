@@ -246,7 +246,7 @@ pub fn (err GlobError) code() int {
 }
 
 fn new_regex(pat &string) !meta.Regex {
-	return meta.compile_with_limits('(?s)' + *pat, usize(10 * (1 << 20)), usize(10 * (1 << 20))) or {
+	return meta.compile_with_limits('(?s)' + *pat, uint(10 * (1 << 20)), uint(10 * (1 << 20))) or {
 		glob_err := GlobError{
 			glob_: (*pat).to_owned()
 			kind_: ErrorKind.regex(err.msg())
@@ -299,14 +299,14 @@ fn candidate_from_string[^a](path &^a string) Candidate[^a] {
 	}
 }
 
-fn (candidate &Candidate[^a]) path_prefix[^a](max usize) string {
+fn (candidate &Candidate[^a]) path_prefix[^a](max uint) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
 	return unsafe { candidate.path_.substr_unsafe(0, int(max)) }
 }
 
-fn (candidate &Candidate[^a]) path_suffix[^a](max usize) string {
+fn (candidate &Candidate[^a]) path_suffix[^a](max uint) string {
 	if candidate.path_.len <= int(max) {
 		return candidate.path_
 	}
@@ -318,17 +318,17 @@ type GlobSetMatchStrategy = BasenameLiteralStrategy | ExtensionStrategy | Litera
 
 struct LiteralStrategy implements IClone {
 mut:
-	entries map[string][]usize
+	entries map[string][]uint
 }
 
 fn LiteralStrategy.new() LiteralStrategy {
 	return LiteralStrategy{
-		entries: map[string][]usize{}
+		entries: map[string][]uint{}
 	}
 }
 
-fn (mut s LiteralStrategy) add(global_index usize, lit string) {
-	mut hits := s.entries[lit] or { []usize{} }
+fn (mut s LiteralStrategy) add(global_index uint, lit string) {
+	mut hits := s.entries[lit] or { []uint{} }
 	hits << global_index
 	s.entries[lit] = hits
 }
@@ -337,7 +337,7 @@ fn (s &LiteralStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return candidate.path_ in s.entries
 }
 
-fn (s &LiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &LiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	if hits := s.entries[candidate.path_] {
 		matches << hits
 	}
@@ -345,17 +345,17 @@ fn (s &LiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches [
 
 struct BasenameLiteralStrategy implements IClone {
 mut:
-	entries map[string][]usize
+	entries map[string][]uint
 }
 
 fn BasenameLiteralStrategy.new() BasenameLiteralStrategy {
 	return BasenameLiteralStrategy{
-		entries: map[string][]usize{}
+		entries: map[string][]uint{}
 	}
 }
 
-fn (mut s BasenameLiteralStrategy) add(global_index usize, lit string) {
-	mut hits := s.entries[lit] or { []usize{} }
+fn (mut s BasenameLiteralStrategy) add(global_index uint, lit string) {
+	mut hits := s.entries[lit] or { []uint{} }
 	hits << global_index
 	s.entries[lit] = hits
 }
@@ -367,7 +367,7 @@ fn (s &BasenameLiteralStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return candidate.basename_ in s.entries
 }
 
-fn (s &BasenameLiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &BasenameLiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	if candidate.basename_ == '' {
 		return
 	}
@@ -378,17 +378,17 @@ fn (s &BasenameLiteralStrategy) matches_into[^a](candidate &Candidate[^a], mut m
 
 struct ExtensionStrategy implements IClone {
 mut:
-	entries map[string][]usize
+	entries map[string][]uint
 }
 
 fn ExtensionStrategy.new() ExtensionStrategy {
 	return ExtensionStrategy{
-		entries: map[string][]usize{}
+		entries: map[string][]uint{}
 	}
 }
 
-fn (mut s ExtensionStrategy) add(global_index usize, ext string) {
-	mut hits := s.entries[ext] or { []usize{} }
+fn (mut s ExtensionStrategy) add(global_index uint, ext string) {
+	mut hits := s.entries[ext] or { []uint{} }
 	hits << global_index
 	s.entries[ext] = hits
 }
@@ -400,7 +400,7 @@ fn (s &ExtensionStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return candidate.ext_ in s.entries
 }
 
-fn (s &ExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &ExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	if candidate.ext_ == '' {
 		return
 	}
@@ -414,8 +414,8 @@ struct PrefixStrategy implements IClone {
 	// stores its literal patterns directly while preserving overlapping-prefix
 	// match behavior.
 	patterns []string
-	map_     []usize
-	longest  usize
+	map_     []uint
+	longest  uint
 }
 
 fn (s &PrefixStrategy) is_match[^a](candidate &Candidate[^a]) bool {
@@ -429,7 +429,7 @@ fn (s &PrefixStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return false
 }
 
-fn (s &PrefixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &PrefixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	path := candidate.path_prefix(s.longest)
 	for i, pattern in s.patterns {
 		if path.starts_with(pattern) {
@@ -443,8 +443,8 @@ struct SuffixStrategy implements IClone {
 	// stores its literal patterns directly while preserving overlapping-suffix
 	// match behavior.
 	patterns []string
-	map_     []usize
-	longest  usize
+	map_     []uint
+	longest  uint
 }
 
 fn (s &SuffixStrategy) is_match[^a](candidate &Candidate[^a]) bool {
@@ -457,7 +457,7 @@ fn (s &SuffixStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return false
 }
 
-fn (s &SuffixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &SuffixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	path := candidate.path_suffix(s.longest)
 	for i, pattern in s.patterns {
 		if path.ends_with(pattern) {
@@ -467,7 +467,7 @@ fn (s &SuffixStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []
 }
 
 struct RequiredExtensionEntry implements IClone {
-	global_index usize
+	global_index uint
 	matcher      meta.Regex
 }
 
@@ -489,7 +489,7 @@ fn (s &RequiredExtensionStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return false
 }
 
-fn (s &RequiredExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &RequiredExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	if candidate.ext_ == '' {
 		return
 	}
@@ -503,7 +503,7 @@ fn (s &RequiredExtensionStrategy) matches_into[^a](candidate &Candidate[^a], mut
 }
 
 struct RegexSetEntry implements IClone {
-	global_index usize
+	global_index uint
 	matcher      meta.Regex
 }
 
@@ -522,7 +522,7 @@ fn (s &RegexSetStrategy) is_match[^a](candidate &Candidate[^a]) bool {
 	return false
 }
 
-fn (s &RegexSetStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []usize) {
+fn (s &RegexSetStrategy) matches_into[^a](candidate &Candidate[^a], mut matches []uint) {
 	for entry in s.entries {
 		if entry.matcher.find(candidate.path_) != none {
 			matches << entry.global_index
@@ -552,7 +552,7 @@ fn glob_set_strategy_is_match[^a](strat &GlobSetMatchStrategy, candidate &Candid
 	return ((*strat) as RegexSetStrategy).is_match(candidate)
 }
 
-fn glob_set_strategy_matches_into[^a](strat &GlobSetMatchStrategy, candidate &Candidate[^a], mut matches []usize) {
+fn glob_set_strategy_matches_into[^a](strat &GlobSetMatchStrategy, candidate &Candidate[^a], mut matches []uint) {
 	if *strat is LiteralStrategy {
 		((*strat) as LiteralStrategy).matches_into(candidate, mut matches)
 		return
@@ -583,21 +583,21 @@ fn glob_set_strategy_matches_into[^a](strat &GlobSetMatchStrategy, candidate &Ca
 struct MultiStrategyBuilder implements IClone {
 mut:
 	literals []string
-	map_     []usize
-	longest  usize
+	map_     []uint
+	longest  uint
 }
 
 fn MultiStrategyBuilder.new() MultiStrategyBuilder {
 	return MultiStrategyBuilder{
 		literals: []string{}
-		map_:     []usize{}
+		map_:     []uint{}
 		longest:  0
 	}
 }
 
-fn (mut b MultiStrategyBuilder) add(global_index usize, literal string) {
-	if usize(literal.len) > b.longest {
-		b.longest = usize(literal.len)
+fn (mut b MultiStrategyBuilder) add(global_index uint, literal string) {
+	if uint(literal.len) > b.longest {
+		b.longest = uint(literal.len)
 	}
 	b.map_ << global_index
 	b.literals << literal
@@ -637,7 +637,7 @@ fn (b &MultiStrategyBuilder) is_empty() bool {
 }
 
 struct RequiredExtensionBuilderEntry implements IClone {
-	global_index usize
+	global_index uint
 	regex        string
 }
 
@@ -652,7 +652,7 @@ fn RequiredExtensionStrategyBuilder.new() RequiredExtensionStrategyBuilder {
 	}
 }
 
-fn (mut b RequiredExtensionStrategyBuilder) add(global_index usize, ext string, regex string) {
+fn (mut b RequiredExtensionStrategyBuilder) add(global_index uint, ext string, regex string) {
 	mut items := b.entries[ext] or { []RequiredExtensionBuilderEntry{} }
 	items << RequiredExtensionBuilderEntry{
 		global_index: global_index
@@ -682,7 +682,7 @@ fn (b RequiredExtensionStrategyBuilder) build() !RequiredExtensionStrategy {
 /// single pass.
 pub struct GlobSet implements IClone {
 	mut:
-	len_   usize
+	len_   uint
 	strats []GlobSetMatchStrategy
 }
 
@@ -743,7 +743,7 @@ pub fn (gs &GlobSet) is_empty() bool {
 }
 
 /// Returns the number of globs in this set.
-pub fn (gs &GlobSet) len() usize {
+pub fn (gs &GlobSet) len() uint {
 	return gs.len_
 }
 
@@ -818,7 +818,7 @@ pub fn (gs &GlobSet) matches_all_candidate[^a](path &Candidate[^a]) bool {
 
 /// Returns the sequence number of every glob pattern that matches the
 /// given path.
-pub fn (gs &GlobSet) matches(path string) []usize {
+pub fn (gs &GlobSet) matches(path string) []uint {
 	candidate := Candidate.new(&path)
 	return gs.matches_candidate(&candidate)
 }
@@ -828,8 +828,8 @@ pub fn (gs &GlobSet) matches(path string) []usize {
 ///
 /// This takes a Candidate as input, which can be used to amortize the
 /// cost of preparing a path for matching.
-pub fn (gs &GlobSet) matches_candidate[^a](path &Candidate[^a]) []usize {
-	mut into := []usize{}
+pub fn (gs &GlobSet) matches_candidate[^a](path &Candidate[^a]) []uint {
+	mut into := []uint{}
 	if gs.is_empty() {
 		return into
 	}
@@ -843,7 +843,7 @@ pub fn (gs &GlobSet) matches_candidate[^a](path &Candidate[^a]) []usize {
 /// `into` is cleared before matching begins, and contains the set of
 /// sequence numbers (in ascending order) after matching ends. If no globs
 /// were matched, then `into` will be empty.
-pub fn (gs &GlobSet) matches_into(path string, mut into []usize) {
+pub fn (gs &GlobSet) matches_into(path string, mut into []uint) {
 	candidate := Candidate.new(&path)
 	gs.matches_candidate_into(&candidate, mut into)
 }
@@ -857,7 +857,7 @@ pub fn (gs &GlobSet) matches_into(path string, mut into []usize) {
 ///
 /// This takes a Candidate as input, which can be used to amortize the
 /// cost of preparing a path for matching.
-pub fn (gs &GlobSet) matches_candidate_into[^a](path &Candidate[^a], mut into []usize) {
+pub fn (gs &GlobSet) matches_candidate_into[^a](path &Candidate[^a], mut into []uint) {
 	into.clear()
 	if gs.is_empty() {
 		return
@@ -887,28 +887,28 @@ pub fn GlobSet.new(globs &[]Glob) !GlobSet {
 		strategy := match_strategy_new(glob)
 		match strategy.kind {
 			.literal {
-				lits.add(usize(i), strategy.value)
+				lits.add(uint(i), strategy.value)
 			}
 			.basename_literal {
-				base_lits.add(usize(i), strategy.value)
+				base_lits.add(uint(i), strategy.value)
 			}
 			.extension {
-				exts.add(usize(i), strategy.value)
+				exts.add(uint(i), strategy.value)
 			}
 			.prefix {
-				prefixes.add(usize(i), strategy.value)
+				prefixes.add(uint(i), strategy.value)
 			}
 			.suffix {
 				if strategy.component {
-					lits.add(usize(i), strategy.value[1..].to_owned())
+					lits.add(uint(i), strategy.value[1..].to_owned())
 				}
-				suffixes.add(usize(i), strategy.value)
+				suffixes.add(uint(i), strategy.value)
 			}
 			.required_extension {
-				required_exts.add(usize(i), strategy.value, glob.regex().to_owned())
+				required_exts.add(uint(i), strategy.value, glob.regex().to_owned())
 			}
 			.regex {
-				regexes.add(usize(i), glob.regex().to_owned())
+				regexes.add(uint(i), glob.regex().to_owned())
 			}
 		}
 	}
@@ -935,7 +935,7 @@ pub fn GlobSet.new(globs &[]Glob) !GlobSet {
 		strats << regexes.regex_set()!
 	}
 	return GlobSet{
-		len_:   usize(globs.len)
+		len_:   uint(globs.len)
 		strats: strats
 	}
 }
@@ -1008,7 +1008,7 @@ pub fn escape(s string) string {
 	return escaped
 }
 
-fn dedup_usize(mut xs []usize) {
+fn dedup_usize(mut xs []uint) {
 	if xs.len <= 1 {
 		return
 	}

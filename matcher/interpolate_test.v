@@ -2,14 +2,14 @@ module matcher
 
 struct NameIndex {
 	name  string
-	index usize
+	index uint
 }
 
 fn assert_find_cap_ref_none(text string) {
 	assert find_cap_ref(text.bytes()) == none
 }
 
-fn assert_find_cap_ref_named(text string, name string, end usize) {
+fn assert_find_cap_ref_named(text string, name string, end uint) {
 	cap_ref := find_cap_ref(text.bytes()) or {
 		assert false
 		return
@@ -17,7 +17,7 @@ fn assert_find_cap_ref_named(text string, name string, end usize) {
 	assert cap_ref == CaptureRef.named(name, end)
 }
 
-fn assert_find_cap_ref_numbered(text string, number usize, end usize) {
+fn assert_find_cap_ref_numbered(text string, number uint, end uint) {
 	cap_ref := find_cap_ref(text.bytes()) or {
 		assert false
 		return
@@ -81,11 +81,11 @@ fn test_find_cap_ref13() {
 fn interpolate_string(mut name_to_index []NameIndex, caps []string, replacement string) string {
 	sort_name_indices(mut name_to_index)
 	mut dst := []u8{}
-	interpolate(replacement.bytes(), fn [caps] (i usize, mut dst []u8) {
+	interpolate(replacement.bytes(), fn [caps] (i uint, mut dst []u8) {
 		if i < caps.len {
 			dst << caps[i].bytes()
 		}
-	}, fn [name_to_index] (name string) ?usize {
+	}, fn [name_to_index] (name string) ?uint {
 		return binary_search_name_index(name_to_index, name)
 	}, mut dst)
 	return dst.bytestr()
@@ -101,7 +101,7 @@ fn sort_name_indices(mut items []NameIndex) {
 	}
 }
 
-fn binary_search_name_index(items []NameIndex, name string) ?usize {
+fn binary_search_name_index(items []NameIndex, name string) ?uint {
 	mut lo := 0
 	mut hi := items.len
 	for lo < hi {

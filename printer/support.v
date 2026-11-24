@@ -6,7 +6,7 @@ import regex
 import searcher
 import time
 
-fn match_new(start usize, end usize) matcher.Match {
+fn match_new(start uint, end uint) matcher.Match {
 	return matcher.Match.new(start, end)
 }
 
@@ -59,14 +59,14 @@ fn (mut pm PrinterMatcher) drop() {
 	}
 }
 
-fn (pm &PrinterMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
+fn (pm &PrinterMatcher) find_at(haystack &[]u8, at uint) !matcher.FallibleMatch {
 	return match pm.kind {
 		.rust_regex { pm.regex.find_at(haystack, at)! }
 		.pcre2 { pm.pcre2.find_at(haystack, at)! }
 	}
 }
 
-fn (pm &PrinterMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
+fn (pm &PrinterMatcher) shortest_match_at(haystack &[]u8, at uint) !matcher.FallibleUsize {
 	return match pm.kind {
 		.rust_regex { pm.regex.shortest_match_at(haystack, at)! }
 		.pcre2 { pm.pcre2.shortest_match_at(haystack, at)! }
@@ -80,26 +80,26 @@ fn (pm &PrinterMatcher) new_captures() !matcher.NoCaptures {
 	return matcher.NoCaptures.new()
 }
 
-fn (pm &PrinterMatcher) capture_count() usize {
+fn (pm &PrinterMatcher) capture_count() uint {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_count() }
 		.pcre2 { pm.pcre2.capture_count() }
 	}
 }
 
-fn (pm &PrinterMatcher) capture_index(name string) ?usize {
+fn (pm &PrinterMatcher) capture_index(name string) ?uint {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_index(name) }
 		.pcre2 { pm.pcre2.capture_index(name) }
 	}
 }
 
-fn (pm &PrinterMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (pm &PrinterMatcher) captures_at(haystack &[]u8, at uint, mut caps matcher.NoCaptures) !bool {
 	_ = pm
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
 
-fn (pm &PrinterMatcher) capture_groups_at(haystack &[]u8, at usize) !(matcher.FallibleMatch, []string) {
+fn (pm &PrinterMatcher) capture_groups_at(haystack &[]u8, at uint) !(matcher.FallibleMatch, []string) {
 	return match pm.kind {
 		.rust_regex { pm.regex.capture_groups_at(haystack, at)! }
 		.pcre2 { pm.pcre2.capture_groups_at(haystack, at)! }
@@ -210,7 +210,9 @@ pub fn (pp PrinterPath[^a]) with_separator[^a](sep ?u8) PrinterPath[^a] {
 
 /// Return the raw bytes for this path.
 pub fn (pp &PrinterPath[^a]) as_bytes[^a]() []u8 {
-	return pp.bytes
+	// V-specific: these getters return a Rust borrow (`&[u8]`, `&[Match]`) as an
+	// explicit view of the field rather than an ownership copy.
+	return unsafe { pp.bytes }
 }
 
 /// Return this path as a hyperlink.
@@ -276,7 +278,7 @@ fn (d NiceDuration) fractional_seconds() f64 {
 /// to be satisfied with and with pure safe code.
 pub struct DecimalFormatter {
 	buf   [decimal_formatter_max_u64_len]u8
-	start usize
+	start uint
 }
 
 /// Discovered via `u64::MAX.to_string().len()`.
@@ -313,7 +315,7 @@ pub fn (fmt &DecimalFormatter) as_bytes() []u8 {
 /// This stops trimming a prefix as soon as it sees non-whitespace or a line
 /// terminator.
 pub fn trim_ascii_prefix(line_term matcher.LineTerminator, slice []u8, range matcher.Match) matcher.Match {
-	mut count := usize(0)
+	mut count := uint(0)
 	for b in slice[range.start()..range.end()] {
 		if !(b == `\t` || b == `\n` || b == 0x0b || b == 0x0c || b == `\r` || b == ` `) {
 			break
@@ -385,18 +387,18 @@ fn ReplacementCaptures.new(mat matcher.Match, groups []string) ReplacementCaptur
 	}
 }
 
-fn (caps &ReplacementCaptures) len() usize {
-	return if caps.has_overall { usize(caps.groups.len + 1) } else { usize(0) }
+fn (caps &ReplacementCaptures) len() uint {
+	return if caps.has_overall { uint(caps.groups.len + 1) } else { uint(0) }
 }
 
-fn (caps &ReplacementCaptures) get(i usize) ?matcher.Match {
+fn (caps &ReplacementCaptures) get(i uint) ?matcher.Match {
 	if i == 0 && caps.has_overall {
 		return caps.overall
 	}
 	return none
 }
 
-fn (caps &ReplacementCaptures) append(i usize, haystack []u8, mut dst []u8) {
+fn (caps &ReplacementCaptures) append(i uint, haystack &[]u8, mut dst []u8) {
 	if i == 0 {
 		if overall := caps.get(0) {
 			append_match_bytes(mut dst, haystack, overall)
@@ -404,22 +406,22 @@ fn (caps &ReplacementCaptures) append(i usize, haystack []u8, mut dst []u8) {
 		return
 	}
 	group_index := i - 1
-	if group_index >= usize(caps.groups.len) {
+	if group_index >= uint(caps.groups.len) {
 		return
 	}
 	group := caps.groups[group_index]
-	for i := 0; i < group.len; i++ {
-		dst << group[i]
+	for j := 0; j < group.len; j++ {
+		dst << group[j]
 	}
 }
 
-fn append_bytes(mut dst []u8, bytes []u8) {
-	for byte in bytes {
+fn append_bytes(mut dst []u8, bytes &[]u8) {
+	for byte in *bytes {
 		dst << byte
 	}
 }
 
-fn append_match_bytes(mut dst []u8, haystack []u8, mat matcher.Match) {
+fn append_match_bytes(mut dst []u8, haystack &[]u8, mat matcher.Match) {
 	for i := mat.start(); i < mat.end(); i++ {
 		dst << haystack[i]
 	}
@@ -593,17 +595,17 @@ pub fn (sunk &^a Sunk[^a]) context_kind[^a]() ?&^a searcher.SinkContextKind {
 
 @[inline]
 pub fn (sunk &Sunk[^a]) bytes[^a]() []u8 {
-	return sunk.bytes_
+	return unsafe { sunk.bytes_ }
 }
 
 @[inline]
 pub fn (sunk &Sunk[^a]) matches[^a]() []matcher.Match {
-	return sunk.matches_
+	return unsafe { sunk.matches_ }
 }
 
 @[inline]
 pub fn (sunk &Sunk[^a]) original_matches[^a]() []matcher.Match {
-	return sunk.original_matches_
+	return unsafe { sunk.original_matches_ }
 }
 
 @[inline]
@@ -650,20 +652,17 @@ fn trim_line_terminator[^b](searcher_ &searcher.Searcher, buf &^b []u8, mut line
 /// Like `Matcher::replace_with_captures_at`, but accepts an end bound.
 ///
 /// See also: `find_iter_at_in_context` for why we need this.
-fn replace_with_captures_in_context(matcher_ &PrinterMatcher, bytes []u8, line_terminator []u8, range matcher.Match, replacement []u8, mut dst []u8, mut matches []matcher.Match) ! {
+fn replace_with_captures_in_context(matcher_ &PrinterMatcher, bytes &[]u8, line_terminator &[]u8, range matcher.Match, replacement &[]u8, mut dst []u8, mut matches []matcher.Match) ! {
 	mut last_match := range.start()
 	mut search_start := range.start()
 	mut has_last_match := false
-	mut last_match_end := usize(0)
+	mut last_match_end := uint(0)
 	for {
 		if search_start > bytes.len {
 			break
 		}
 		maybe_mat, groups := matcher_.capture_groups_at(bytes, search_start)!
-		if !maybe_mat.has_value {
-			break
-		}
-		mat := maybe_mat.value
+		mat := maybe_mat.get() or { break }
 		if mat.start() >= range.end() {
 			break
 		}
@@ -680,13 +679,13 @@ fn replace_with_captures_in_context(matcher_ &PrinterMatcher, bytes []u8, line_t
 		append_bytes(mut dst, bytes[last_match..mat.start()])
 		start := dst.len
 		caps := ReplacementCaptures.new(mat, groups)
-		matcher.interpolate(replacement, fn [caps, bytes] (i usize, mut output []u8) {
+		matcher.interpolate(replacement, fn [caps, bytes] (i uint, mut output []u8) {
 			caps.append(i, bytes, mut output)
-		}, fn [matcher_] (name string) ?usize {
+		}, fn [matcher_] (name string) ?uint {
 			return matcher_.capture_index(name)
 		}, mut dst)
 		end := dst.len
-		matches << match_new(start, end)
+		matches << match_new(uint(start), uint(end))
 		last_match = mat.end()
 		search_start = next_start
 		has_last_match = true

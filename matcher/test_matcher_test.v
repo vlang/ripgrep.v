@@ -60,7 +60,7 @@ fn make_test_matcher_no_caps(pattern string) TestMatcherNoCaps {
 	}
 }
 
-fn tm(start usize, end usize) Match {
+fn tm(start uint, end uint) Match {
 	return Match.new(start, end)
 }
 
@@ -100,28 +100,28 @@ fn is_space_byte(byte u8) bool {
 		|| byte == ` `
 }
 
-fn word_pair_at(haystack &[]u8, start usize) ?WordPairMatch {
+fn word_pair_at(haystack &[]u8, start uint) ?WordPairMatch {
 	mut i := start
-	if i >= usize(haystack.len) || !is_word_byte(haystack[i]) {
+	if i >= uint(haystack.len) || !is_word_byte(haystack[i]) {
 		return none
 	}
 	first_start := i
-	for i < usize(haystack.len) && is_word_byte(haystack[i]) {
+	for i < uint(haystack.len) && is_word_byte(haystack[i]) {
 		i++
 	}
 	first_end := i
 	space_start := i
-	for i < usize(haystack.len) && is_space_byte(haystack[i]) {
+	for i < uint(haystack.len) && is_space_byte(haystack[i]) {
 		i++
 	}
 	if i == space_start {
 		return none
 	}
 	second_start := i
-	if i >= usize(haystack.len) || !is_word_byte(haystack[i]) {
+	if i >= uint(haystack.len) || !is_word_byte(haystack[i]) {
 		return none
 	}
-	for i < usize(haystack.len) && is_word_byte(haystack[i]) {
+	for i < uint(haystack.len) && is_word_byte(haystack[i]) {
 		i++
 	}
 	return WordPairMatch{
@@ -131,9 +131,9 @@ fn word_pair_at(haystack &[]u8, start usize) ?WordPairMatch {
 	}
 }
 
-fn find_word_pair(haystack &[]u8, at usize) ?WordPairMatch {
+fn find_word_pair(haystack &[]u8, at uint) ?WordPairMatch {
 	mut start := at
-	for start < usize(haystack.len) {
+	for start < uint(haystack.len) {
 		if mat := word_pair_at(haystack, start) {
 			return mat
 		}
@@ -142,22 +142,22 @@ fn find_word_pair(haystack &[]u8, at usize) ?WordPairMatch {
 	return none
 }
 
-fn find_a_plus(haystack &[]u8, at usize) ?Match {
+fn find_a_plus(haystack &[]u8, at uint) ?Match {
 	mut start := at
-	for start < usize(haystack.len) && haystack[start] != `a` {
+	for start < uint(haystack.len) && haystack[start] != `a` {
 		start++
 	}
-	if start >= usize(haystack.len) {
+	if start >= uint(haystack.len) {
 		return none
 	}
 	mut end := start
-	for end < usize(haystack.len) && haystack[end] == `a` {
+	for end < uint(haystack.len) && haystack[end] == `a` {
 		end++
 	}
 	return tm(start, end)
 }
 
-fn (m TestMatcher) find_at(haystack &[]u8, at usize) !FallibleMatch {
+fn (m TestMatcher) find_at(haystack &[]u8, at uint) !FallibleMatch {
 	match m.pattern {
 		.word_pair {
 			mat := find_word_pair(haystack, at) or { return FallibleMatch.absent() }
@@ -178,7 +178,7 @@ fn (m TestMatcher) new_captures() !TestCaptures {
 	}
 }
 
-fn (m TestMatcher) captures_at(haystack &[]u8, at usize, mut caps TestCaptures) !bool {
+fn (m TestMatcher) captures_at(haystack &[]u8, at uint, mut caps TestCaptures) !bool {
 	_ = m
 	mat := find_word_pair(haystack, at) or { return false }
 	caps.matches[0] = mat.overall
@@ -190,25 +190,25 @@ fn (m TestMatcher) captures_at(haystack &[]u8, at usize, mut caps TestCaptures) 
 	return true
 }
 
-fn (m TestMatcher) capture_count() usize {
+fn (m TestMatcher) capture_count() uint {
 	return match m.pattern {
-		.word_pair { usize(3) }
-		.a_plus { usize(0) }
+		.word_pair { uint(3) }
+		.a_plus { uint(0) }
 	}
 }
 
-fn (m TestMatcher) capture_index(name string) ?usize {
+fn (m TestMatcher) capture_index(name string) ?uint {
 	if !m.named {
 		return none
 	}
 	return match name {
-		'a' { usize(1) }
-		'b' { usize(2) }
+		'a' { uint(1) }
+		'b' { uint(2) }
 		else { none }
 	}
 }
 
-fn (m TestMatcherNoCaps) find_at(haystack &[]u8, at usize) !FallibleMatch {
+fn (m TestMatcherNoCaps) find_at(haystack &[]u8, at uint) !FallibleMatch {
 	return m.inner.find_at(haystack, at)
 }
 
@@ -217,27 +217,27 @@ fn (m TestMatcherNoCaps) new_captures() !NoCaptures {
 	return NoCaptures.new()
 }
 
-fn (m TestMatcherNoCaps) captures_at(haystack &[]u8, at usize, mut caps NoCaptures) !bool {
+fn (m TestMatcherNoCaps) captures_at(haystack &[]u8, at uint, mut caps NoCaptures) !bool {
 	_ = m
 	return default_captures_at(haystack, at, mut caps)
 }
 
-fn (m TestMatcherNoCaps) capture_count() usize {
+fn (m TestMatcherNoCaps) capture_count() uint {
 	_ = m
 	return default_capture_count()
 }
 
-fn (m TestMatcherNoCaps) capture_index(name string) ?usize {
+fn (m TestMatcherNoCaps) capture_index(name string) ?uint {
 	_ = m
 	return default_capture_index(name)
 }
 
-fn (caps &TestCaptures) len() usize {
-	return usize(caps.matches.len)
+fn (caps &TestCaptures) len() uint {
+	return uint(caps.matches.len)
 }
 
-fn (caps &TestCaptures) get(i usize) ?Match {
-	if i >= usize(caps.matches.len) || !caps.present[i] {
+fn (caps &TestCaptures) get(i uint) ?Match {
+	if i >= uint(caps.matches.len) || !caps.present[i] {
 		return none
 	}
 	return caps.matches[i]
@@ -294,14 +294,14 @@ fn test_shortest_match() {
 	// defers to `find`.
 	found := shortest_match(matcher_, 'aaa'.bytes())!
 	end := found.get() or { panic('missing shortest match') }
-	assert end == usize(3)
+	assert end == uint(3)
 }
 
 fn test_captures() {
 	matcher_ := make_test_matcher(r'(?P<a>\w+)\s+(?P<b>\w+)')
 	assert matcher_.capture_count() == 3
-	assert matcher_.capture_index('a') == ?usize(1)
-	assert matcher_.capture_index('b') == ?usize(2)
+	assert matcher_.capture_index('a') == ?uint(1)
+	assert matcher_.capture_index('b') == ?uint(2)
 	assert matcher_.capture_index('nada') == none
 
 	mut caps := matcher_.new_captures()!
@@ -422,12 +422,12 @@ fn test_replace_with_captures() {
 	mut caps := matcher_.new_captures()!
 	mut dst := []u8{}
 	replace_with_captures(matcher_, haystack, mut caps, mut dst, fn [matcher_, haystack_ptr] (caps &TestCaptures, mut dst []u8) bool {
-		interpolate('$2 $1'.bytes(), fn [caps, haystack_ptr] (i usize, mut dst []u8) {
+		interpolate('$2 $1'.bytes(), fn [caps, haystack_ptr] (i uint, mut dst []u8) {
 			cap_match := caps.get(i) or { return }
 			unsafe {
 				append_slice(mut dst, (*haystack_ptr)[cap_match.start()..cap_match.end()])
 			}
-		}, fn [matcher_] (name string) ?usize {
+		}, fn [matcher_] (name string) ?uint {
 			return matcher_.capture_index(name)
 		}, mut dst)
 		return true
@@ -437,12 +437,12 @@ fn test_replace_with_captures() {
 	// Test that replacements respect short circuiting.
 	dst.clear()
 	replace_with_captures(matcher_, haystack, mut caps, mut dst, fn [matcher_, haystack_ptr] (caps &TestCaptures, mut dst []u8) bool {
-		interpolate('$2 $1'.bytes(), fn [caps, haystack_ptr] (i usize, mut dst []u8) {
+		interpolate('$2 $1'.bytes(), fn [caps, haystack_ptr] (i uint, mut dst []u8) {
 			cap_match := caps.get(i) or { return }
 			unsafe {
 				append_slice(mut dst, (*haystack_ptr)[cap_match.start()..cap_match.end()])
 			}
-		}, fn [matcher_] (name string) ?usize {
+		}, fn [matcher_] (name string) ?uint {
 			return matcher_.capture_index(name)
 		}, mut dst)
 		return false

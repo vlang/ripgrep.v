@@ -63,7 +63,7 @@ fn write_stderr_line(msg string) {
 fn write_stderr_all(buf []u8) {
 	mut written_total := 0
 	for written_total < buf.len {
-		ptr := unsafe { voidptr(usize(buf.data) + usize(written_total)) }
+		ptr := unsafe { voidptr(uint(buf.data) + uint(written_total)) }
 		C.errno = 0
 		written := $if windows {
 			int(C._write(2, ptr, buf.len - written_total))

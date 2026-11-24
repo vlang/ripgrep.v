@@ -33,4 +33,4 @@ and/or printing file paths that either contain or don't contain matches.
 // match without searching the entire rest of the contents.
 //
 // Note that this kludge is only active in multi-line mode.
-pub const max_look_ahead = usize(128)
+pub const max_look_ahead = uint(128)

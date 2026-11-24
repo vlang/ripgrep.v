@@ -10,7 +10,7 @@ module matcher
 /// of a capture group reference and is expected to resolve the index to its
 /// corresponding matched text. If no such match exists, then `append` should
 /// not write anything to its given buffer.
-pub fn interpolate(replacement []u8, append fn (usize, mut []u8), name_to_index fn (string) ?usize, mut dst []u8) {
+pub fn interpolate(replacement []u8, append fn (uint, mut []u8), name_to_index fn (string) ?uint, mut dst []u8) {
 	mut replacement_bytes := replacement.clone()
 	for replacement_bytes.len > 0 {
 		index := find_byte(&replacement_bytes, `$`) or { break }
@@ -49,8 +49,8 @@ pub fn interpolate(replacement []u8, append fn (usize, mut []u8), name_to_index 
 struct CaptureRef {
 	kind   CaptureRefKind
 	name   string
-	number usize
-	end    usize
+	number uint
+	end    uint
 }
 
 /// A reference to a capture group in some text.
@@ -61,7 +61,7 @@ enum CaptureRefKind {
 	number
 }
 
-fn CaptureRef.named(name string, end usize) CaptureRef {
+fn CaptureRef.named(name string, end uint) CaptureRef {
 	return CaptureRef{
 		kind: .named
 		name: name.clone()
@@ -69,7 +69,7 @@ fn CaptureRef.named(name string, end usize) CaptureRef {
 	}
 }
 
-fn CaptureRef.numbered(number usize, end usize) CaptureRef {
+fn CaptureRef.numbered(number uint, end uint) CaptureRef {
 	return CaptureRef{
 		kind:   .number
 		number: number
@@ -81,8 +81,8 @@ fn CaptureRef.numbered(number usize, end usize) CaptureRef {
 /// starting at the beginning of `replacement`.
 ///
 /// If no such valid reference could be found, none is returned.
-fn find_cap_ref(replacement []u8) ?CaptureRef {
-	mut i := usize(0)
+fn find_cap_ref(replacement &[]u8) ?CaptureRef {
+	mut i := uint(0)
 	if replacement.len <= 1 || replacement[0] != `$` {
 		return none
 	}
@@ -120,16 +120,16 @@ fn is_valid_cap_letter(byte u8) bool {
 	}
 }
 
-fn find_byte(bytes &[]u8, needle u8) ?usize {
+fn find_byte(bytes &[]u8, needle u8) ?uint {
 	for i in 0 .. bytes.len {
 		if bytes[i] == needle {
-			return usize(i)
+			return uint(i)
 		}
 	}
 	return none
 }
 
-fn parse_capture_number(cap string) ?usize {
+fn parse_capture_number(cap string) ?uint {
 	if cap.len == 0 {
 		return none
 	}
@@ -146,5 +146,5 @@ fn parse_capture_number(cap string) ?usize {
 			return none
 		}
 	}
-	return usize(number)
+	return uint(number)
 }

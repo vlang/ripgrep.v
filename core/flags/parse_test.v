@@ -165,5 +165,5 @@ fn test_parse_from_raw_reads_file_patterns() {
 }
 
 fn test_parse_usize_accepts_platform_maximum() {
-	assert parse_usize('18446744073709551615')! == ~usize(0)
+	assert parse_usize('18446744073709551615')! == ~uint(0)
 }

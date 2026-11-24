@@ -27,12 +27,12 @@ $if !windows {
 	#flag freebsd -L/usr/local/lib -liconv
 	#flag openbsd -L/usr/local/lib -liconv
 	#flag termux -L/data/data/com.termux/files/usr/lib -liconv
-	fn C.mmap(addr voidptr, len usize, prot i32, flags i32, fd i32, offset i64) voidptr
-	fn C.munmap(addr voidptr, len usize) i32
-	fn C.rg_pread(fd i32, buf voidptr, count usize, offset i64) isize
+	fn C.mmap(addr voidptr, len uint, prot i32, flags i32, fd i32, offset i64) voidptr
+	fn C.munmap(addr voidptr, len uint) i32
+	fn C.rg_pread(fd i32, buf voidptr, count uint, offset i64) C.ptrdiff_t
 	fn C.iconv_open(tocode charptr, fromcode charptr) voidptr
 	fn C.iconv_close(cd voidptr) i32
-	fn C.iconv(cd voidptr, inbuf &charptr, inbytesleft &usize, outbuf &charptr, outbytesleft &usize) usize
+	fn C.iconv(cd voidptr, inbuf &charptr, inbytesleft &uint, outbuf &charptr, outbytesleft &uint) uint
 	fn C.rg_iconv_error_illegal_sequence() int
 	fn C.rg_iconv_error_incomplete_sequence() int
 	fn C.rg_iconv_error_output_full() int
@@ -43,7 +43,7 @@ $if windows {
 	#include <io.h>
 	fn C._get_osfhandle(fd int) voidptr
 	fn C.CreateFileMappingW(file voidptr, attributes voidptr, protect u32, size_high u32, size_low u32, name voidptr) voidptr
-	fn C.MapViewOfFile(mapping voidptr, access u32, offset_high u32, offset_low u32, bytes usize) voidptr
+	fn C.MapViewOfFile(mapping voidptr, access u32, offset_high u32, offset_low u32, bytes uint) voidptr
 	fn C.UnmapViewOfFile(address voidptr) bool
 	fn C.CloseHandle(handle voidptr) bool
 }
@@ -55,8 +55,8 @@ interface IClone {}
 /// from satisfying the broader V interface even though this code never uses
 /// those capture operations.
 pub interface SearchMatcher {
-	find_at(haystack &[]u8, at usize) !matcher.FallibleMatch
-	shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize
+	find_at(haystack &[]u8, at uint) !matcher.FallibleMatch
+	shortest_match_at(haystack &[]u8, at uint) !matcher.FallibleUsize
 	non_matching_bytes[^a]() ?&^a matcher.ByteSet
 	line_terminator() ?matcher.LineTerminator
 	find_candidate_line(haystack &[]u8) !matcher.FallibleLineMatchKind
@@ -254,7 +254,7 @@ fn (choice MmapChoice) is_enabled() bool {
 
 struct Mmap {
 	data &u8 = unsafe { nil }
-	len  usize
+	len  uint
 }
 
 fn (m Mmap) bytes() []u8 {
@@ -361,9 +361,9 @@ fn log_mmap_error(path string, has_path bool, message string) {
 	}
 }
 
-fn mmap_file_size(mut file os.File, path string, has_path bool) ?usize {
+fn mmap_file_size(mut file os.File, path string, has_path bool) ?uint {
 	if has_path {
-		return usize(os.file_size(path))
+		return uint(os.file_size(path))
 	}
 	pos := file.tell() or { return none }
 	file.seek(0, .end) or {
@@ -376,9 +376,9 @@ fn mmap_file_size(mut file os.File, path string, has_path bool) ?usize {
 	}
 	file.seek(pos, .start) or { return none }
 	if end <= 0 {
-		return usize(0)
+		return uint(0)
 	}
-	return usize(end)
+	return uint(end)
 }
 
 /// An encoding to use when searching.
@@ -421,6 +421,11 @@ pub fn Encoding.new(label &string) !Encoding {
 		kind:       kind
 		iconv_name: iconv_name.to_owned()
 	}
+}
+
+// V-specific: Return the canonical encoding label stored by the V representation.
+pub fn (encoding &^a Encoding) canonical_label[^a]() &^a string {
+	return &encoding.label
 }
 
 fn normalize_encoding_label(label &string) string {
@@ -586,9 +591,9 @@ mut:
 	/// Whether to invert matching.
 	invert_match bool
 	/// The number of lines after a match to include.
-	after_context usize
+	after_context uint
 	/// The number of lines before a match to include.
-	before_context usize
+	before_context uint
 	/// Whether to enable unbounded context or not.
 	passthru bool
 	/// Whether to count line numbers.
@@ -597,7 +602,7 @@ mut:
 	///
 	/// When not given, no explicit limit is enforced. When set to `0`, then
 	/// only the memory map search strategy is available.
-	heap_limit ?usize
+	heap_limit ?uint
 	/// The memory map strategy.
 	mmap MmapChoice
 	/// The binary data detection strategy.
@@ -701,7 +706,7 @@ pub fn (err ConfigError) code() int {
 /// context.
 ///
 /// If this returns `0`, then no context is ever needed.
-fn (config &Config) max_context() usize {
+fn (config &Config) max_context() uint {
 	return if config.before_context > config.after_context {
 		config.before_context
 	} else {
@@ -715,16 +720,16 @@ fn (config &Config) line_buffer() LineBuffer {
 	builder.line_terminator(config.line_term.as_byte())
 	builder.binary_detection(config.binary)
 	if limit := config.heap_limit {
-		if limit <= usize(default_buffer_capacity) {
+		if limit <= uint(default_buffer_capacity) {
 			builder.capacity(limit)
 			builder.buffer_alloc(BufferAllocation{
 				kind: .error
 			})
 		} else {
-			builder.capacity(usize(default_buffer_capacity))
+			builder.capacity(uint(default_buffer_capacity))
 			builder.buffer_alloc(BufferAllocation{
 				kind:       .error
-				additional: limit - usize(default_buffer_capacity)
+				additional: limit - uint(default_buffer_capacity)
 			})
 		}
 	}
@@ -823,7 +828,7 @@ pub fn (mut builder SearcherBuilder) multi_line(yes bool) &SearcherBuilder {
 /// `line_count` contextual lines after every match.
 ///
 /// This is set to `0` by default.
-pub fn (mut builder SearcherBuilder) after_context(line_count usize) &SearcherBuilder {
+pub fn (mut builder SearcherBuilder) after_context(line_count uint) &SearcherBuilder {
 	builder.config.after_context = line_count
 	return builder
 }
@@ -834,7 +839,7 @@ pub fn (mut builder SearcherBuilder) after_context(line_count usize) &SearcherBu
 /// `line_count` contextual lines before every match.
 ///
 /// This is set to `0` by default.
-pub fn (mut builder SearcherBuilder) before_context(line_count usize) &SearcherBuilder {
+pub fn (mut builder SearcherBuilder) before_context(line_count uint) &SearcherBuilder {
 	builder.config.before_context = line_count
 	return builder
 }
@@ -874,7 +879,7 @@ pub fn (mut builder SearcherBuilder) passthru(yes bool) &SearcherBuilder {
 /// immediately.
 ///
 /// By default, no limit is set.
-pub fn (mut builder SearcherBuilder) heap_limit(bytes ?usize) &SearcherBuilder {
+pub fn (mut builder SearcherBuilder) heap_limit(bytes ?uint) &SearcherBuilder {
 	builder.config.heap_limit = bytes
 	return builder
 }
@@ -1233,11 +1238,11 @@ fn file_has_bom_at(mut file os.File, pos i64) bool {
 	} $else {
 		mut prefix := []u8{len: 3}
 		defer { unsafe { prefix.free() } }
-		nread := C.rg_pread(file.fd, prefix.data, usize(prefix.len), pos)
+		nread := int(C.rg_pread(file.fd, prefix.data, uint(prefix.len), pos))
 		if nread <= 0 {
 			return false
 		}
-		return slice_has_bom(prefix[..int(nread)])
+		return slice_has_bom(prefix[..nread])
 	}
 }
 
@@ -1633,7 +1638,7 @@ fn IconvStream.new(label string) !IconvStream {
 		mut src_encoding := normalize_iconv_encoding(label)
 		dst_encoding := 'UTF-8'
 		cd := C.iconv_open(charptr(dst_encoding.str), charptr(src_encoding.str))
-		if isize(cd) == -1 {
+		if cd == voidptr(-1) {
 			return error('platform can\'t convert from ${src_encoding} to ${dst_encoding}')
 		}
 		return IconvStream{
@@ -1696,18 +1701,18 @@ fn (mut stream IconvStream) convert(input []u8, final bool) !IconvConvertResult 
 			out_len = 64
 		}
 		mut out := []u8{len: out_len}
-		mut src_ptr := charptr(input.data)
-		mut src_left := usize(input.len)
+		mut src_ptr := unsafe { charptr(input.data) }
+		mut src_left := uint(input.len)
 		mut written_total := 0
 		for {
 			if written_total >= out.len {
 				out << []u8{len: 8 * (1 << 10)}
 			}
-			mut dst_ptr := unsafe { charptr(voidptr(usize(out.data) + usize(written_total))) }
-			mut dst_left := usize(out.len - written_total)
+			mut dst_ptr := unsafe { charptr(voidptr(uint(out.data) + uint(written_total))) }
+			mut dst_left := uint(out.len - written_total)
 			res := C.iconv(stream.cd, &src_ptr, &src_left, &dst_ptr, &dst_left)
 			written_total = out.len - int(dst_left)
-			if res != usize(-1) {
+			if res != uint(-1) {
 				out.trim(written_total)
 				return IconvConvertResult{
 					bytes: out
@@ -1750,8 +1755,8 @@ fn (mut stream IconvStream) convert(input []u8, final bool) !IconvConvertResult 
 				} else {
 					1
 				}
-				src_ptr = unsafe { charptr(voidptr(usize(src_ptr) + usize(consume))) }
-				src_left -= usize(consume)
+				src_ptr = unsafe { charptr(voidptr(uint(src_ptr) + uint(consume))) }
+				src_left -= uint(consume)
 				continue
 			}
 			msg := if c_errno == 0 { 'unknown iconv failure' } else { os.posix_get_error_msg(c_errno) }
@@ -2579,7 +2584,7 @@ fn (mut s Searcher) fill_multi_line_buffer_from_file(mut file os.File, path stri
 		s.read_all_into_multi_line_buffer(mut read_from)!
 		return
 	}
-	capacity := mmap_file_size(mut file, path, has_path) or { usize(0) }
+	capacity := mmap_file_size(mut file, path, has_path) or { uint(0) }
 	s.multi_line_buffer = []u8{cap: int(capacity + 1)}
 	s.read_all_into_multi_line_buffer(mut read_from)!
 }
@@ -2617,7 +2622,7 @@ fn (mut s Searcher) read_all_into_multi_line_buffer(mut read_from io.Reader) ! {
 			break
 		}
 		if limit := s.config.heap_limit {
-			if usize(s.multi_line_buffer.len + nread) >= limit {
+			if uint(s.multi_line_buffer.len + nread) >= limit {
 				return alloc_error(limit)
 			}
 		}
@@ -2707,13 +2712,13 @@ pub fn (s &Searcher) multi_line_with_matcher(matcher_ &SearchMatcher) bool {
 
 /// Returns the number of "after" context lines to report. When context
 /// reporting is not enabled, this returns `0`.
-pub fn (s &Searcher) after_context() usize {
+pub fn (s &Searcher) after_context() uint {
 	return s.config.after_context
 }
 
 /// Returns the number of "before" context lines to report. When context
 /// reporting is not enabled, this returns `0`.
-pub fn (s &Searcher) before_context() usize {
+pub fn (s &Searcher) before_context() uint {
 	return s.config.before_context
 }
 
@@ -2854,7 +2859,7 @@ pub struct LineIter[^b] {
 pub fn LineIter.new[^b](line_term u8, bytes []u8) LineIter[^b] {
 	return LineIter[^b]{
 		bytes:   bytes
-		stepper: LineStep.new(line_term, 0, bytes.len)
+		stepper: LineStep.new(line_term, 0, uint(bytes.len))
 	}
 }
 
@@ -2934,7 +2939,9 @@ pub fn (mat SinkMatch[^b]) with_line_term[^b](line_term matcher.LineTerminator) 
 
 /// Exposes as much of the underlying buffer that was search as possible.
 pub fn (mat &SinkMatch[^b]) buffer[^b]() []u8 {
-	return mat.buffer_
+	// V-specific: these getters return a Rust borrow (`&[u8]`, `&[Match]`) as an
+	// explicit view of the field rather than an ownership copy.
+	return unsafe { mat.buffer_ }
 }
 
 /// Returns a range that corresponds to where [`SinkMatch::bytes`] appears
@@ -2946,7 +2953,7 @@ pub fn (mat &SinkMatch[^b]) bytes_range_in_buffer[^b]() matcher.Match {
 /// Returns the bytes for all matching lines, including the line
 /// terminators, if they exist.
 pub fn (mat &SinkMatch[^b]) bytes[^b]() []u8 {
-	return mat.bytes_
+	return unsafe { mat.bytes_ }
 }
 
 /// Returns the absolute byte offset of the start of this match. This
@@ -2989,8 +2996,8 @@ pub fn (mat &SinkMatch[^b]) lines[^b]() LineIter[^b] {
 pub struct LineStep {
 	line_term u8
 mut:
-	pos usize
-	end usize
+	pos uint
+	end uint
 }
 
 /// Create a new line iterator over the given range of bytes using the
@@ -3000,7 +3007,7 @@ mut:
 /// same slice must be provided to each call.
 ///
 /// This panics if `start` is not less than or equal to `end`.
-pub fn LineStep.new(line_term u8, start usize, end usize) LineStep {
+pub fn LineStep.new(line_term u8, start uint, end uint) LineStep {
 	return LineStep{
 		line_term: line_term
 		pos:       start
@@ -3015,21 +3022,21 @@ pub fn LineStep.new(line_term u8, start usize, end usize) LineStep {
 ///
 /// The range returned includes the line terminator. Ranges are always
 /// non-empty.
-pub fn (mut step LineStep) next(bytes []u8) ?(usize, usize) {
+pub fn (mut step LineStep) next[^b](bytes &^b []u8) ?(uint, uint) {
 	return step.next_impl(bytes)
 }
 
 /// Like next, but returns a `Match` instead of a tuple.
 @[inline]
-fn (mut step LineStep) next_match(bytes []u8) ?matcher.Match {
+fn (mut step LineStep) next_match[^b](bytes &^b []u8) ?matcher.Match {
 	start, end := step.next_impl(bytes) or { return none }
 	return matcher.Match.new(start, end)
 }
 
 @[inline]
-fn (mut step LineStep) next_impl(bytes_in []u8) ?(usize, usize) {
-	bytes := bytes_in[..step.end]
-	if line_end := find_byte(bytes[step.pos..], step.line_term) {
+fn (mut step LineStep) next_impl[^b](bytes_in &^b []u8) ?(uint, uint) {
+	bytes := &(*bytes_in)[..step.end]
+	if line_end := find_byte((*bytes)[step.pos..], step.line_term) {
 		start := step.pos
 		end := step.pos + line_end + 1
 		$if debug {
@@ -3053,9 +3060,9 @@ fn (mut step LineStep) next_impl(bytes_in []u8) ?(usize, usize) {
 }
 
 /// Count the number of occurrences of `line_term` in `bytes`.
-fn count(bytes []u8, line_term u8) u64 {
+fn count[^b](bytes &^b []u8, line_term u8) u64 {
 	mut count := u64(0)
-	for byte in bytes {
+	for byte in *bytes {
 		if byte == line_term {
 			count++
 		}
@@ -3066,14 +3073,12 @@ fn count(bytes []u8, line_term u8) u64 {
 /// Given a line that possibly ends with a terminator, return that line without
 /// the terminator.
 ///
-/// V-specific: V cannot annotate a slice descriptor itself with a lifetime;
-/// the returned slice is nevertheless a borrowed view into `bytes`.
 @[inline]
-fn without_terminator(bytes []u8, line_term matcher.LineTerminator) []u8 {
+fn without_terminator[^b](bytes &^b []u8, line_term matcher.LineTerminator) &^b []u8 {
 	term := line_term.as_bytes()
-	start := if bytes.len > term.len { bytes.len - term.len } else { usize(0) }
-	if bytes[start..] == term {
-		return bytes[..bytes.len - term.len]
+	start := if bytes.len > term.len { bytes.len - term.len } else { uint(0) }
+	if (*bytes)[start..] == term {
+		return &(*bytes)[..bytes.len - term.len]
 	}
 	return bytes
 }
@@ -3083,15 +3088,15 @@ fn without_terminator(bytes []u8, line_term matcher.LineTerminator) []u8 {
 ///
 /// Line terminators are considered part of the line they terminate.
 @[inline]
-fn locate(bytes []u8, line_term u8, range matcher.Match) matcher.Match {
-	line_start := if i := rfind_byte(bytes[..range.start()], line_term) {
+fn locate[^b](bytes &^b []u8, line_term u8, range matcher.Match) matcher.Match {
+	line_start := if i := rfind_byte((*bytes)[..range.start()], line_term) {
 		i + 1
 	} else {
-		usize(0)
+		uint(0)
 	}
-	line_end := if range.end() > line_start && bytes[range.end() - 1] == line_term {
+	line_end := if range.end() > line_start && (*bytes)[range.end() - 1] == line_term {
 		range.end()
-	} else if i := find_byte(bytes[range.end()..], line_term) {
+	} else if i := find_byte((*bytes)[range.end()..], line_term) {
 		range.end() + i + 1
 	} else {
 		bytes.len
@@ -3107,8 +3112,8 @@ fn locate(bytes []u8, line_term u8, range matcher.Match) matcher.Match {
 ///
 /// If `bytes` ends with a line terminator, then the terminator itself is
 /// considered part of the last line.
-fn preceding(bytes []u8, line_term u8, count usize) usize {
-	return preceding_by_pos(bytes, bytes.len, line_term, count)
+fn preceding[^b](bytes &^b []u8, line_term u8, count uint) uint {
+	return preceding_by_pos(bytes, uint(bytes.len), line_term, count)
 }
 
 /// Returns the minimal starting offset of the line that occurs `count` lines
@@ -3120,16 +3125,16 @@ fn preceding(bytes []u8, line_term u8, count usize) usize {
 /// the line that it terminates. For example, given `bytes = b"abc\nxyz\n"`
 /// and `pos = 7`, `preceding(bytes, pos, b'\n', 0)` returns `4` (as does `pos
 /// = 8`) and `preceding(bytes, pos, `b'\n', 1)` returns `0`.
-fn preceding_by_pos(bytes []u8, pos usize, line_term u8, count usize) usize {
+fn preceding_by_pos[^b](bytes &^b []u8, pos uint, line_term u8, count uint) uint {
 	mut cur_pos := pos
 	mut remaining := count
 	if cur_pos == 0 {
 		return 0
-	} else if bytes[cur_pos - 1] == line_term {
+	} else if (*bytes)[cur_pos - 1] == line_term {
 		cur_pos--
 	}
 	for {
-		if i := rfind_byte(bytes[..cur_pos], line_term) {
+		if i := rfind_byte((*bytes)[..cur_pos], line_term) {
 			if remaining == 0 {
 				return i + 1
 			} else if i == 0 {
@@ -3180,7 +3185,7 @@ fn SinkContext.new[^b](line_term matcher.LineTerminator, bytes &^b []u8, kind Si
 
 /// Returns the context bytes, including line terminators.
 pub fn (ctx &SinkContext[^b]) bytes[^b]() []u8 {
-	return ctx.bytes_
+	return unsafe { ctx.bytes_ }
 }
 
 /// Returns the type of context.
@@ -3519,8 +3524,8 @@ fn is_valid_utf8_bytes(bytes []u8) bool {
 }
 
 struct Utf8ErrorInfo {
-	valid_up_to usize
-	error_len   ?usize
+	valid_up_to uint
+	error_len   ?uint
 }
 
 fn (err Utf8ErrorInfo) msg() string {
@@ -3531,8 +3536,8 @@ fn (err Utf8ErrorInfo) msg() string {
 }
 
 fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
-	mut i := usize(0)
-	for i < usize(bytes.len) {
+	mut i := uint(0)
+	for i < uint(bytes.len) {
 		first := bytes[i]
 		if first < 0x80 {
 			i++
@@ -3542,10 +3547,10 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 		if width == 0 {
 			return Utf8ErrorInfo{
 				valid_up_to: i
-				error_len:   usize(1)
+				error_len:   uint(1)
 			}
 		}
-		if i + 1 >= usize(bytes.len) {
+		if i + 1 >= uint(bytes.len) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
 				error_len:   none
@@ -3554,14 +3559,14 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 		if !is_valid_utf8_second(first, bytes[i + 1]) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
-				error_len:   usize(1)
+				error_len:   uint(1)
 			}
 		}
 		if width == 2 {
 			i += 2
 			continue
 		}
-		if i + 2 >= usize(bytes.len) {
+		if i + 2 >= uint(bytes.len) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
 				error_len:   none
@@ -3570,14 +3575,14 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 		if !is_utf8_continuation(bytes[i + 2]) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
-				error_len:   usize(2)
+				error_len:   uint(2)
 			}
 		}
 		if width == 3 {
 			i += 3
 			continue
 		}
-		if i + 3 >= usize(bytes.len) {
+		if i + 3 >= uint(bytes.len) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
 				error_len:   none
@@ -3586,7 +3591,7 @@ fn first_utf8_error(bytes []u8) ?Utf8ErrorInfo {
 		if !is_utf8_continuation(bytes[i + 3]) {
 			return Utf8ErrorInfo{
 				valid_up_to: i
-				error_len:   usize(3)
+				error_len:   uint(3)
 			}
 		}
 		i += 4
@@ -3599,8 +3604,8 @@ fn lossy_utf8_string(bytes []u8) string {
 		return bytes.bytestr()
 	}
 	mut out := []u8{cap: bytes.len}
-	mut start := usize(0)
-	for start < usize(bytes.len) {
+	mut start := uint(0)
+	for start < uint(bytes.len) {
 		err := first_utf8_error(bytes[start..]) or {
 			append_bytes(mut out, bytes[start..])
 			break
@@ -3614,7 +3619,7 @@ fn lossy_utf8_string(bytes []u8) string {
 	return out.bytestr()
 }
 
-fn utf8_sequence_width(first u8) usize {
+fn utf8_sequence_width(first u8) uint {
 	return if first >= 0xc2 && first <= 0xdf {
 		2
 	} else if first >= 0xe0 && first <= 0xef {
@@ -3646,12 +3651,15 @@ fn append_bytes(mut dst []u8, bytes []u8) {
 	}
 }
 
+// V-specific: these stand in for Rust passing `&M` and `&mut S` as the generic
+// matcher and sink. The interface value is copied without taking ownership of
+// the boxed matcher or sink, which the caller keeps owning.
 fn matcher_ref_value(matcher_ &SearchMatcher) SearchMatcher {
-	return *matcher_
+	return unsafe { *matcher_ }
 }
 
 fn sink_ref_value(sink &Sink) Sink {
-	return *sink
+	return unsafe { *sink }
 }
 
 enum FastMatchResult {
@@ -3669,13 +3677,13 @@ struct Core[^s] {
 mut:
 	sink                Sink
 	binary              bool
-	pos                 usize
+	pos                 uint
 	absolute_byte_offset u64
-	binary_byte_offset_ ?usize
+	binary_byte_offset_ ?uint
 	line_number         ?u64
-	last_line_counted   usize
-	last_line_visited   usize
-	after_context_left  usize
+	last_line_counted   uint
+	last_line_visited   uint
+	after_context_left  uint
 	has_sunk            bool
 	has_matched         bool
 	count_              u64
@@ -3706,11 +3714,11 @@ fn Core.new[^s](searcher_ &^s Searcher, matcher_ SearchMatcher, sink Sink, binar
 	return core
 }
 
-fn (core &Core[^s]) pos[^s]() usize {
+fn (core &Core[^s]) pos[^s]() uint {
 	return core.pos
 }
 
-fn (mut core Core[^s]) set_pos[^s](pos usize) {
+fn (mut core Core[^s]) set_pos[^s](pos uint) {
 	core.pos = pos
 }
 
@@ -3741,7 +3749,7 @@ fn (mut core Core[^s]) binary_data[^s](binary_byte_offset u64) !bool {
 	return core.sink.binary_data(core.searcher, binary_byte_offset)!
 }
 
-fn (core &Core[^s]) is_match[^s](line []u8) !bool {
+fn (core &Core[^s]) is_match[^s, ^b](line &^b []u8) !bool {
 	// We need to strip the line terminator here to match the
 	// semantics of line-by-line searching. Namely, regexes
 	// like `(?m)^$` can match at the final position beyond a
@@ -3767,7 +3775,7 @@ fn (mut core Core[^s]) find[^s](slice []u8) !matcher.FallibleMatch {
 	return matcher.FallibleMatch.absent()
 }
 
-fn (mut core Core[^s]) shortest_match[^s](slice []u8) !matcher.FallibleUsize {
+fn (mut core Core[^s]) shortest_match[^s, ^b](slice &^b []u8) !matcher.FallibleUsize {
 	if core.has_exceeded_match_limit() {
 		return matcher.FallibleUsize.absent()
 	}
@@ -3786,7 +3794,7 @@ fn (mut core Core[^s]) finish[^s](byte_count u64, binary_byte_offset ?u64) ! {
 	core.sink.finish(core.searcher, &finish)!
 }
 
-fn (mut core Core[^s]) match_by_line[^s](buf []u8) !bool {
+fn (mut core Core[^s]) match_by_line[^s, ^b](buf &^b []u8) !bool {
 	if core.is_line_by_line_fast() {
 		result := core.match_by_line_fast(buf)!
 		return match result {
@@ -3798,7 +3806,7 @@ fn (mut core Core[^s]) match_by_line[^s](buf []u8) !bool {
 	return core.match_by_line_slow(buf)!
 }
 
-fn (mut core Core[^s]) roll[^s](buf []u8) usize {
+fn (mut core Core[^s]) roll[^s, ^b](buf &^b []u8) uint {
 	consumed := if core.config.max_context() == 0 {
 		buf.len
 	} else {
@@ -3822,11 +3830,11 @@ fn (mut core Core[^s]) roll[^s](buf []u8) usize {
 	core.absolute_byte_offset += u64(consumed)
 	core.last_line_counted = 0
 	core.last_line_visited = 0
-	core.set_pos(buf.len - consumed)
+	core.set_pos(uint(buf.len) - consumed)
 	return consumed
 }
 
-fn (mut core Core[^s]) detect_binary[^s](buf []u8, range matcher.Match) !bool {
+fn (mut core Core[^s]) detect_binary[^s, ^b](buf &^b []u8, range matcher.Match) !bool {
 	if _ := core.binary_byte_offset_ {
 		if _ := core.config.binary.quit_byte() {
 			return true
@@ -3839,7 +3847,7 @@ fn (mut core Core[^s]) detect_binary[^s](buf []u8, range matcher.Match) !bool {
 	} else {
 		return false
 	}
-	if i := find_byte(buf[range.start()..range.end()], binary_byte) {
+	if i := find_byte((*buf)[range.start()..range.end()], binary_byte) {
 		offset := range.start() + i
 		core.binary_byte_offset_ = offset
 		if !core.binary_data(u64(offset))! {
@@ -3852,7 +3860,7 @@ fn (mut core Core[^s]) detect_binary[^s](buf []u8, range matcher.Match) !bool {
 	return false
 }
 
-fn (mut core Core[^s]) before_context_by_line[^s](buf []u8, upto usize) !bool {
+fn (mut core Core[^s]) before_context_by_line[^s, ^b](buf &^b []u8, upto uint) !bool {
 	if core.config.before_context == 0 {
 		return true
 	}
@@ -3860,7 +3868,7 @@ fn (mut core Core[^s]) before_context_by_line[^s](buf []u8, upto usize) !bool {
 	if range.is_empty() {
 		return true
 	}
-	before_context_start := range.start() + preceding(buf[range.start()..range.end()],
+	before_context_start := range.start() + preceding((*buf)[range.start()..range.end()],
 		core.config.line_term.as_byte(), core.config.before_context - 1)
 
 	context_range := matcher.Match.new(before_context_start, range.end())
@@ -3878,7 +3886,7 @@ fn (mut core Core[^s]) before_context_by_line[^s](buf []u8, upto usize) !bool {
 	return true
 }
 
-fn (mut core Core[^s]) after_context_by_line[^s](buf []u8, upto usize) !bool {
+fn (mut core Core[^s]) after_context_by_line[^s, ^b](buf &^b []u8, upto uint) !bool {
 	if core.after_context_left == 0 {
 		return true
 	}
@@ -3888,7 +3896,7 @@ fn (mut core Core[^s]) after_context_by_line[^s](buf []u8, upto usize) !bool {
 	for {
 		line := stepper.next_match(buf) or { break }
 		if exceeded_match_limit
-			&& core.is_match(buf[line.start()..line.end()])! != core.config.invert_match {
+			&& core.is_match((*buf)[line.start()..line.end()])! != core.config.invert_match {
 			after_context_left := core.after_context_left
 			core.set_pos(line.end())
 			if !core.sink_matched(buf, line)! {
@@ -3905,7 +3913,7 @@ fn (mut core Core[^s]) after_context_by_line[^s](buf []u8, upto usize) !bool {
 	return true
 }
 
-fn (mut core Core[^s]) other_context_by_line[^s](buf []u8, upto usize) !bool {
+fn (mut core Core[^s]) other_context_by_line[^s, ^b](buf &^b []u8, upto uint) !bool {
 	range := matcher.Match.new(core.last_line_visited, upto)
 	mut stepper := LineStep.new(core.config.line_term.as_byte(), range.start(), range.end())
 	for {
@@ -3917,11 +3925,11 @@ fn (mut core Core[^s]) other_context_by_line[^s](buf []u8, upto usize) !bool {
 	return true
 }
 
-fn (mut core Core[^s]) match_by_line_slow[^s](buf []u8) !bool {
+fn (mut core Core[^s]) match_by_line_slow[^s, ^b](buf &^b []u8) !bool {
 	$if debug {
 		assert !core.searcher.multi_line_with_matcher(&core.matcher_)
 	}
-	range := matcher.Match.new(core.pos(), buf.len)
+	range := matcher.Match.new(core.pos(), uint(buf.len))
 	mut stepper := LineStep.new(core.config.line_term.as_byte(), range.start(), range.end())
 	for {
 		line := stepper.next_match(buf) or { break }
@@ -3932,7 +3940,7 @@ fn (mut core Core[^s]) match_by_line_slow[^s](buf []u8) !bool {
 		// classes of regexes from matching the empty position *after*
 		// the end of the line. For example, `(?m)^$` will match at
 		// position (2, 2) in the string `a\n`.
-		slice := without_terminator(buf[line.start()..line.end()], core.config.line_term)
+		slice := without_terminator((*buf)[line.start()..line.end()], core.config.line_term)
 		mut matched := false
 		if _ := core.shortest_match(slice)!.get() {
 			matched = true
@@ -3965,7 +3973,7 @@ fn (mut core Core[^s]) match_by_line_slow[^s](buf []u8) !bool {
 	return true
 }
 
-fn (mut core Core[^s]) match_by_line_fast[^s](buf []u8) !FastMatchResult {
+fn (mut core Core[^s]) match_by_line_fast[^s, ^b](buf &^b []u8) !FastMatchResult {
 	$if debug {
 		assert !core.config.passthru
 	}
@@ -3999,18 +4007,18 @@ fn (mut core Core[^s]) match_by_line_fast[^s](buf []u8) !FastMatchResult {
 			}
 		}
 	}
-	if !core.after_context_by_line(buf, buf.len)! {
+	if !core.after_context_by_line(buf, uint(buf.len))! {
 		return .stop
 	}
 	if core.has_exceeded_match_limit() && core.after_context_left == 0 {
 		return .stop
 	}
-	core.set_pos(buf.len)
+	core.set_pos(uint(buf.len))
 	return .continue_search
 }
 
 @[inline]
-fn (mut core Core[^s]) match_by_line_fast_invert[^s](buf []u8) !bool {
+fn (mut core Core[^s]) match_by_line_fast_invert[^s, ^b](buf &^b []u8) !bool {
 	assert core.config.invert_match
 
 	maybe_line := core.find_by_line_fast(buf)!
@@ -4019,7 +4027,7 @@ fn (mut core Core[^s]) match_by_line_fast_invert[^s](buf []u8) !bool {
 		core.set_pos(line.end())
 		range
 	} else {
-		range := matcher.Match.new(core.pos(), buf.len)
+		range := matcher.Match.new(core.pos(), uint(buf.len))
 		core.set_pos(range.end())
 		range
 	}
@@ -4048,7 +4056,7 @@ fn (mut core Core[^s]) match_by_line_fast_invert[^s](buf []u8) !bool {
 }
 
 @[inline]
-fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
+fn (mut core Core[^s]) find_by_line_fast[^s, ^b](buf &^b []u8) !matcher.FallibleMatch {
 	$if debug {
 		assert !core.searcher.multi_line_with_matcher(&core.matcher_)
 		assert core.is_line_by_line_fast()
@@ -4058,7 +4066,7 @@ fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
 		if core.has_exceeded_match_limit() {
 			return matcher.FallibleMatch.absent()
 		}
-		candidate_haystack := unsafe { buf[pos..] }
+		candidate_haystack := &(*buf)[pos..]
 		maybe_kind := core.matcher_.find_candidate_line(candidate_haystack)!
 		kind := maybe_kind.get() or {
 			return matcher.FallibleMatch.absent()
@@ -4074,7 +4082,7 @@ fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
 			return matcher.FallibleMatch.some(line)
 		}
 		line := locate(buf, core.config.line_term.as_byte(), matcher.Match.zero(kind.position()).offset(pos))
-		if core.is_match(buf[line.start()..line.end()])! {
+		if core.is_match((*buf)[line.start()..line.end()])! {
 			return matcher.FallibleMatch.some(line)
 		}
 		pos = line.end()
@@ -4083,7 +4091,7 @@ fn (mut core Core[^s]) find_by_line_fast[^s](buf []u8) !matcher.FallibleMatch {
 }
 
 @[inline]
-fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
+fn (mut core Core[^s]) sink_matched[^s, ^b](buf &^b []u8, range matcher.Match) !bool {
 	if core.binary && core.detect_binary(buf, range)! {
 		return false
 	}
@@ -4092,7 +4100,7 @@ fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	mut mat := SinkMatch.new(&buf, range)
+	mut mat := SinkMatch.new(buf, range)
 	mat = mat.with_line_term(core.config.line_term)
 	mat = mat.with_absolute_byte_offset(offset)
 	mat = mat.with_line_number(core.line_number)
@@ -4106,14 +4114,14 @@ fn (mut core Core[^s]) sink_matched[^s](buf []u8, range matcher.Match) !bool {
 	return true
 }
 
-fn (mut core Core[^s]) sink_before_context[^s](buf []u8, range matcher.Match) !bool {
+fn (mut core Core[^s]) sink_before_context[^s, ^b](buf &^b []u8, range matcher.Match) !bool {
 	if core.binary && core.detect_binary(buf, range)! {
 		return false
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	ctx_bytes := buf[range.start()..range.end()]
-	ctx := SinkContext.new(core.config.line_term, &ctx_bytes,
+	ctx_bytes := &(*buf)[range.start()..range.end()]
+	ctx := SinkContext.new(core.config.line_term, ctx_bytes,
 		.before, offset, core.line_number)
 	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
@@ -4124,7 +4132,7 @@ fn (mut core Core[^s]) sink_before_context[^s](buf []u8, range matcher.Match) !b
 	return true
 }
 
-fn (mut core Core[^s]) sink_after_context[^s](buf []u8, range matcher.Match) !bool {
+fn (mut core Core[^s]) sink_after_context[^s, ^b](buf &^b []u8, range matcher.Match) !bool {
 	assert core.after_context_left >= 1
 
 	if core.binary && core.detect_binary(buf, range)! {
@@ -4132,8 +4140,8 @@ fn (mut core Core[^s]) sink_after_context[^s](buf []u8, range matcher.Match) !bo
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	ctx_bytes := buf[range.start()..range.end()]
-	ctx := SinkContext.new(core.config.line_term, &ctx_bytes,
+	ctx_bytes := &(*buf)[range.start()..range.end()]
+	ctx := SinkContext.new(core.config.line_term, ctx_bytes,
 		.after, offset, core.line_number)
 	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
@@ -4145,14 +4153,14 @@ fn (mut core Core[^s]) sink_after_context[^s](buf []u8, range matcher.Match) !bo
 	return true
 }
 
-fn (mut core Core[^s]) sink_other_context[^s](buf []u8, range matcher.Match) !bool {
+fn (mut core Core[^s]) sink_other_context[^s, ^b](buf &^b []u8, range matcher.Match) !bool {
 	if core.binary && core.detect_binary(buf, range)! {
 		return false
 	}
 	core.count_lines(buf, range.start())
 	offset := core.absolute_byte_offset + u64(range.start())
-	ctx_bytes := buf[range.start()..range.end()]
-	ctx := SinkContext.new(core.config.line_term, &ctx_bytes,
+	ctx_bytes := &(*buf)[range.start()..range.end()]
+	ctx := SinkContext.new(core.config.line_term, ctx_bytes,
 		.other, offset, core.line_number)
 	keepgoing := core.sink.context(core.searcher, &ctx)!
 	if !keepgoing {
@@ -4163,7 +4171,7 @@ fn (mut core Core[^s]) sink_other_context[^s](buf []u8, range matcher.Match) !bo
 	return true
 }
 
-fn (mut core Core[^s]) sink_break_context[^s](start_of_line usize) !bool {
+fn (mut core Core[^s]) sink_break_context[^s](start_of_line uint) !bool {
 	is_gap := core.last_line_visited < start_of_line
 	any_context := core.config.before_context > 0 || core.config.after_context > 0
 
@@ -4173,12 +4181,12 @@ fn (mut core Core[^s]) sink_break_context[^s](start_of_line usize) !bool {
 	return core.sink.context_break(core.searcher)!
 }
 
-fn (mut core Core[^s]) count_lines[^s](buf []u8, upto usize) {
+fn (mut core Core[^s]) count_lines[^s, ^b](buf &^b []u8, upto uint) {
 	if line_number := core.line_number {
 		if core.last_line_counted >= upto {
 			return
 		}
-		slice := buf[core.last_line_counted..upto]
+		slice := &(*buf)[core.last_line_counted..upto]
 		count := count(slice, core.config.line_term.as_byte())
 		core.line_number = line_number + count
 		core.last_line_counted = upto

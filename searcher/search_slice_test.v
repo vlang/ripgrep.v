@@ -5,6 +5,12 @@ import matcher
 import os
 import regex
 
+// V-specific: a string literal cannot be passed to the `&string` label
+// parameter, so the tests bind the label to a parameter first.
+fn encoding_for(label string) !Encoding {
+	return Encoding.new(label)
+}
+
 struct ByteSliceReaderForSearch {
 mut:
 	bytes []u8
@@ -80,7 +86,7 @@ fn (m LiteralMatcher) with_line_term(line_term ?matcher.LineTerminator) LiteralM
 	}
 }
 
-fn (m LiteralMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
+fn (m LiteralMatcher) find_at(haystack &[]u8, at uint) !matcher.FallibleMatch {
 	if at > haystack.len {
 		return matcher.FallibleMatch.absent()
 	}
@@ -104,7 +110,7 @@ fn (m LiteralMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
 	return matcher.FallibleMatch.absent()
 }
 
-fn (m LiteralMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
+fn (m LiteralMatcher) shortest_match_at(haystack &[]u8, at uint) !matcher.FallibleUsize {
 	return matcher.shortest_match_at(m, haystack, at)
 }
 
@@ -113,18 +119,18 @@ fn (m LiteralMatcher) new_captures() !matcher.NoCaptures {
 	return matcher.NoCaptures.new()
 }
 
-fn (m LiteralMatcher) capture_count() usize {
+fn (m LiteralMatcher) capture_count() uint {
 	_ = m
 	return 0
 }
 
-fn (m LiteralMatcher) capture_index(name string) ?usize {
+fn (m LiteralMatcher) capture_index(name string) ?uint {
 	_ = m
 	_ = name
 	return none
 }
 
-fn (m LiteralMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m LiteralMatcher) captures_at(haystack &[]u8, at uint, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	_ = haystack
 	_ = at
@@ -151,14 +157,14 @@ fn (m LiteralMatcher) find_candidate_line(haystack &[]u8) !matcher.FallibleLineM
 
 struct ShortestMatchOnlyMatcher {}
 
-fn (m ShortestMatchOnlyMatcher) find_at(haystack &[]u8, at usize) !matcher.FallibleMatch {
+fn (m ShortestMatchOnlyMatcher) find_at(haystack &[]u8, at uint) !matcher.FallibleMatch {
 	_ = m
 	_ = haystack
 	_ = at
 	return error('search core called find_at instead of shortest_match_at')
 }
 
-fn (m ShortestMatchOnlyMatcher) shortest_match_at(haystack &[]u8, at usize) !matcher.FallibleUsize {
+fn (m ShortestMatchOnlyMatcher) shortest_match_at(haystack &[]u8, at uint) !matcher.FallibleUsize {
 	_ = m
 	for i := at; i < haystack.len; i++ {
 		if haystack[i] == `x` {
@@ -173,17 +179,17 @@ fn (m ShortestMatchOnlyMatcher) new_captures() !matcher.NoCaptures {
 	return matcher.NoCaptures.new()
 }
 
-fn (m ShortestMatchOnlyMatcher) capture_count() usize {
+fn (m ShortestMatchOnlyMatcher) capture_count() uint {
 	_ = m
 	return matcher.default_capture_count()
 }
 
-fn (m ShortestMatchOnlyMatcher) capture_index(name string) ?usize {
+fn (m ShortestMatchOnlyMatcher) capture_index(name string) ?uint {
 	_ = m
 	return matcher.default_capture_index(name)
 }
 
-fn (m ShortestMatchOnlyMatcher) captures_at(haystack &[]u8, at usize, mut caps matcher.NoCaptures) !bool {
+fn (m ShortestMatchOnlyMatcher) captures_at(haystack &[]u8, at uint, mut caps matcher.NoCaptures) !bool {
 	_ = m
 	return matcher.default_captures_at(haystack, at, mut caps)
 }
@@ -255,7 +261,7 @@ fn (mut sink CollectSink) finish(searcher_ &Searcher, finish &SinkFinish) ! {
 
 fn test_searcher_mod_config_error_heap_limit() {
 	mut builder := SearcherBuilder.new()
-	builder.heap_limit(usize(0))
+	builder.heap_limit(uint(0))
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
 	searcher_.search_slice(LiteralMatcher.new(''), []u8{}, &sink) or {
@@ -382,7 +388,7 @@ fn test_search_slice_utf16le_bom_sniffing() {
 fn test_search_slice_explicit_utf16be_encoding() {
 	haystack := [u8(0), `f`, 0, `o`, 0, `o`, 0, `\n`]
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf-16be')!
+	encoding := encoding_for('utf-16be')!
 	builder.encoding(encoding)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
@@ -398,7 +404,7 @@ fn test_search_slice_explicit_utf16be_encoding() {
 fn test_transcode_explicit_windows1252_encoding() {
 	haystack := [u8(0x80), 0x81, `\n`]
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('latin1')!
+	encoding := encoding_for('latin1')!
 	builder.encoding(encoding)
 	searcher_ := builder.build()
 
@@ -414,7 +420,7 @@ fn test_encoding_rs_single_byte_tables_replace_unmapped_bytes() {
 
 fn test_transcode_explicit_utf8_replaces_malformed_sequences() {
 	mut builder := SearcherBuilder.new()
-	builder.encoding(Encoding.new('utf-8')!)
+	builder.encoding(encoding_for('utf-8')!)
 	searcher_ := builder.build()
 	got := transcode_slice_with_config(&searcher_.config, [u8(`a`), 0xc2, `b`, 0xe2, 0x82])!
 	assert got == [u8(`a`), 0xef, 0xbf, 0xbd, `b`, 0xef, 0xbf, 0xbd]
@@ -458,7 +464,7 @@ fn test_iso2022jp_stream_boundary_preserves_mode_and_split_pair() {
 fn test_transcode_explicit_x_user_defined_encoding() {
 	haystack := [u8(`A`), 0x80, `B`]
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('x-user-defined')!
+	encoding := encoding_for('x-user-defined')!
 	builder.encoding(encoding)
 	searcher_ := builder.build()
 
@@ -489,7 +495,7 @@ fn test_search_reader_with_default_regex_complex_classes() {
 		matcher_ := regex_builder.build(pattern)!
 		matcher_ref := regex.RegexMatcherRef.new(&matcher_)
 		candidate := matcher_ref.find_candidate_line('abc\n'.bytes())!
-		assert candidate.has_value
+		assert candidate.get() != none
 		mut source := ByteSliceReaderForSearch.new('abc\n')
 		mut searcher_ := Searcher.new()
 		mut sink := CollectSink{}
@@ -533,7 +539,7 @@ fn test_search_reader_explicit_utf16le_encoding() {
 		`\n`, 0]
 	mut source := ByteSliceReaderForSearch.new_bytes(haystack)
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf-16le')!
+	encoding := encoding_for('utf-16le')!
 	builder.encoding(encoding)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
@@ -556,7 +562,7 @@ fn test_search_reader_utf16le_preserves_surrogate_pair_across_stream_chunk() {
 	haystack << [u8(0x3d), 0xd8, 0x00, 0xde, `\n`, 0]
 	mut source := ByteSliceReaderForSearch.new_bytes(haystack)
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf-16le')!
+	encoding := encoding_for('utf-16le')!
 	builder.encoding(encoding)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
@@ -573,7 +579,7 @@ fn test_search_reader_explicit_utf16le_streams_until_quit() {
 	}
 	mut source := LimitedChunkReaderForSearch.new(&haystack, 5, 16)
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf-16le')!
+	encoding := encoding_for('utf-16le')!
 	builder.encoding(encoding)
 	builder.max_matches(u64(1))
 	mut searcher_ := builder.build()
@@ -611,7 +617,7 @@ fn test_search_reader_iconv_encoding_streams_until_quit() {
 	}
 	mut source := LimitedChunkReaderForSearch.new(&haystack, 5, 16)
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('cp1251')!
+	encoding := encoding_for('cp1251')!
 	builder.encoding(encoding)
 	builder.max_matches(u64(1))
 	mut searcher_ := builder.build()
@@ -628,7 +634,7 @@ fn test_search_reader_shift_jis_preserves_one_byte_chunk_boundaries() {
 	haystack := [u8(0x93), 0xfa, 0x96, 0x7b, `\n`]
 	mut source := LimitedChunkReaderForSearch.new(&haystack, 1, haystack.len)
 	mut builder := SearcherBuilder.new()
-	builder.encoding(Encoding.new('shift_jis')!)
+	builder.encoding(encoding_for('shift_jis')!)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
 	searcher_.search_reader(LiteralMatcher.new('日本'), mut source, &sink)!
@@ -639,7 +645,7 @@ fn test_search_reader_iso2022jp_preserves_state_across_one_byte_chunks() {
 	haystack := [u8(0x1b), `$`, `B`, 0x24, 0x22, 0x1b, `(`, `B`, `\n`]
 	mut source := LimitedChunkReaderForSearch.new(&haystack, 1, haystack.len)
 	mut builder := SearcherBuilder.new()
-	builder.encoding(Encoding.new('iso-2022-jp')!)
+	builder.encoding(encoding_for('iso-2022-jp')!)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
 	searcher_.search_reader(LiteralMatcher.new('あ'), mut source, &sink)!
@@ -723,7 +729,7 @@ fn test_search_file_explicit_utf16be_encoding() {
 		file.close()
 	}
 	mut builder := SearcherBuilder.new()
-	encoding := Encoding.new('utf-16be')!
+	encoding := encoding_for('utf-16be')!
 	builder.encoding(encoding)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
@@ -802,7 +808,7 @@ fn test_search_reader_multi_line_heap_limit_errors_at_limit() {
 	mut source := ByteSliceReaderForSearch.new(text)
 	mut builder := SearcherBuilder.new()
 	builder.multi_line(true)
-	builder.heap_limit(usize(text.len))
+	builder.heap_limit(uint(text.len))
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
 	searcher_.search_reader(LiteralMatcher.new('Sherlock'), mut source, &sink) or {
@@ -815,8 +821,8 @@ fn test_search_reader_multi_line_heap_limit_errors_at_limit() {
 fn test_search_slice_multi_line_heap_limit_applies_to_transcoded_bytes() {
 	mut builder := SearcherBuilder.new()
 	builder.multi_line(true)
-	builder.heap_limit(usize(2))
-	builder.encoding(Encoding.new('windows-1252')!)
+	builder.heap_limit(uint(2))
+	builder.encoding(encoding_for('windows-1252')!)
 	mut searcher_ := builder.build()
 	mut sink := CollectSink{}
 	searcher_.search_slice(LiteralMatcher.new('€'), [u8(0x80)], &sink) or {

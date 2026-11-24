@@ -93,7 +93,7 @@ fn CommandReaderRef.new[^r](rdr &^r cli.CommandReader) CommandReaderRef[^r] {
 
 fn (mut rdr CommandReaderRef[^r]) read[^r](mut buf []u8) !int {
 	return rdr.rdr.read_for_search(mut buf) or {
-		if cli.is_broken_pipe_error(err) || err.msg() == '' {
+		if cli.is_broken_pipe_error(&err) || err.msg() == '' {
 			return io.Eof{}
 		}
 		return error(err.msg())
@@ -113,7 +113,7 @@ fn DecompressionReaderRef.new[^r](rdr &^r cli.DecompressionReader) Decompression
 
 fn (mut rdr DecompressionReaderRef[^r]) read[^r](mut buf []u8) !int {
 	return rdr.rdr.read_for_search(mut buf) or {
-		if cli.is_broken_pipe_error(err) || err.msg() == '' {
+		if cli.is_broken_pipe_error(&err) || err.msg() == '' {
 			return io.Eof{}
 		}
 		return error(err.msg())

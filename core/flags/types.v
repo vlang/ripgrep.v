@@ -345,9 +345,9 @@ pub fn parse_user_color_spec(spec string) !UserColorSpec {
 /// order. Thus, we need to keep track of them separately.
 pub struct ContextModeLimited {
 pub mut:
-	before ?usize
-	after  ?usize
-	both   ?usize
+	before ?uint
+	after  ?uint
+	both   ?uint
 }
 
 /// Returns the specific number of contextual lines that should be shown
@@ -355,9 +355,9 @@ pub mut:
 /// that `before` and `after` both partially override `both` in all cases.
 ///
 /// By default, this returns `(0, 0)`.
-pub fn (m &ContextModeLimited) get() (usize, usize) {
-	mut before := usize(0)
-	mut after := usize(0)
+pub fn (m &ContextModeLimited) get() (uint, uint) {
+	mut before := uint(0)
+	mut after := uint(0)
 	if lines := m.both {
 		before = lines
 		after = lines
@@ -413,7 +413,7 @@ pub fn passthru_context_mode() ContextMode {
 /// If this was set to "passthru" context, then it is overridden in favor
 /// of limited context with the given value for "before" and `0` for
 /// "after."
-pub fn (mut m ContextMode) set_before(lines usize) {
+pub fn (mut m ContextMode) set_before(lines uint) {
 	if m.kind == .passthru {
 		m.kind = .limited
 		m.limited = ContextModeLimited{
@@ -429,7 +429,7 @@ pub fn (mut m ContextMode) set_before(lines usize) {
 /// If this was set to "passthru" context, then it is overridden in favor
 /// of limited context with the given value for "after" and `0` for
 /// "before."
-pub fn (mut m ContextMode) set_after(lines usize) {
+pub fn (mut m ContextMode) set_after(lines uint) {
 	if m.kind == .passthru {
 		m.kind = .limited
 		m.limited = ContextModeLimited{
@@ -445,7 +445,7 @@ pub fn (mut m ContextMode) set_after(lines usize) {
 /// If this was set to "passthru" context, then it is overridden in favor
 /// of limited context with the given value for "both" and `None` for
 /// "before" and "after".
-pub fn (mut m ContextMode) set_both(lines usize) {
+pub fn (mut m ContextMode) set_both(lines uint) {
 	if m.kind == .passthru {
 		m.kind = .limited
 		m.limited = ContextModeLimited{
@@ -458,7 +458,7 @@ pub fn (mut m ContextMode) set_both(lines usize) {
 
 /// A convenience function for use in tests that returns the limited
 /// context. If this mode isn't limited, then it panics.
-pub fn (m &ContextMode) get_limited() (usize, usize) {
+pub fn (m &ContextMode) get_limited() (uint, uint) {
 	if m.kind == .passthru {
 		panic('context mode is passthru')
 	}
@@ -576,10 +576,10 @@ pub:
 	label string
 }
 
-pub fn new_encoding(label string) !Encoding {
+pub fn new_encoding(label &string) !Encoding {
 	encoding := searcher.Encoding.new(label) or { return error('unrecognized encoding') }
 	return Encoding{
-		label: encoding.label.clone()
+		label: (*encoding.canonical_label()).clone()
 	}
 }
 
@@ -914,7 +914,7 @@ pub mut:
 	context                      ContextMode
 	context_separator            ContextSeparator
 	crlf                         bool
-	dfa_size_limit               ?usize
+	dfa_size_limit               ?uint
 	encoding                     EncodingMode
 	engine                       EngineChoice
 	field_context_separator      FieldContextSeparator
@@ -937,7 +937,7 @@ pub mut:
 	max_columns                  ?u64
 	max_columns_preview          bool
 	max_count                    ?u64
-	max_depth                    ?usize
+	max_depth                    ?uint
 	max_filesize                 ?u64
 	mmap                         MmapMode
 	multiline                    bool
@@ -961,16 +961,16 @@ pub mut:
 	pre                          ?string
 	pre_glob                     []string
 	quiet                        bool
-	regex_size_limit             ?usize
+	regex_size_limit             ?uint
 	replace                      ?string
 	search_zip                   bool
 	sort                         ?SortMode
 	stats                        bool
 	stop_on_nonmatch             bool
-	threads                      ?usize
+	threads                      ?uint
 	trim                         bool
 	type_changes                 []TypeChange
-	unrestricted                 usize
+	unrestricted                 uint
 	vimgrep                      bool
 	with_filename                ?bool
 }
@@ -1012,11 +1012,11 @@ pub fn default_low_args() LowArgs {
 	}
 }
 
-pub fn parse_usize(value string) !usize {
-	parsed := parse_unsigned(value, u64(~usize(0))) or {
+pub fn parse_usize(value string) !uint {
+	parsed := parse_unsigned(value, u64(~uint(0))) or {
 		return error('value is not a valid number: ${err.msg()}')
 	}
-	return usize(parsed)
+	return uint(parsed)
 }
 
 pub fn parse_u64(value string) !u64 {
@@ -1081,9 +1081,9 @@ pub fn parse_human_readable_u64(value string) !u64 {
 	return parsed * multiplier
 }
 
-pub fn parse_human_readable_usize(value string) !usize {
+pub fn parse_human_readable_usize(value string) !uint {
 	parsed := parse_human_readable_u64(value)!
-	cast := usize(parsed)
+	cast := uint(parsed)
 	if u64(cast) != parsed {
 		return error('size is too big')
 	}
