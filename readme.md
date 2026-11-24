@@ -13,9 +13,10 @@ the V mappings for functions whose names necessarily changed.
 
 Build with V including the ownership checker fixes in
 [vlang/v#32859](https://github.com/vlang/v/pull/32859) and
-[vlang/v#32866](https://github.com/vlang/v/pull/32866), `sync.arc.Weak` from
-[vlang/v#32865](https://github.com/vlang/v/pull/32865), and `encoding.utf8.View` from
-[vlang/v#32869](https://github.com/vlang/v/pull/32869).
+[vlang/v#32866](https://github.com/vlang/v/pull/32866). The port uses `sync.arc.Weak`
+from [vlang/v#32865](https://github.com/vlang/v/pull/32865) and `encoding.utf8.View`
+from [vlang/v#32869](https://github.com/vlang/v/pull/32869). The additional check for
+loans held by returned view structs is in [vlang/v#32870](https://github.com/vlang/v/pull/32870).
 
 ```sh
 cd /path/to/ripgrep_v

@@ -58,9 +58,10 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   checks.
 - The checker change in [vlang/v#32866](https://github.com/vlang/v/pull/32866) catches
   the two `cli.Buffer.as_slice()` probes for an escaping local and a live view during
-  `buffer.clear()`. The same compiler accepts mutation of a byte array while an
-  `encoding.utf8.View` returned inside an option is live. General borrow tracking
-  through returned aggregate values and Rust's thread safety guarantees remain open.
+  `buffer.clear()`. The follow-up in [vlang/v#32870](https://github.com/vlang/v/pull/32870)
+  keeps the byte array borrowed while a view unwrapped from an option is live. The
+  checker still accepts passing the same mutable counter to two concurrent `spawn`
+  calls. Rust's thread safety guarantees and general aggregate borrow tracking remain open.
 
 ## File inventory
 
