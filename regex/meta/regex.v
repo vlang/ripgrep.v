@@ -54,7 +54,7 @@ module meta
 
 import strconv
 import strings
-import sync.stdatomic
+import sync.arc
 
 /******************************************************************************
 *
@@ -297,48 +297,45 @@ fn memo_hash(key u64) u64 {
 
 // Regex is the compiled regular expression object.
 pub struct Regex implements IClone, Drop {
-pub:
-	pattern         string         // The original regex string
-	prog            []Inst         // Compiled bytecode
-	total_groups    int            // Number of capture groups defined in pattern
-	group_map       map[string]int // Mapping of names to indices for (?P<name>...)
-	prefix_lit      string         // Pre-calculated literal prefix for fast-skip optimization
-	has_prefix      bool           // Whether a literal prefix exists
-	anchored        bool           // True if pattern starts with '^' (optimization hint)
-	needs_memo      bool           // True when the program contains branching states.
-	memo_size_limit uint          // Maximum dense VM cache requested by the caller.
 mut:
-	refs &stdatomic.AtomicVal[int] = unsafe { nil }
+	program ?arc.Arc[RegexProgram]
 }
 
+// RegexProgram holds the immutable bytecode and metadata shared by Regex clones.
+struct RegexProgram implements Drop {
+	pattern         string
+	prog            []Inst
+	total_groups    int
+	group_map       map[string]int
+	prefix_lit      string
+	has_prefix      bool
+	anchored        bool
+	needs_memo      bool
+	memo_size_limit uint
+}
+
+// clone shares the compiled program with the original regex.
 pub fn (re &Regex) clone() Regex {
-	if !isnil(re.refs) {
-		re.refs.add(1)
-	}
+	owner := re.program or { return Regex{} }
 	return Regex{
-		pattern:         re.pattern
-		prog:            re.prog
-		total_groups:    re.total_groups
-		group_map:       re.group_map
-		prefix_lit:      re.prefix_lit
-		has_prefix:      re.has_prefix
-		anchored:        re.anchored
-		needs_memo:      re.needs_memo
-		memo_size_limit: re.memo_size_limit
-		refs:            re.refs
+		program: owner.clone()
 	}
 }
 
 // V-specific: reports whether the local VM has installed its literal-prefix
 // acceleration, corresponding to `regex_automata::meta::Regex.is_accelerated`.
 pub fn (re &Regex) is_accelerated() bool {
-	return re.has_prefix
+	owner := re.program or { return false }
+	program := owner.get()
+	return program.has_prefix
 }
 
 // V-specific: the Rust implementation queries this from HIR properties. The
 // local VM retains the same information on compiled word assertions.
 pub fn (re &Regex) contains_word_unicode() bool {
-	for inst in re.prog {
+	owner := re.program or { return false }
+	program := owner.get()
+	for inst in program.prog {
 		if inst.typ == .assert_word && inst.word_unicode {
 			return true
 		}
@@ -346,25 +343,37 @@ pub fn (re &Regex) contains_word_unicode() bool {
 	return false
 }
 
+// total_groups returns the number of capture groups excluding the whole match.
+pub fn (re &Regex) total_groups() int {
+	owner := re.program or { return 0 }
+	program := owner.get()
+	return program.total_groups
+}
+
+// group_index returns the index of the capture group named by name.
+pub fn (re &Regex) group_index(name &string) ?int {
+	owner := re.program or { return none }
+	program := owner.get()
+	return program.group_map[*name] or { return none }
+}
+
+// drop releases this owner's reference to the compiled program.
 pub fn (mut re Regex) drop() {
-	if isnil(re.refs) {
-		return
-	}
-	if re.refs.sub(1) != 1 {
-		re.refs = unsafe { nil }
-		return
-	}
+	drop_owned(re.program)
+	re.program = none
+}
+
+fn (mut program RegexProgram) drop() {
+	// The last strong reference has exclusive access to the program buffers.
 	unsafe {
-		re.pattern.free()
-		for mut inst in re.prog {
+		program.pattern.free()
+		for mut inst in program.prog {
 			inst.free()
 		}
-		re.prog.free()
-		re.group_map.free()
-		re.prefix_lit.free()
-		free(re.refs)
+		program.prog.free()
+		program.group_map.free()
+		program.prefix_lit.free()
 	}
-	re.refs = unsafe { nil }
 }
 
 // Match contains the results of a successful regex match.
@@ -464,8 +473,7 @@ fn read_rune_at(str &u8, len int, index int) (rune, int) {
 			&& is_utf8_continuation_byte(str[index + 2]) {
 			if (b0 == 0xe0 && str[index + 1] >= 0xa0) || (b0 >= 0xe1 && b0 <= 0xec)
 				|| (b0 == 0xed && str[index + 1] <= 0x9f) || (b0 >= 0xee && b0 <= 0xef) {
-				return rune((u32(b0 & 0x0f) << 12) | (u32(str[index + 1] & 0x3f) << 6) | u32(str[
-					index + 2] & 0x3f)), 3
+				return rune((u32(b0 & 0x0f) << 12) | (u32(str[index + 1] & 0x3f) << 6) | u32(str[index + 2] & 0x3f)), 3
 			}
 		}
 		if index + 3 < len && is_utf8_continuation_byte(str[index + 1])
@@ -473,8 +481,7 @@ fn read_rune_at(str &u8, len int, index int) (rune, int) {
 			&& is_utf8_continuation_byte(str[index + 3]) {
 			if (b0 == 0xf0 && str[index + 1] >= 0x90) || (b0 >= 0xf1 && b0 <= 0xf3)
 				|| (b0 == 0xf4 && str[index + 1] <= 0x8f) {
-				return rune((u32(b0 & 0x07) << 18) | (u32(str[index + 1] & 0x3f) << 12) | (u32(str[
-					index + 2] & 0x3f) << 6) | u32(str[index + 3] & 0x3f)), 4
+				return rune((u32(b0 & 0x07) << 18) | (u32(str[index + 1] & 0x3f) << 12) | (u32(str[index + 2] & 0x3f) << 6) | u32(str[index + 3] & 0x3f)), 4
 			}
 		}
 	}
@@ -619,27 +626,30 @@ pub fn compile_with_limits(pattern string, size_limit uint, memo_size_limit uint
 	}
 
 	return Regex{
-		pattern:         pattern
-		prog:            optimized_prog
-		total_groups:    final_group_count
-		group_map:       group_map
-		prefix_lit:      prefix
-		has_prefix:      has_prefix
-		anchored:        anchored
-		needs_memo:      needs_memo
-		memo_size_limit: memo_size_limit
-		refs:            stdatomic.new_atomic(1)
+		program: arc.new(RegexProgram{
+			pattern:         pattern
+			prog:            optimized_prog
+			total_groups:    final_group_count
+			group_map:       group_map
+			prefix_lit:      prefix
+			has_prefix:      has_prefix
+			anchored:        anchored
+			needs_memo:      needs_memo
+			memo_size_limit: memo_size_limit
+		})
 	}
 }
 
 // new_machine allocates a new VM state machine.
 // This isolates the runtime memory (stack/captures) from the compiled regex, allowing thread-safe usage.
 pub fn (r &Regex) new_machine() Machine {
+	owner := r.program or { return Machine{} }
+	program := owner.get()
 	// Keep the common path allocation-free, but grow for valid expressions instead
 	// of turning workspace exhaustion into a false negative.
 	mut machine := Machine{
-		captures:        []int{len: r.total_groups * 2}
-		memo_size_limit: r.memo_size_limit
+		captures:        []int{len: program.total_groups * 2}
+		memo_size_limit: program.memo_size_limit
 	}
 	unsafe {
 		machine.captures.flags |= .noslices
@@ -1542,9 +1552,11 @@ fn rune_ranges_contain(ranges []RuneRange, value rune, ignore_case bool, unicode
 // OPTIMIZATION: Uses raw pointers for instruction and stack access to bypass bounds checking.
 @[direct_array_access]
 fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
+	owner := r.program or { return none }
+	program := owner.get()
 	unsafe {
-		if r.needs_memo {
-			m.begin_memo(text.len, r.prog.len)
+		if program.needs_memo {
+			m.begin_memo(text.len, program.prog.len)
 		}
 		// Optimization: Cast voidptr to typed pointer for direct indexing
 		mut cap_ptr := &int(m.captures.data)
@@ -1558,11 +1570,11 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 		mut sp := start_pos // String Pointer Index
 		mut stack_ptr := 0 // Stack Pointer Offset
 
-		cap_size := r.total_groups * 2
+		cap_size := program.total_groups * 2
 		frame_size := cap_size + 2 // [captures..., saved_sp, saved_pc]
 
 		// Raw pointers for hot path access
-		prog_start := &Inst(r.prog.data)
+		prog_start := &program.prog[0]
 		mut inst_ptr := prog_start // PC as a pointer
 
 		str_ptr := text.str
@@ -1578,7 +1590,7 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 		}
 
 		for {
-			if r.needs_memo {
+			if program.needs_memo {
 				pc := int((uint(inst_ptr) - uint(prog_start)) / uint(sizeof(Inst)))
 				if m.memo_seen(sp, pc) {
 					goto backtrack
@@ -1590,10 +1602,10 @@ fn (r &Regex) vm_match(text string, start_pos int, mut m Machine) ?Match {
 			match inst_ptr.typ {
 				.match {
 					// Only allocate result strings on successful match
-					mut s_groups := []string{cap: r.total_groups}
-					mut group_starts := []int{cap: r.total_groups}
-					mut group_ends := []int{cap: r.total_groups}
-					for i := 0; i < r.total_groups; i++ {
+					mut s_groups := []string{cap: program.total_groups}
+					mut group_starts := []int{cap: program.total_groups}
+					mut group_ends := []int{cap: program.total_groups}
+					for i := 0; i < program.total_groups; i++ {
 						s, e := cap_ptr[i * 2], cap_ptr[i * 2 + 1]
 						s_groups << if s != -1 && e >= s { text[s..e] } else { '' }
 						group_starts << s
@@ -1917,6 +1929,8 @@ pub fn (r &Regex) find(text string) ?Match {
 // find_from returns the first match starting from start_index.
 // Optimized with fast prefix skipping and anchor checks.
 pub fn (r &Regex) find_from(text string, start_index int) ?Match {
+	owner := r.program or { return none }
+	program := owner.get()
 	if start_index < 0 || start_index > text.len {
 		return none
 	}
@@ -1926,7 +1940,7 @@ pub fn (r &Regex) find_from(text string, start_index int) ?Match {
 	}
 
 	// Optimization: Anchored pattern (^) only checks the start
-	if r.anchored {
+	if program.anchored {
 		if start_index == 0 {
 			return r.vm_match(text, 0, mut m)
 		}
@@ -1938,13 +1952,13 @@ pub fn (r &Regex) find_from(text string, start_index int) ?Match {
 	}
 
 	// Optimization: Boyer-Moore-like literal prefix skip
-	if r.has_prefix {
-		mut i := text.index_after(r.prefix_lit, start_index) or { -1 }
+	if program.has_prefix {
+		mut i := text.index_after(program.prefix_lit, start_index) or { -1 }
 		for i != -1 {
 			if res := r.vm_match(text, i, mut m) {
 				return res
 			}
-			i = text.index_after(r.prefix_lit, i + 1) or { -1 }
+			i = text.index_after(program.prefix_lit, i + 1) or { -1 }
 		}
 		return none
 	}
@@ -2024,7 +2038,7 @@ pub fn (r &Regex) fullmatch(text string) ?Match {
 
 // group_by_name retrieves text captured by a named group.
 pub fn (r &Regex) group_by_name(m Match, name string) string {
-	idx := r.group_map[name] or { return '' }
+	idx := r.group_index(&name) or { return '' }
 	return if idx < m.groups.len { m.groups[idx] } else { '' }
 }
 

@@ -68,7 +68,7 @@ pub fn (builder &RegexMatcherBuilder) build_many(patterns &[]string) !RegexMatch
 	}
 	re := chir.to_regex()!
 	allow_exact_shortcuts := !builder.config.word && !builder.config.whole_line
-		&& re.total_groups == 0
+		&& re.total_groups() == 0
 	byte_literal := if needs_backend_normalization || !allow_exact_shortcuts {
 		?[]u8(none)
 	} else {
@@ -598,11 +598,11 @@ pub fn (re &RegexMatcher) new_captures() !RegexCaptures {
 }
 
 pub fn (re &RegexMatcher) capture_count() uint {
-	return uint(re.regex.total_groups + 1)
+	return uint(re.regex.total_groups() + 1)
 }
 
 pub fn (re &RegexMatcher) capture_index(name string) ?uint {
-	if index := re.regex.group_map[name] {
+	if index := re.regex.group_index(name) {
 		return uint(index + 1)
 	}
 	return none
@@ -617,7 +617,7 @@ pub fn (re &RegexMatcher) captures_at(haystack &[]u8, at uint, mut caps RegexCap
 	if at > haystack.len {
 		return false
 	}
-	if re.regex.total_groups == 0 {
+	if re.regex.total_groups() == 0 {
 		mat := re.find_at(haystack, at)!.get() or { return false }
 		caps.set(0, mat)
 		return true
@@ -969,8 +969,8 @@ fn strict_utf8_rune_at(haystack &[]u8, offset uint) (rune, int) {
 			|| (b0 >= 0xe1 && b0 <= 0xec)
 			|| (b0 == 0xed && haystack[offset + 1] <= 0x9f)
 			|| (b0 >= 0xee && b0 <= 0xef) {
-			return rune((u32(b0 & 0x0f) << 12) | (u32(haystack[offset + 1] & 0x3f) << 6)
-				| u32(haystack[offset + 2] & 0x3f)), 3
+			return rune((u32(b0 & 0x0f) << 12) | (u32(haystack[offset + 1] & 0x3f) << 6) |
+				u32(haystack[offset + 2] & 0x3f)), 3
 		}
 	}
 	if offset + 3 < haystack.len && is_utf8_continuation(haystack[offset + 1])
@@ -979,8 +979,8 @@ fn strict_utf8_rune_at(haystack &[]u8, offset uint) (rune, int) {
 		if (b0 == 0xf0 && haystack[offset + 1] >= 0x90)
 			|| (b0 >= 0xf1 && b0 <= 0xf3)
 			|| (b0 == 0xf4 && haystack[offset + 1] <= 0x8f) {
-			return rune((u32(b0 & 0x07) << 18) | (u32(haystack[offset + 1] & 0x3f) << 12)
-				| (u32(haystack[offset + 2] & 0x3f) << 6) | u32(haystack[offset + 3] & 0x3f)), 4
+			return rune((u32(b0 & 0x07) << 18) | (u32(haystack[offset + 1] & 0x3f) << 12) |
+				(u32(haystack[offset + 2] & 0x3f) << 6) | u32(haystack[offset + 3] & 0x3f)), 4
 		}
 	}
 	return rune(0), 0
