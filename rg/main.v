@@ -5,9 +5,7 @@ import core
 import core.flags
 import ignore
 import printer
-import sync
 import sync.arc
-import sync.stdatomic
 import time
 
 const parallel_job_queue_capacity = 256
@@ -275,71 +273,113 @@ fn search_parallel(args &flags.HiArgs, mode flags.SearchMode) !bool {
 		printer_ := args.printer_buffer(mode, bufwtr.buffer())
 		workers << args.search_worker_buffer(matcher_, searcher_, printer_)!
 	}
+	stats := args.stats()
+	has_stats := stats != none
+	shared := arc.new(SearchParallelShared{
+		matched:   arc.new_atomic(false)
+		searched:  arc.new_atomic(false)
+		output:    arc.new_mutex(SearchParallelOutput{ writer: bufwtr })
+		stats:     arc.new_mutex(stats or { printer.Stats.new() })
+		has_stats: has_stats
+	})
+	mut factory := SearchParallelVisitorFactory{
+		workers:          workers
+		haystack_builder: args.haystack_builder()
+		state:            shared.clone()
+		quit_after_match: args.quit_after_match()
+	}
 	defer {
-		for mut worker in workers {
+		for mut worker in factory.workers {
 			worker.printer().get_mut().free()
 			worker.free()
 		}
-		unsafe { workers.free() }
-	}
-	stats := args.stats()
-	mut shared_value := SearchParallelShared{
-		output_lock:        sync.new_mutex()
-		stats_lock:         sync.new_mutex()
-		bufwtr:             bufwtr
-		matched:            stdatomic.new_atomic(false)
-		searched:           stdatomic.new_atomic(false)
-		output_broken_pipe: stdatomic.new_atomic(false)
-		stats:              stats or { printer.Stats.new() }
-		has_stats:          stats != none
-	}
-	shared_state := &shared_value
-	mut factory := SearchParallelVisitorFactory{
-		workers:          &workers
-		next_worker:      stdatomic.new_atomic(0)
-		haystack_builder: args.haystack_builder()
-		state:            shared_state
-		quit_after_match: args.quit_after_match()
+		unsafe { factory.workers.free() }
 	}
 	walk.run(mut factory)
+	shared_state := shared.get()
 	matched := shared_state.matched.load()
 	if args.has_implicit_path() && !shared_state.searched.load() {
 		eprint_nothing_searched()
 	}
 	if shared_state.has_stats {
-		mut wtr := shared_state.bufwtr.buffer()
-		print_stats(mode, shared_state.stats, started_at, mut wtr) or {}
-		shared_state.bufwtr.print(&wtr) or {}
+		final_stats := shared_state.stats.update(snapshot_parallel_stats)
+		shared_state.output.update_with(SearchParallelReport{
+			mode:    mode
+			stats:   final_stats
+			started: started_at
+		}, write_parallel_report)
 	}
 	return matched
 }
 
 struct SearchParallelShared {
-	output_lock &sync.Mutex
-	stats_lock  &sync.Mutex
-	matched             &stdatomic.AtomicVal[bool]
-	searched            &stdatomic.AtomicVal[bool]
-	output_broken_pipe  &stdatomic.AtomicVal[bool]
+	matched   arc.Atomic[bool]
+	searched  arc.Atomic[bool]
+	output    arc.Mutex[SearchParallelOutput]
+	stats     arc.Mutex[printer.Stats]
 	has_stats bool
+}
+
+struct SearchParallelOutput {
 mut:
-	bufwtr cli.BufferWriter
-	stats  printer.Stats
+	writer      cli.BufferWriter
+	broken_pipe bool
+}
+
+struct SearchParallelReport {
+	mode    flags.SearchMode
+	stats   printer.Stats
+	started time.Time
+}
+
+fn merge_parallel_stats(previous printer.Stats, next printer.Stats) arc.MutexUpdate[printer.Stats, bool] {
+	return arc.MutexUpdate[printer.Stats, bool]{ value: previous + next }
+}
+
+fn snapshot_parallel_stats(stats printer.Stats) arc.MutexUpdate[printer.Stats, printer.Stats] {
+	snapshot := stats.clone()
+	return arc.MutexUpdate[printer.Stats, printer.Stats]{ value: stats, result: snapshot }
+}
+
+struct SearchParallelBuffer[^a] {
+	buffer &^a cli.Buffer
+	path   &^a string
+}
+
+fn write_parallel_buffer[^a](previous SearchParallelOutput, context SearchParallelBuffer[^a]) arc.MutexUpdate[SearchParallelOutput, bool] {
+	mut output := previous
+	output.writer.print(context.buffer) or {
+		if cli.is_broken_pipe_error(&err) {
+			output.broken_pipe = true
+		} else {
+			core.err_message('${*context.path}: ${err.msg()}')
+		}
+	}
+	broken := output.broken_pipe
+	return arc.MutexUpdate[SearchParallelOutput, bool]{ value: output, result: broken }
+}
+
+fn write_parallel_report(previous SearchParallelOutput, report SearchParallelReport) arc.MutexUpdate[SearchParallelOutput, bool] {
+	mut output := previous
+	mut buffer := output.writer.buffer()
+	print_stats(report.mode, report.stats, report.started, mut buffer) or {}
+	output.writer.print(&buffer) or {}
+	return arc.MutexUpdate[SearchParallelOutput, bool]{ value: output }
 }
 
 struct SearchParallelVisitorFactory {
-	workers          &[]core.SearchWorker[cli.Buffer]
-	next_worker      &stdatomic.AtomicVal[int]
 	haystack_builder core.HaystackBuilder
-	state            &SearchParallelShared
+	state            arc.Arc[SearchParallelShared]
 	quit_after_match bool
+mut:
+	workers []core.SearchWorker[cli.Buffer]
 }
 
 fn (mut factory SearchParallelVisitorFactory) create() ignore.ParallelVisitor {
-	index := factory.next_worker.add(1)
 	return SearchParallelVisitor{
-		worker:            unsafe { &factory.workers[index] }
+		worker:           factory.workers.pop()
 		haystack_builder: factory.haystack_builder
-		state:             factory.state
+		state:            factory.state.clone()
 		quit_after_match: factory.quit_after_match
 	}
 }
@@ -348,13 +388,14 @@ struct SearchParallelVisitor {
 	haystack_builder core.HaystackBuilder
 	quit_after_match bool
 mut:
-	worker &core.SearchWorker[cli.Buffer]
-	state  &SearchParallelShared
+	worker core.SearchWorker[cli.Buffer]
+	state  arc.Arc[SearchParallelShared]
 }
 
 fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
 	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
-	visitor.state.searched.store(true)
+	shared_state := visitor.state.get()
+	shared_state.searched.store(true)
 	visitor.worker.printer().get_mut().clear()
 	search_result := visitor.worker.search(&haystack) or {
 		core.err_message('${*haystack.path()}: ${err.msg()}')
@@ -362,33 +403,28 @@ fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.Wa
 		return .continue_
 	}
 	if search_result.has_match() {
-		visitor.state.matched.store(true)
+		shared_state.matched.store(true)
 	}
-	if visitor.state.has_stats {
-		visitor.state.stats_lock.lock()
+	if shared_state.has_stats {
 		result_stats := search_result.stats() or { panic('stats enabled without search stats') }
-		visitor.state.stats = visitor.state.stats + *result_stats
-		visitor.state.stats_lock.unlock()
+		shared_state.stats.update_with(result_stats.clone(), merge_parallel_stats)
 	}
-	visitor.state.output_lock.lock()
 	worker_buffer := visitor.worker.printer().get_mut()
-	visitor.state.bufwtr.print(worker_buffer) or {
-		if cli.is_broken_pipe_error(&err) {
-			visitor.state.output_broken_pipe.store(true)
-		} else {
-			core.err_message('${*haystack.path()}: ${err.msg()}')
-		}
-	}
-	visitor.state.output_lock.unlock()
+	broken := shared_state.output.update_with(SearchParallelBuffer{
+		buffer: worker_buffer
+		path:   haystack.path()
+	}, write_parallel_buffer)
 	haystack.free_owned()
-	if visitor.state.output_broken_pipe.load()
-		|| (visitor.state.matched.load() && visitor.quit_after_match) {
+	if broken || (shared_state.matched.load() && visitor.quit_after_match) {
 		return .quit
 	}
 	return .continue_
 }
 
 fn (mut visitor SearchParallelVisitor) free() {
+	visitor.worker.printer().get_mut().free()
+	visitor.worker.free()
+	visitor.state.drop()
 	unsafe { free(&visitor) }
 }
 

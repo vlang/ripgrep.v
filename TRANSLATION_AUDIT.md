@@ -59,8 +59,12 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   moves the map into each protected update and keeps the allocation alive across
   workers. Each worker owns a handle to the work-stealing queues. A paired update
   moves work while both queues are locked. The strict compiler stack accepts the
-  cache and queues. The walker still needs static transfer bounds for its filter
-  callback and visitor interface.
+  cache and queues. A search visitor owns its search worker and keeps the shared
+  writer, aggregate statistics and cancellation state alive through Arc handles.
+  The walker still needs checked erasure for its filter callback and visitor
+  interface.
+  [Generic thread bounds](https://github.com/vlang/v/pull/32890)
+  [Explicit destructor reachability](https://github.com/vlang/v/pull/32891)
   [Arc-owned mutex](https://github.com/vlang/v/pull/32885)
   [Transfer checks](https://github.com/vlang/v/pull/32872)
   [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
