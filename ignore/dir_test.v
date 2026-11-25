@@ -182,6 +182,9 @@ fn test_ignore() {
 	assert ig.matched('foo', false).is_ignore()
 	assert ig.matched('bar', false).is_whitelist()
 	assert ig.matched('baz', false).is_none()
+	assert ig.matched('./foo'.to_owned(), false).is_ignore()
+	assert ig.matched('./bar'.to_owned(), false).is_whitelist()
+	assert ig.matched('./baz'.to_owned(), false).is_none()
 }
 
 fn test_custom_ignore() {

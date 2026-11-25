@@ -430,19 +430,16 @@ fn (ig &^a Ignore) matched[^a](path string, is_dir bool) Match[IgnoreMatch[^a]] 
 }
 
 fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitignore_matches []uint) Match[IgnoreMatch[^a]] {
-	mut path_value := path
-	if path_value.starts_with('./') {
-		path_value = unsafe { path_value.substr_unsafe(2, path_value.len) }
-	}
+	path_value := if path.starts_with('./') { &path[2..] } else { &path }
 	if !ig.overrides.get().is_empty() {
-		mat := match_from_override(ig.overrides.get().matched(path_value, is_dir))
+		mat := match_from_override(ig.overrides.get().matched(*path_value, is_dir))
 		if !mat.is_none() {
 			return mat
 		}
 	}
 	mut whitelisted := ignore_match_none()
 	if ig.has_any_ignore_rules() {
-		mat := ig.matched_ignore_with_scratch(&path_value, is_dir, mut gitignore_matches)
+		mat := ig.matched_ignore_with_scratch(path_value, is_dir, mut gitignore_matches)
 		if mat.is_ignore() {
 			return mat
 		} else if mat.is_whitelist() {
@@ -450,7 +447,7 @@ fn (ig &^a Ignore) matched_with_scratch[^a](path string, is_dir bool, mut gitign
 		}
 	}
 	if !ig.types.get().is_empty() {
-		mat := match_from_types(ig.types.get().matched(path_value, is_dir))
+		mat := match_from_types(ig.types.get().matched(*path_value, is_dir))
 		if mat.is_ignore() {
 			return mat
 		} else if mat.is_whitelist() {
