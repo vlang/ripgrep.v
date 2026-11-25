@@ -363,18 +363,29 @@ fn test_walk_build_is_lazy() {
 	}
 }
 
+fn test_walk_builder_clone_keeps_its_current_dir() {
+	mut builder := WalkBuilder.new('.')
+	builder.current_dir('original')
+	mut cloned := builder.clone()
+	assert *cloned.get_or_set_current_dir() == 'original'
+	cloned.current_dir('updated')
+	assert *builder.get_or_set_current_dir() == 'original'
+	assert *cloned.get_or_set_current_dir() == 'updated'
+}
+
 fn test_walk_builder_discovers_current_dir_once() {
 	td := tmpdir()
 	defer {
 		td.cleanup()
 	}
 	mut builder := WalkBuilder.new(td.path())
-	assert !builder.cwd_initialized
+	assert builder.cwd_cache.slot.get() == none
 	_ := builder.build()
-	assert builder.cwd_initialized
-	cached := builder.cwd_value.clone()
+	first := builder.cwd_cache.slot.get() or { panic('CWD was not cached') }
+	cached := (*first).to_owned()
 	_ := builder.build_parallel()
-	assert builder.cwd_value == cached
+	after := builder.cwd_cache.slot.get() or { panic('CWD cache was cleared') }
+	assert *after == cached
 }
 
 fn test_no_ignores() {

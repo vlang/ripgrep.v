@@ -2,7 +2,6 @@ module ignore
 
 import os
 import runtime
-import sync
 import sync.arc
 import sync.thread as transport
 import time
@@ -559,9 +558,19 @@ mut:
 	///
 	/// When `None`, the CWD is fetched from `std::env::current_dir()`. If
 	/// that fails, then global gitignores are ignored (an error is logged).
-	cwd_mutex        &sync.Mutex
-	cwd_initialized  bool
-	cwd_value        string
+	cwd_cache WalkCwd
+}
+
+struct WalkCwd implements IClone {
+mut:
+	slot arc.Once[string]
+}
+
+fn (cache &WalkCwd) clone() WalkCwd {
+	if value := cache.slot.get() {
+		return WalkCwd{ slot: arc.new_once_with((*value).to_owned()) }
+	}
+	return WalkCwd{ slot: arc.new_once[string]() }
 }
 
 /// Create a new builder for a recursive directory iterator for the
@@ -572,11 +581,9 @@ mut:
 /// `Walk` values.
 pub fn WalkBuilder.new(path string) WalkBuilder {
 	return WalkBuilder{
-		paths:            [path.to_owned()]
-		ig_builder:       IgnoreBuilder.new()
-		cwd_mutex:        sync.new_mutex()
-		cwd_initialized:  false
-		cwd_value:        ''.to_owned()
+		paths:      [path.to_owned()]
+		ig_builder: IgnoreBuilder.new()
+		cwd_cache:  WalkCwd{ slot: arc.new_once[string]() }
 	}
 }
 
@@ -978,8 +985,7 @@ pub fn (mut builder WalkBuilder) filter_entry(filter FilterFn) &WalkBuilder {
 /// or from gitignore files added via [`WalkBuilder::add_ignore`].
 pub fn (mut builder WalkBuilder) current_dir(cwd string) &WalkBuilder {
 	builder.ig_builder.current_dir(cwd)
-	builder.cwd_initialized = true
-	builder.cwd_value = cwd.to_owned()
+	builder.cwd_cache = WalkCwd{ slot: arc.new_once_with(cwd.to_owned()) }
 	return builder
 }
 
@@ -989,17 +995,7 @@ pub fn (mut builder WalkBuilder) current_dir(cwd string) &WalkBuilder {
 /// if `WalkBuilder::current_dir` hasn't been called yet. And we ensure
 /// that we only do it once.
 fn (builder &^a WalkBuilder) get_or_set_current_dir[^a]() &^a string {
-	builder.cwd_mutex.lock()
-	if !builder.cwd_initialized {
-		cwd := os.getwd()
-		unsafe {
-			mut builder_mut := &WalkBuilder(builder)
-			builder_mut.cwd_value = cwd.to_owned()
-			builder_mut.cwd_initialized = true
-		}
-	}
-	builder.cwd_mutex.unlock()
-	return &builder.cwd_value
+	return builder.cwd_cache.slot.get_or_init(os.getwd)
 }
 
 /// Walk is a recursive directory iterator over file paths in one or more

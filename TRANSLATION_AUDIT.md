@@ -74,6 +74,17 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   [Native ownership transfer](https://github.com/vlang/v/pull/32894)
   [Explicit destructor reachability](https://github.com/vlang/v/pull/32891)
   [Qualified generic destructors](https://github.com/vlang/v/pull/32897)
+- Rust's walk builder initializes its current-directory cache through
+  `OnceLock`. The V builder uses an owned `arc.Once` and borrows the cached
+  path for matching. Cloning a builder copies its cached path or creates
+  another empty cell. Destruction releases the cell's mutex and path.
+  [Owned once cells](https://github.com/vlang/v/pull/32899)
+  [Immutable returned borrows](https://github.com/vlang/v/pull/32898)
+- Rust's `ParallelVisitorBuilder<'s>` can lend visitor state to a traversal
+  scope. V's checked mutable callback currently requires owned state.
+  Scoped checks cover direct scalar borrows. Scoped borrows inside erased
+  visitor state still need compiler support.
+  [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
   mutable access to the searcher and printer state, without `RefCell`'s dynamic loan
   checks.
