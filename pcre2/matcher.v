@@ -435,7 +435,9 @@ pub fn (mut builder RegexMatcherBuilder) max_jit_stack_size(bytes ?uint) &RegexM
 }
 
 /// An implementation of the `Matcher` trait using PCRE2.
-@[heap]
+// V-specific: each clone owns independent PCRE2 code, match context and JIT stack.
+// Ownership moves the native resources to a worker for exclusive use.
+@[heap; unsafe_thread_transfer]
 pub struct RegexMatcher implements IClone, Drop {
 	// V-specific: PCRE2 resources are owned by the shim object. The reference
 	// count protects by-value aliases, while `clone` duplicates Rust's owned

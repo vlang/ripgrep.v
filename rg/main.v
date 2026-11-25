@@ -376,15 +376,15 @@ mut:
 }
 
 fn (mut factory SearchParallelVisitorFactory) create() ignore.ParallelVisitor {
-	return SearchParallelVisitor{
+	return ignore.new_parallel_visitor(SearchParallelVisitor{
 		worker:           factory.workers.pop()
 		haystack_builder: factory.haystack_builder
 		state:            factory.state.clone()
 		quit_after_match: factory.quit_after_match
-	}
+	})
 }
 
-struct SearchParallelVisitor {
+struct SearchParallelVisitor implements Drop {
 	haystack_builder core.HaystackBuilder
 	quit_after_match bool
 mut:
@@ -392,7 +392,8 @@ mut:
 	state  arc.Arc[SearchParallelShared]
 }
 
-fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.WalkState {
+// call searches one entry and writes its results through the shared output buffer.
+pub fn (mut visitor SearchParallelVisitor) call(result ignore.WalkResult) ignore.WalkState {
 	mut haystack := visitor.haystack_builder.build_from_result(result) or { return .continue_ }
 	shared_state := visitor.state.get()
 	shared_state.searched.store(true)
@@ -421,11 +422,10 @@ fn (mut visitor SearchParallelVisitor) visit(result ignore.WalkResult) ignore.Wa
 	return .continue_
 }
 
-fn (mut visitor SearchParallelVisitor) free() {
+fn (mut visitor SearchParallelVisitor) drop() {
 	visitor.worker.printer().get_mut().free()
 	visitor.worker.free()
 	visitor.state.drop()
-	unsafe { free(&visitor) }
 }
 
 fn walk_parallel_stream_runner(walk ignore.WalkParallel, events chan ignore.WalkParallelStreamResult, stop arc.Atomic[bool]) bool {

@@ -1,9 +1,7 @@
 module ignore
 
 import os
-import sync
 import sync.arc
-import sync.stdatomic
 
 fn wfile(path string, contents string) {
 	os.write_file(path, contents) or { panic(err.msg()) }
@@ -47,104 +45,86 @@ fn walk_collect(prefix string, builder &WalkBuilder) []string {
 	return paths
 }
 
-@[heap]
-struct ParallelCollectorState {
-	mutex &sync.Mutex
+struct ParallelCollector implements Drop {
 mut:
-	dents []DirEntry
+	entries arc.Mutex[[]DirEntry]
 }
 
-struct ParallelCollector {
-	state &ParallelCollectorState
-}
-
-fn (mut collector ParallelCollector) visit(result WalkResult) WalkState {
+pub fn (mut collector ParallelCollector) call(result WalkResult) WalkState {
 	if !result.is_error {
-		collector.state.mutex.lock()
-		unsafe {
-			mut state := &ParallelCollectorState(collector.state)
-			state.dents << result.entry
-		}
-		collector.state.mutex.unlock()
+		collector.entries.update_with(result.entry.clone(), append_parallel_entry)
 	}
 	return .continue_
 }
 
-fn (mut collector ParallelCollector) free() {
-	unsafe { free(&collector) }
+fn append_parallel_entry(entries []DirEntry, entry DirEntry) arc.MutexUpdate[[]DirEntry, bool] {
+	mut next := entries
+	next << entry
+	return arc.MutexUpdate[[]DirEntry, bool]{ value: next }
+}
+
+fn (mut collector ParallelCollector) drop() {
+	collector.entries.drop()
 }
 
 struct ParallelCollectorFactory {
-	state &ParallelCollectorState
+	entries arc.Mutex[[]DirEntry]
 }
 
 fn (mut factory ParallelCollectorFactory) create() ParallelVisitor {
-	return ParallelCollector{
-		state: factory.state
-	}
+	return new_parallel_visitor(ParallelCollector{ entries: factory.entries.clone() })
 }
 
 fn walk_collect_entries_parallel(builder &WalkBuilder) []DirEntry {
-	state := &ParallelCollectorState{
-		mutex: sync.new_mutex()
-	}
-	mut factory := ParallelCollectorFactory{
-		state: state
-	}
+	entries := arc.new_mutex([]DirEntry{})
+	mut factory := ParallelCollectorFactory{ entries: entries.clone() }
 	builder.build_parallel().run(mut factory)
-	return unsafe { state.dents.clone() }
+	return entries.update(fn (values []DirEntry) arc.MutexUpdate[[]DirEntry, []DirEntry] {
+		return arc.MutexUpdate[[]DirEntry, []DirEntry]{ result: values }
+	})
 }
 
-@[heap]
-struct ParallelSkipCollectorState {
-	mutex &sync.Mutex
+struct ParallelSkipCollector implements Drop {
 mut:
-	paths []string
+	paths arc.Mutex[[]string]
 }
 
-struct ParallelSkipCollector {
-	state &ParallelSkipCollectorState
-}
-
-fn (mut collector ParallelSkipCollector) visit(result WalkResult) WalkState {
+pub fn (mut collector ParallelSkipCollector) call(result WalkResult) WalkState {
 	if result.is_error {
 		return .continue_
 	}
-	collector.state.mutex.lock()
-	unsafe {
-		mut state := &ParallelSkipCollectorState(collector.state)
-		state.paths << (*result.entry.path()).to_owned()
-	}
-	collector.state.mutex.unlock()
+	collector.paths.update_with((*result.entry.path()).to_owned(), append_parallel_path)
 	if *result.entry.file_name() == 'skip' {
 		return .skip
 	}
 	return .continue_
 }
 
-fn (mut collector ParallelSkipCollector) free() {
-	unsafe { free(&collector) }
+fn append_parallel_path(paths []string, path string) arc.MutexUpdate[[]string, bool] {
+	mut next := paths
+	next << path
+	return arc.MutexUpdate[[]string, bool]{ value: next }
+}
+
+fn (mut collector ParallelSkipCollector) drop() {
+	collector.paths.drop()
 }
 
 struct ParallelSkipCollectorFactory {
-	state &ParallelSkipCollectorState
+	paths arc.Mutex[[]string]
 }
 
 fn (mut factory ParallelSkipCollectorFactory) create() ParallelVisitor {
-	return ParallelSkipCollector{
-		state: factory.state
-	}
+	return new_parallel_visitor(ParallelSkipCollector{ paths: factory.paths.clone() })
 }
 
 fn walk_collect_skip_parallel(builder &WalkBuilder) []string {
-	state := &ParallelSkipCollectorState{
-		mutex: sync.new_mutex()
-	}
-	mut factory := ParallelSkipCollectorFactory{
-		state: state
-	}
+	paths := arc.new_mutex([]string{})
+	mut factory := ParallelSkipCollectorFactory{ paths: paths.clone() }
 	builder.build_parallel().run(mut factory)
-	return unsafe { state.paths.clone() }
+	return paths.update(fn (values []string) arc.MutexUpdate[[]string, []string] {
+		return arc.MutexUpdate[[]string, []string]{ result: values }
+	})
 }
 
 fn walk_collect_parallel(prefix string, builder &WalkBuilder) []string {
@@ -223,15 +203,29 @@ fn panic_name_comparator(_left &string, _right &string) int {
 	panic('parallel traversal must not invoke sort callbacks')
 }
 
-fn filter_must_run_once(entry &DirEntry) bool {
-	if entry.err != none {
-		panic('parallel traversal invoked its filter more than once for an entry')
-	}
-	unsafe {
-		mut entry_mut := &DirEntry(entry)
-		entry_mut.err = other_error('filter marker')
-	}
-	return true
+struct OnceFilter implements Drop {
+mut:
+	seen arc.Mutex[FilterPaths]
+}
+
+pub fn (filter &OnceFilter) call(entry &DirEntry) bool {
+	return filter.seen.update_with((*entry.path()).to_owned(), record_filter_path)
+}
+
+struct FilterPaths {
+mut:
+	seen map[string]bool
+}
+
+fn record_filter_path(paths FilterPaths, path string) arc.MutexUpdate[FilterPaths, bool] {
+	mut seen := paths
+	assert path !in seen.seen, 'parallel traversal invoked its filter more than once for an entry'
+	seen.seen[path] = true
+	return arc.MutexUpdate[FilterPaths, bool]{ value: seen, result: true }
+}
+
+fn (mut filter OnceFilter) drop() {
+	filter.seen.drop()
 }
 
 fn test_walk_entry_metadata_and_inode_match_filesystem() {
@@ -340,7 +334,7 @@ fn test_walk_parallel_filters_each_file_once() {
 	}
 	wfile(os.join_path(td.path(), 'file'), '')
 	mut builder := WalkBuilder.new(td.path())
-	builder.filter_entry(filter_must_run_once)
+	builder.filter_entry(new_filter(OnceFilter{ seen: arc.new_mutex(FilterPaths{}) }))
 	builder.threads(2)
 	paths := walk_collect_parallel(td.path(), builder)
 	assert paths == ['file']
@@ -751,8 +745,12 @@ fn test_no_read_permissions() {
 	}
 }
 
-fn filter_not_a(entry &DirEntry) bool {
-	return *entry.file_name() != 'a'
+struct ExcludeName {
+	name string
+}
+
+pub fn (filter &ExcludeName) call(entry &DirEntry) bool {
+	return *entry.file_name() != filter.name
 }
 
 fn test_filter() {
@@ -761,16 +759,56 @@ fn test_filter() {
 		td.cleanup()
 	}
 	mkdirp(os.join_path(td.path(), 'a/b/c'))
-	mkdirp(os.join_path(td.path(), 'x/y'))
+	mkdirp(os.join_path(td.path(), 'x/y/a'))
 	wfile(os.join_path(td.path(), 'a/b/foo'), '')
 	wfile(os.join_path(td.path(), 'x/y/foo'), '')
+	wfile(os.join_path(td.path(), 'x/y/a/hidden'), '')
 
-	assert_paths(td.path(), WalkBuilder.new(td.path()), ['x', 'x/y', 'x/y/foo', 'a', 'a/b', 'a/b/foo',
-		'a/b/c'])
+	assert_paths(td.path(), WalkBuilder.new(td.path()), ['x', 'x/y', 'x/y/foo', 'x/y/a', 'x/y/a/hidden',
+		'a', 'a/b', 'a/b/foo', 'a/b/c'])
 
 	mut builder := WalkBuilder.new(td.path())
-	builder.filter_entry(filter_not_a)
+	builder.filter_entry(new_filter(ExcludeName{ name: 'a'.to_owned() }))
 	assert_paths(td.path(), builder, ['x', 'x/y', 'x/y/foo'])
+	builder.threads(2)
+	assert walk_collect_parallel(td.path(), builder) == ['x', 'x/y', 'x/y/foo']
+}
+
+struct FilterWithDrop implements Drop {
+	released chan bool
+}
+
+pub fn (filter &FilterWithDrop) call(_entry &DirEntry) bool {
+	return true
+}
+
+fn (mut filter FilterWithDrop) drop() {
+	filter.released <- true
+}
+
+fn new_filtered_walk(path string, released chan bool) Walk {
+	mut builder := WalkBuilder.new(path)
+	builder.filter_entry(new_filter(FilterWithDrop{ released: released }))
+	return builder.build()
+}
+
+fn test_walk_keeps_filter_alive_after_builder_drops() {
+	td := tmpdir()
+	defer {
+		td.cleanup()
+	}
+	wfile(os.join_path(td.path(), 'file'), '')
+	released := chan bool{cap: 2}
+	mut dropped := false
+	{
+		mut walk := new_filtered_walk(td.path(), released)
+		assert released.try_pop(mut dropped) == .not_ready
+		assert walk.next() != none
+		assert walk.next() != none
+	}
+	assert released.try_pop(mut dropped) == .success
+	assert dropped
+	assert released.try_pop(mut dropped) == .not_ready
 }
 
 fn test_parallel_skip_prevents_descent() {
@@ -821,29 +859,28 @@ fn test_parallel_single_root_uses_requested_workers() {
 	}
 }
 
-struct QuitParallelVisitor {
-	visits &stdatomic.AtomicVal[int]
+struct QuitParallelVisitor implements Drop {
+mut:
+	visits arc.Atomic[int]
 }
 
-fn (mut visitor QuitParallelVisitor) visit(_result WalkResult) WalkState {
+pub fn (mut visitor QuitParallelVisitor) call(_result WalkResult) WalkState {
 	visitor.visits.add(1)
 	return .quit
 }
 
-fn (mut visitor QuitParallelVisitor) free() {
-	unsafe { free(&visitor) }
+fn (mut visitor QuitParallelVisitor) drop() {
+	visitor.visits.drop()
 }
 
 struct QuitParallelVisitorFactory {
-	visits  &stdatomic.AtomicVal[int]
-	created &stdatomic.AtomicVal[int]
+	visits  arc.Atomic[int]
+	created arc.Atomic[int]
 }
 
 fn (mut factory QuitParallelVisitorFactory) create() ParallelVisitor {
 	factory.created.add(1)
-	return QuitParallelVisitor{
-		visits: factory.visits
-	}
+	return new_parallel_visitor(QuitParallelVisitor{ visits: factory.visits.clone() })
 }
 
 fn test_parallel_quit_wakes_idle_work_stealers() {
@@ -856,11 +893,11 @@ fn test_parallel_quit_wakes_idle_work_stealers() {
 	}
 	mut builder := WalkBuilder.new(td.path())
 	builder.threads(4)
-	visits := stdatomic.new_atomic(0)
-	created := stdatomic.new_atomic(0)
+	visits := arc.new_atomic(0)
+	created := arc.new_atomic(0)
 	mut factory := QuitParallelVisitorFactory{
-		visits:  visits
-		created: created
+		visits:  visits.clone()
+		created: created.clone()
 	}
 	builder.build_parallel().run(mut factory)
 	assert created.load() == 4

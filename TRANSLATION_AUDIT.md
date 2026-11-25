@@ -49,25 +49,31 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   Both walkers cache compiled parent matchers through `Weak` and recompile a matcher
   after its last strong reference has expired. The V cache uses the `sync.arc.Weak`
   API proposed in [vlang/v#32865](https://github.com/vlang/v/pull/32865).
-- The walker in `crates/ignore/src/walk.rs` requires Rust `Send` and `Sync` bounds for
-  thread-shared callbacks and visitors. The V walker synchronizes shared state at
-  runtime and joins its workers before returning. V's proposed default thread-transfer
-  check rejects the two-worker mutable-counter probe. A follow-up permits a direct
-  scalar borrow with a lexical deferred join. Worker cancellation flags and counters now
-  move reference-counted atomic handles. Regex clones share their immutable program
-  through `sync.arc.Arc`. The compiled ignore cache uses `sync.arc.Mutex`, which
-  moves the map into each protected update and keeps the allocation alive across
-  workers. Each worker owns a handle to the work-stealing queues. A paired update
-  moves work while both queues are locked. The strict compiler stack accepts the
-  cache and queues. A search visitor owns its search worker and keeps the shared
-  writer, aggregate statistics and cancellation state alive through Arc handles.
-  The walker still needs checked erasure for its filter callback and visitor
-  interface.
-  [Generic thread bounds](https://github.com/vlang/v/pull/32890)
-  [Explicit destructor reachability](https://github.com/vlang/v/pull/32891)
-  [Arc-owned mutex](https://github.com/vlang/v/pull/32885)
+- The walker in `crates/ignore/src/walk.rs` requires `Send + Sync` for its shared
+  filter and `Send` for its per-thread visitor. The V walker takes a
+  `SharedCallback` that checks predicate state before erasing its type. Its
+  clones share that state through an Arc. A visitor factory gives each thread,
+  including the first visitor that handles root errors, an exclusively owned
+  `MutCallback`. The callback drops the concrete visitor when its owner exits.
+  A visitor owns its search worker and shares output, aggregate statistics and
+  cancellation state through Arc handles. Queue updates move work between
+  Arc-owned mutexes while holding both locks.
   [Transfer checks](https://github.com/vlang/v/pull/32872)
-  [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
+  [Generic thread bounds](https://github.com/vlang/v/pull/32890)
+  [Arc-owned atomics](https://github.com/vlang/v/pull/32883)
+  [Arc-owned mutex](https://github.com/vlang/v/pull/32885)
+  [Mutable callbacks](https://github.com/vlang/v/pull/32895)
+  [Shared callbacks](https://github.com/vlang/v/pull/32896)
+- Rust and V transfer worker-owned regex state to the worker that uses it. The V
+  PCRE2 clone owns a separate code object, match context and optional JIT stack.
+  The native transfer declaration records that one worker can use and destroy
+  those resources after the move. Filter and visitor lifetimes are tested
+  through construction, traversal and destruction. Ignore matching borrows
+  the path after removing its leading `./`, keeping the original allocation
+  alive until matching finishes.
+  [Native ownership transfer](https://github.com/vlang/v/pull/32894)
+  [Explicit destructor reachability](https://github.com/vlang/v/pull/32891)
+  [Qualified generic destructors](https://github.com/vlang/v/pull/32897)
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
   mutable access to the searcher and printer state, without `RefCell`'s dynamic loan
   checks.
@@ -182,9 +188,15 @@ functions produces additional benign differences.
 
 ## Ownership and behavior verification
 
-The exact latest V compiler and build commands are in `readme.md`. With that
-compiler, both the default and `-d pcre2` production binaries compile with
-`-d ownership -ownership`. Module results are:
+The current strict ownership build passed all 63 unit test files and 14
+integration and PCRE2 test runs on macOS arm64. Both production binaries used
+the same compiler revision. Parallel search, statistics, file listing,
+cancellation and no-match status matched Rust ripgrep 15.2.0. AddressSanitizer
+with `-gc none` covered traversal, filter cleanup, relative ignore paths and
+parallel PCRE2 search.
+
+The pinned V compiler revision and strict ownership build commands are in
+`readme.md`. The earlier full translation test run recorded these module totals.
 
 | Module | Tests |
 | --- | ---: |
