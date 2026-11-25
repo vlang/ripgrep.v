@@ -13,7 +13,7 @@ the V mappings for functions whose names necessarily changed.
 
 The strict ownership builds use a pinned V revision containing the pending
 compiler and library changes listed in the translation audit.
-[Verified V revision](https://github.com/vlang/v/commit/d8e92f12dd5c20453b3eeea1876a01a0a21d2f0c)
+[Verified V revision](https://github.com/vlang/v/commit/175e186f12b1c26b29e41113929d975699495ce8)
 
 From a directory alongside the ripgrep.v checkout, build the compiler and both
 regex-engine variants.
@@ -21,7 +21,7 @@ regex-engine variants.
 ```sh
 git clone -b feat/ripgrep-ownership-stack https://github.com/vlang/v.git v-ownership
 cd v-ownership
-git checkout --detach d8e92f12dd5c20453b3eeea1876a01a0a21d2f0c
+git checkout --detach 175e186f12b1c26b29e41113929d975699495ce8
 make
 ./v -d ownership -gc none -o ./vownership cmd/v
 

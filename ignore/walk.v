@@ -1727,7 +1727,8 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 	stacks := WorkStealingStacks.new(worker_count, mut initial)
 	quit_now := arc.new_atomic(false)
 	active_workers := arc.new_atomic(worker_count)
-	mut threads := []thread bool{}
+	mut threads := []thread{}
+	defer { threads.wait() }
 	threads << spawn walk_stealing_visit_worker(wp.clone(), stacks.clone(), first_visitor, quit_now.clone(),
 		active_workers.clone(), 0)
 	for worker_index in 1 .. worker_count {
@@ -1735,10 +1736,6 @@ pub fn (wp WalkParallel) run(mut factory ParallelVisitorFactory) {
 		threads << spawn walk_stealing_visit_worker(wp.clone(), stacks.clone(), visitor, quit_now.clone(), active_workers.clone(),
 			worker_index)
 	}
-	for worker_thread in threads {
-		worker_thread.wait()
-	}
-	unsafe { threads.free() }
 }
 
 // A result emitted by unordered parallel traversal.
@@ -2074,7 +2071,7 @@ fn take_work(stacks &WorkStealingStacks, active_workers &arc.Atomic[int], stop &
 	return none
 }
 
-fn walk_stealing_visit_worker(wp WalkParallel, queue_owner arc.Arc[WorkStealingStacks], visitor_in ParallelVisitor, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {
+fn walk_stealing_visit_worker(wp WalkParallel, queue_owner arc.Arc[WorkStealingStacks], visitor_in ParallelVisitor, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) {
 	stacks := queue_owner.get()
 	mut walk := wp.new_walk()
 	mut visitor := visitor_in
@@ -2088,7 +2085,6 @@ fn walk_stealing_visit_worker(wp WalkParallel, queue_owner arc.Arc[WorkStealingS
 			break
 		}
 	}
-	return true
 }
 
 fn walk_stealing_stream_worker(wp WalkParallel, queue_owner arc.Arc[WorkStealingStacks], results chan WalkParallelStreamResult, stop arc.Atomic[bool], active_workers arc.Atomic[int], worker_index int) bool {

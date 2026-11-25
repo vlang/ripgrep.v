@@ -80,11 +80,15 @@ find . -type f -name '*.v' -print0 | xargs -0 wc -l
   another empty cell. Destruction releases the cell's mutex and path.
   [Owned once cells](https://github.com/vlang/v/pull/32899)
   [Immutable returned borrows](https://github.com/vlang/v/pull/32898)
-- Rust's `ParallelVisitorBuilder<'s>` can lend visitor state to a traversal
-  scope. V's checked mutable callback currently requires owned state.
-  Scoped checks cover direct scalar borrows. Scoped borrows inside erased
-  visitor state still need compiler support.
+- The parallel visitor traversal defers the join of its worker array until
+  the traversal scope exits. The V checker can keep scalar borrows in worker
+  arguments live through this join, including fields of inline worker structs.
+  Rust's `ParallelVisitorBuilder<'s>` can also lend state through the erased
+  visitor it returns. V's checked mutable callback currently requires owned
+  state, so that factory-level lifetime still needs compiler support.
   [Scoped scalar borrows](https://github.com/vlang/v/pull/32873)
+  [Borrowed worker fields](https://github.com/vlang/v/pull/32901)
+  [Deferred worker arrays](https://github.com/vlang/v/pull/32902)
 - Rust uses `RefCell` for search scratch buffers and printer writers. The V APIs use
   mutable access to the searcher and printer state, without `RefCell`'s dynamic loan
   checks.
